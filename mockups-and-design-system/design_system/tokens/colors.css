@@ -1,0 +1,65 @@
+/* GOD_MODE_CODE — Color tokens
+   Rooted in the Matrix digital-rain: pure black void, phosphor green glyphs,
+   a near-white "shine" at the head of each falling trail. */
+:root {
+  /* ---- Rain scale: the green phosphor gradient from shine-head to faint-tail ---- */
+  --rain-shine: #E9FFEE;   /* leading glyph, near-white bloom */
+  --rain-glow:  #9BFFB4;   /* just behind the head */
+  --rain-bright:#3BFF6B;   /* bright active green */
+  --rain-green: #00FF41;   /* THE Matrix green — core brand */
+  --rain-mid:   #00C336;   /* mid trail */
+  --rain-dim:   #008A26;   /* dim trail */
+  --rain-dark:  #044F17;   /* deep trail */
+  --rain-faint: #04270D;   /* nearly gone */
+  --rain-ghost: #031807;   /* barely-there phosphor ghost */
+
+  /* ---- Void neutrals: black, green-tinted as it lifts.
+     Surfaces are VEILED (~90% over the void) so the digital rain reads
+     faintly through every panel while text stays crisp. Solids live in the
+     -solid tokens below for the rare case a fully opaque block is needed. ---- */
+  --void:      #000000;    /* the screen behind everything */
+  --carbon:    #030503;
+  --surface-1-solid: #070B07;
+  --surface-2-solid: #0B110B;
+  --surface-3-solid: #10190F;
+  --surface-1: color-mix(in srgb, #070B07 90%, transparent); /* base panel, veiled */
+  --surface-2: color-mix(in srgb, #0B110B 90%, transparent); /* raised / card, veiled */
+  --surface-3: color-mix(in srgb, #10190F 90%, transparent); /* highest / hover, veiled */
+  --overlay:   #0009;      /* scrim over rain */
+
+  /* ---- Lines ---- */
+  --line-faint: #0C1A0C;
+  --line:       #13331A;
+  --line-bright:#1C5A2E;
+
+  /* ---- Ink (text) ---- */
+  --ink-max:  #DFFFE6;     /* headings, high-emphasis */
+  --ink-1:    #6BFF8E;     /* primary body */
+  --ink-2:    #2F9E4B;     /* secondary / muted */
+  --ink-3:    #1C6531;     /* tertiary / disabled */
+  --ink-on:   #010A02;     /* text on bright-green fills */
+
+  /* ---- Semantic accents ---- */
+  --correct:  #00FF41;     /* a correctly typed glyph */
+  --error:    #FF2E4C;     /* the red pill — a wrong keystroke */
+  --error-dim:#4A0912;
+  --warning:  #FFC400;     /* amber alert */
+  --warning-dim:#3A2C00;
+  --info:     #17E0C4;     /* rare cyan accent */
+
+  /* ---- Semantic aliases (use these in components) ---- */
+  --bg-app:        var(--void);
+  --bg-surface:    var(--surface-1);
+  --bg-card:       var(--surface-2);
+  --bg-raised:     var(--surface-3);
+  --text-heading:  var(--ink-max);
+  --text-body:     var(--ink-1);
+  --text-muted:    var(--ink-2);
+  --text-disabled: var(--ink-3);
+  --text-invert:   var(--ink-on);
+  --accent:        var(--rain-green);
+  --accent-hover:  var(--rain-bright);
+  --border-color:  var(--line);
+  --border-strong: var(--line-bright);
+  --focus-ring:    var(--rain-green);
+}

@@ -1,0 +1,46 @@
+/* GOD_MODE_CODE — Typography
+   A fully monospaced system. Everything sits on a fixed-width grid, echoing
+   both the falling code columns and the act of typing itself. */
+:root {
+  /* ---- Families ---- */
+  --font-terminal: 'Share Tech Mono', ui-monospace, 'Cascadia Mono', monospace; /* brand + chrome */
+  --font-mono:     'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', monospace; /* body + typing */
+  --font-crt:      'VT323', 'Share Tech Mono', monospace; /* giant CRT numerals */
+
+  /* Semantic aliases */
+  --font-display: var(--font-terminal);
+  --font-body:    var(--font-mono);
+  --font-code:    var(--font-mono);
+  --font-stat:    var(--font-crt);
+
+  /* ---- Type scale (1.25 major-third-ish, tuned for mono) ---- */
+  --text-2xs: 11px;
+  --text-xs:  12px;
+  --text-sm:  14px;
+  --text-md:  16px;   /* base */
+  --text-lg:  19px;
+  --text-xl:  24px;
+  --text-2xl: 32px;
+  --text-3xl: 44px;
+  --text-4xl: 60px;
+  --text-5xl: 82px;
+
+  /* ---- Weights (JetBrains Mono) ---- */
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-bold:    700;
+  --weight-black:   800;
+
+  /* ---- Line heights ---- */
+  --leading-tight:  1.1;
+  --leading-snug:   1.35;
+  --leading-normal: 1.6;
+  --leading-loose:  1.9;   /* the typing surface breathes wider */
+
+  /* ---- Tracking: mono runs wide; brand chrome runs wider still ---- */
+  --tracking-tight:  -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.08em;
+  --tracking-wider:  0.2em;   /* NAV / LABELS / BUTTONS — uppercased */
+  --tracking-widest: 0.4em;
+}

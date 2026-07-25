@@ -1,0 +1,12 @@
+/* GOD_MODE_CODE — Webfonts
+   Substitution note: The Matrix films use a proprietary custom glyph face
+   ("Matrix Code NFC") that is not licensable. For a typing product the
+   priority is a crisp, legible fixed-width face, so the system is built on
+   Google Fonts monospaces. Swap these @font-face/@import sources for licensed
+   binaries if the brand acquires them.
+
+   - Share Tech Mono  → terminal / brand / UI chrome (display)
+   - JetBrains Mono   → the typing surface, code blocks, body copy
+   - VT323            → oversized CRT numerals (WPM, timers, big stats)
+*/
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Share+Tech+Mono&family=VT323&display=swap');

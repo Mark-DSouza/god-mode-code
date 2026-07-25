@@ -1,0 +1,129 @@
+# The creature half of a Handle — hand-curated, never a dictionary dump.
+#
+# Six characters is the ceiling, which is the real reason this list is short and
+# specific: PERCOLATING is eleven, and eleven plus a separator plus six is the
+# eighteen characters a Handle gets before the collision suffix eats the rest of
+# the Leaderboard row. See HandleWords for the derivation.
+#
+# Rules, enforced at startup by HandleWords and repeated here for whoever adds
+# the next one:
+#   * A-Z only, 3 to 6 characters, one per line, sorted, no duplicates
+#   * a real animal, recognisable without a search
+#   * nothing that doubles as a slur, an insult, or a body part in any of the
+#     languages this site is read in
+#
+# Lines starting with # and blank lines are ignored.
+
+BADGER
+BEETLE
+BISON
+CAMEL
+CICADA
+COBRA
+CONDOR
+CORGI
+COYOTE
+CRAB
+CRANE
+DINGO
+DONKEY
+DRAGON
+EAGLE
+EGRET
+ELK
+FALCON
+FERRET
+FINCH
+FOSSA
+GANNET
+GECKO
+GIBBON
+GOPHER
+HERON
+HORNET
+HYENA
+IBIS
+IGUANA
+IMPALA
+JACKAL
+JAGUAR
+KOALA
+KRAIT
+LEMUR
+LIZARD
+LOCUST
+LORIS
+LYNX
+MACAW
+MAGPIE
+MAMBA
+MANTIS
+MARLIN
+MARMOT
+MARTEN
+MINNOW
+MOOSE
+MOTH
+NEWT
+NUTRIA
+OCELOT
+OKAPI
+ORCA
+ORIOLE
+OSPREY
+OTTER
+OWL
+OYSTER
+PANDA
+PARROT
+PETREL
+PIGEON
+PLOVER
+POSSUM
+PUFFIN
+PYTHON
+QUAIL
+QUOKKA
+RABBIT
+RAVEN
+SABLE
+SALMON
+SEAL
+SERVAL
+SHREW
+SHRIKE
+SHRIMP
+SIFAKA
+SKINK
+SKUNK
+SLOTH
+SNIPE
+SPIDER
+SQUID
+STOAT
+STORK
+SWIFT
+TAPIR
+TARPON
+TERN
+THRUSH
+TIGER
+TOAD
+TOUCAN
+TROUT
+TURTLE
+URCHIN
+VICUNA
+VIPER
+VOLE
+WALRUS
+WAPITI
+WEASEL
+WEEVIL
+WHALE
+WIGEON
+WOLF
+WOMBAT
+WREN
+YAK
+ZEBRA

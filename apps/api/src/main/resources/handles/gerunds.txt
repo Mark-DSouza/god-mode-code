@@ -1,0 +1,127 @@
+# The gerund half of a Handle — hand-curated, never a dictionary dump.
+#
+# Every entry is read by a stranger on a public Leaderboard next to a creature,
+# so the list is written one word at a time rather than filtered out of a corpus.
+# A dictionary run through a "-ing" filter reaches something obscene, or merely
+# unkind, within a few thousand draws; no blocklist catches the pairing that
+# offends, because it is the *pair* that offends and not either word.
+#
+# Rules, enforced at startup by HandleWords and repeated here for whoever adds
+# the next one:
+#   * A-Z only, 4 to 11 characters, one per line, sorted, no duplicates
+#   * reads as motion or work — the thing a creature is doing
+#   * nothing violent, medical, political, or scatological, and nothing that
+#     turns unkind when a creature is put after it
+#
+# Lines starting with # and blank lines are ignored.
+
+BLINKING
+BOUNCING
+BOUNDING
+BRISTLING
+BUZZING
+CACHING
+CASCADING
+CHASING
+CHIRPING
+CIRCLING
+CLICKING
+CLIMBING
+COASTING
+COMPILING
+CRACKLING
+CRUISING
+DARTING
+DASHING
+DEBUGGING
+DELVING
+DIVING
+DODGING
+DRIFTING
+DRUMMING
+ECHOING
+FADING
+FLICKERING
+FLITTING
+FLOATING
+FLOWING
+FORAGING
+GALLOPING
+GATHERING
+GLIDING
+GLIMMERING
+GLOWING
+HOPPING
+HOVERING
+HUMMING
+HUNTING
+JUMPING
+LEAPING
+LOOPING
+NESTING
+ORBITING
+PACING
+PADDLING
+PARSING
+PATCHING
+PERCOLATING
+PIVOTING
+PLOTTING
+POUNCING
+PREENING
+PROBING
+PROWLING
+PULSING
+RACING
+RALLYING
+RAMBLING
+RIPPLING
+ROAMING
+ROUTING
+ROVING
+RUSHING
+SAILING
+SCALING
+SCANNING
+SCOUTING
+SCUTTLING
+SEEKING
+SHIFTING
+SHIMMERING
+SHUFFLING
+SIFTING
+SKATING
+SKIMMING
+SLIDING
+SLINKING
+SNEAKING
+SOARING
+SORTING
+SPARKING
+SPINNING
+SPIRALING
+SPRAWLING
+SPRINTING
+STALKING
+STIRRING
+STREAMING
+STRIDING
+SURFING
+SWEEPING
+SWIRLING
+SWOOPING
+SYNCING
+TIPTOEING
+TRACKING
+TRAWLING
+TRUNDLING
+TUMBLING
+VANISHING
+VAULTING
+WANDERING
+WEAVING
+WHIRRING
+WHISKING
+WHISTLING
+WINDING
+ZIGZAGGING

@@ -12,8 +12,62 @@
   "tags" : [ {
     "name" : "Health",
     "description" : "Liveness and dependency status"
+  }, {
+    "name" : "Users",
+    "description" : "Identity, Claimed or otherwise"
   } ],
   "paths" : {
+    "/api/users" : {
+      "post" : {
+        "tags" : [ "Users" ],
+        "summary" : "Create an Unclaimed User",
+        "description" : "Creates a User with no credentials attached and a generated Handle, and sets the cookie that recognises this browser as them on later visits. Called by a visitor who arrives without one; nothing is asked of them.\n",
+        "operationId" : "create",
+        "responses" : {
+          "201" : {
+            "description" : "The Unclaimed User that was created",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/me" : {
+      "get" : {
+        "tags" : [ "Users" ],
+        "summary" : "Read the User this browser is",
+        "description" : "Returns the User the request's cookie identifies. 404 means this browser has never been here, or was here longer ago than the cookie lasts — the caller's cue to create one.\n",
+        "operationId" : "me",
+        "parameters" : [ {
+          "name" : "gmc_user",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "The User this browser is recognised as",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "This browser is nobody yet"
+          }
+        }
+      }
+    },
     "/api/health" : {
       "get" : {
         "tags" : [ "Health" ],
@@ -47,6 +101,29 @@
   },
   "components" : {
     "schemas" : {
+      "User" : {
+        "type" : "object",
+        "description" : "A player, whether or not they have Claimed their identity",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid",
+            "description" : "Stable identifier",
+            "example" : "3f1c0b1a-5c2e-4d3b-9f8a-1e2d3c4b5a69"
+          },
+          "handle" : {
+            "type" : "string",
+            "description" : "Display name",
+            "example" : "PERCOLATING_FERRET"
+          },
+          "claimed" : {
+            "type" : "boolean",
+            "description" : "Whether credentials have been attached to this User",
+            "example" : false
+          }
+        },
+        "required" : [ "claimed", "handle", "id" ]
+      },
       "HealthStatus" : {
         "type" : "object",
         "description" : "The backend's own status and that of its dependencies",

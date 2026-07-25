@@ -101,6 +101,13 @@ Attaching credentials to a User. If the player signs in to a User that already
 exists, the Unclaimed User's Runs are merged into it silently and always.
 _Avoid_: Signup, registration, conversion, linking
 
+**Recognition Key**:
+The opaque secret a browser holds, in a long-lived HttpOnly cookie, so the same
+User is recognised on the next visit. Not a credential — nobody signs in with it
+and a User holding one is still Unclaimed; it is what makes an Unclaimed User's
+Runs still theirs tomorrow. Never the User's id, which is public.
+_Avoid_: Token, session, device id, anonymous id
+
 ### Integrity
 
 **Issue**:

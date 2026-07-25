@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/api/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an Unclaimed User
+         * @description Creates a User with no credentials attached and a generated Handle, and sets the cookie that recognises this browser as them on later visits. Called by a visitor who arrives without one; nothing is asked of them.
+         */
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the User this browser is
+         * @description Returns the User the request's cookie identifies. 404 means this browser has never been here, or was here longer ago than the cookie lasts — the caller's cue to create one.
+         */
+        get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -28,6 +68,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description A player, whether or not they have Claimed their identity */
+        User: {
+            /**
+             * Format: uuid
+             * @description Stable identifier
+             * @example 3f1c0b1a-5c2e-4d3b-9f8a-1e2d3c4b5a69
+             */
+            id: string;
+            /**
+             * @description Display name
+             * @example PERCOLATING_FERRET
+             */
+            handle: string;
+            /**
+             * @description Whether credentials have been attached to this User
+             * @example false
+             */
+            claimed: boolean;
+        };
         /** @description The backend's own status and that of its dependencies */
         HealthStatus: {
             /**
@@ -57,6 +116,55 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Unclaimed User that was created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gmc_user?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The User this browser is recognised as */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description This browser is nobody yet */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     health: {
         parameters: {
             query?: never;

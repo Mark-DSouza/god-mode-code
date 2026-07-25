@@ -1,4 +1,4 @@
-import type { Health } from "@gmc/api-client";
+import type { Health, User } from "@gmc/api-client";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 
@@ -21,7 +21,22 @@ export const healthUp: Health = {
   version: "0.0.1-test",
 };
 
-export const handlers = [http.get("/api/health", () => HttpResponse.json(healthUp))];
+/**
+ * A browser that has been here before, which is the uninteresting case and
+ * therefore the right default: tests about anything other than identity should
+ * not have to think about it, and no POST handler is registered, so a test that
+ * unexpectedly creates a User fails on an unhandled request.
+ */
+export const returningUser: User = {
+  id: "00000000-0000-4000-8000-000000000001",
+  handle: "PERCOLATING_FERRET",
+  claimed: false,
+};
+
+export const handlers = [
+  http.get("/api/health", () => HttpResponse.json(healthUp)),
+  http.get("/api/users/me", () => HttpResponse.json(returningUser)),
+];
 
 export const server = setupServer(...handlers);
 

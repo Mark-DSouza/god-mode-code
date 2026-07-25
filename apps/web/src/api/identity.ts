@@ -42,18 +42,3 @@ export function useCurrentUser() {
     staleTime: Number.POSITIVE_INFINITY,
   });
 }
-
-/**
- * The two letters an avatar tile shows for a Handle: the initial of each word.
- *
- * `PERCOLATING_FERRET` gives PF, and `SPIRALING_MANTIS_2` still gives SM — the
- * collision suffix is bookkeeping, not part of who someone is.
- */
-export function initialsFor(handle: string): string {
-  const letters = handle
-    .split("_")
-    .map((word) => word.charAt(0))
-    .filter((letter) => /[A-Za-z]/.test(letter));
-
-  return letters.slice(0, 2).join("").toUpperCase();
-}

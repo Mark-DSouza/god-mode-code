@@ -1,5 +1,5 @@
 import type { User } from "@gmc/api-client";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { server } from "../test/msw-server.ts";
@@ -72,6 +72,17 @@ describe("becoming someone", () => {
     expect(tile).toHaveAttribute("aria-hidden", "true");
   });
 
+  it("says so, rather than rendering blank, when it cannot work out who you are", async () => {
+    server.use(http.get("/api/users/me", () => new HttpResponse(null, { status: 500 })));
+
+    renderApp(<App />);
+
+    // A 500 is not the documented "you are nobody yet", so nothing is created —
+    // creating a second User because one lookup failed would strand the Runs the
+    // first one already has.
+    await waitFor(() => expect(screen.getByTestId("identity-handle")).toHaveTextContent("—"));
+  });
+
   it("shows the same Handle on a return visit, and does not create a second User", async () => {
     const backend = backendWithNobodyYet();
 
@@ -89,6 +100,12 @@ describe("becoming someone", () => {
     // showing DRIFTING_OTTER, and every Run recorded yesterday would belong to
     // someone who no longer exists.
     expect(backend.creations()).toBe(1);
+
+    // What this seam cannot prove is that the *browser* remembers: the stand-in
+    // above hands back the same User without ever reading a cookie. That the
+    // cookie exists, is HttpOnly and outlives a restart is asserted at the HTTP
+    // boundary (UserEndpointTest) and against a real browser profile
+    // (e2e/tests/identity.spec.ts).
   });
 
   it("does not create a User when the backend already knows this browser", async () => {

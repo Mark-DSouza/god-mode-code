@@ -58,7 +58,11 @@ export function Wordmark({
           ▚
         </span>
       )}
-      {text && "GOD_MODE_CODE"}
+      {/* The name is always in the accessibility tree, even when the layout is
+          too narrow to draw it. Dropping the text is a visual decision; the ▚ is
+          `aria-hidden`, so without this the brand would simply vanish for anyone
+          not looking at it. */}
+      {text ? "GOD_MODE_CODE" : <span className="sr-only">GOD_MODE_CODE</span>}
     </span>
   );
 }

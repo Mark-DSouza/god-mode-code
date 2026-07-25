@@ -13,10 +13,10 @@ import java.util.UUID;
  *
  * @param id      stable identifier, safe to publish: the browser is recognised
  *                by a separate secret, never by this.
- * @param handle  the display name, {@code GERUND_CREATURE} while Unclaimed.
+ * @param handle  the Handle, {@code GERUND_CREATURE} while Unclaimed.
  * @param claimed whether credentials have been attached.
  */
-@Schema(description = "A player, whether or not they have Claimed their identity")
+@Schema(description = "Anyone who has played, whether or not they have Claimed their identity")
 public record User(
         @Schema(
                         description = "Stable identifier",
@@ -24,7 +24,7 @@ public record User(
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 UUID id,
         @Schema(
-                        description = "Display name",
+                        description = "The User's Handle",
                         example = "PERCOLATING_FERRET",
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 String handle,

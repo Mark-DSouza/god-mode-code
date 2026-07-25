@@ -1,6 +1,8 @@
 package dev.markdsouza.godmodecode.user;
 
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.IntStream;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,35 +24,29 @@ public class HandleGenerator {
     }
 
     /**
-     * A fresh {@code GERUND_CREATURE}, with no suffix.
+     * Every Handle to try for one arriving visitor, in the order to try them:
+     * a freshly drawn {@code GERUND_CREATURE} first, then {@code BASE_2},
+     * {@code BASE_3}, up to {@link HandleWords#MAX_SUFFIX}.
      *
-     * Not a secure random: a Handle is a public display name, and the only thing
-     * predicting the next one buys is knowing which Handle to race for.
+     * The whole sequence rather than one Handle at a time, so a single place
+     * decides both what a Handle looks like and how far a collision may go. The
+     * caller's only job is to stop at the first one the database accepts.
+     *
+     * Suffixes are dense and ascending rather than random, so the second person
+     * to draw a pair gets {@code _2} and not {@code _734}. The cost is one insert
+     * per existing holder to get past a popular pair, which is bounded by the
+     * length of this list and, with twelve thousand pairs to draw from,
+     * vanishingly rare.
+     *
+     * The draw is not a secure random: a Handle is read by everyone, and predicting the
+     * next one buys nothing but knowing which Handle to race for.
      */
-    public String generateBase() {
+    public List<String> candidates() {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        String gerund = words.gerunds().get(random.nextInt(words.gerunds().size()));
-        String creature = words.creatures().get(random.nextInt(words.creatures().size()));
-        return gerund + "_" + creature;
-    }
+        String base = words.anyGerund(random) + "_" + words.anyCreature(random);
 
-    /**
-     * The Handle to try on a given attempt: the bare base first, then
-     * {@code BASE_2}, {@code BASE_3} and so on.
-     *
-     * Dense and ascending rather than random, so the second person to draw a pair
-     * gets {@code _2} and not {@code _734}. The cost is that a popular pair takes
-     * one insert per existing holder to get past, which at
-     * {@link HandleWords#MAX_SUFFIX} attempts is bounded and, with twelve
-     * thousand pairs to draw from, vanishingly rare.
-     *
-     * @param attempt 1-based.
-     */
-    public String forAttempt(String base, int attempt) {
-        if (attempt < 1 || attempt > HandleWords.MAX_SUFFIX) {
-            throw new IllegalArgumentException(
-                    "Attempt " + attempt + " is outside 1.." + HandleWords.MAX_SUFFIX);
-        }
-        return attempt == 1 ? base : base + "_" + attempt;
+        return IntStream.rangeClosed(1, HandleWords.MAX_SUFFIX)
+                .mapToObj(attempt -> attempt == 1 ? base : base + "_" + attempt)
+                .toList();
     }
 }

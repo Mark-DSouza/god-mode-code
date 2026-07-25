@@ -1,5 +1,6 @@
 package dev.markdsouza.godmodecode.user;
 
+import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,14 +38,13 @@ public class UserService {
     public Arrival createUnclaimedUser() {
         String recognitionKey = RecognitionKey.issue();
         String hash = RecognitionKey.hash(recognitionKey);
-        String base = handles.generateBase();
+        List<String> candidates = handles.candidates();
 
-        for (int attempt = 1; attempt <= HandleWords.MAX_SUFFIX; attempt++) {
-            String handle = handles.forAttempt(base, attempt);
+        for (String handle : candidates) {
             Optional<User> created = users.insertIfHandleFree(handle, hash);
             if (created.isPresent()) {
-                if (attempt > 1) {
-                    log.debug("Handle {} was taken; issued {} instead", base, handle);
+                if (!handle.equals(candidates.getFirst())) {
+                    log.debug("Handle {} was taken; issued {} instead", candidates.getFirst(), handle);
                 }
                 return new Arrival(created.get(), recognitionKey);
             }
@@ -54,7 +54,7 @@ public class UserService {
         // this means either the site is far larger than it was designed for or
         // the generator has stopped varying, and both are worth an error rather
         // than a Handle nobody can read.
-        throw new IllegalStateException("Exhausted every suffix for the Handle " + base);
+        throw new IllegalStateException("Exhausted every suffix for the Handle " + candidates.getFirst());
     }
 
     /** The User a browser presenting this key is, if the key is still one we issued. */

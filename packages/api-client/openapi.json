@@ -21,11 +21,29 @@
       "post" : {
         "tags" : [ "Users" ],
         "summary" : "Create an Unclaimed User",
-        "description" : "Creates a User with no credentials attached and a generated Handle, and sets the cookie that recognises this browser as them on later visits. Called by a visitor who arrives without one; nothing is asked of them.\n",
+        "description" : "Creates a User with no credentials attached and a generated Handle, and sets the cookie that recognises this browser as them on later visits. Nothing is asked of the visitor.\n\nA browser that already holds a valid cookie is told who it is instead, with 200 — so a retry, a double submit or a second tab cannot strand the Runs the first User already has.\n",
         "operationId" : "create",
+        "parameters" : [ {
+          "name" : "gmc_user",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
         "responses" : {
           "201" : {
             "description" : "The Unclaimed User that was created",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "This browser was already someone, and still is",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -103,7 +121,7 @@
     "schemas" : {
       "User" : {
         "type" : "object",
-        "description" : "A player, whether or not they have Claimed their identity",
+        "description" : "Anyone who has played, whether or not they have Claimed their identity",
         "properties" : {
           "id" : {
             "type" : "string",
@@ -113,7 +131,7 @@
           },
           "handle" : {
             "type" : "string",
-            "description" : "Display name",
+            "description" : "The User's Handle",
             "example" : "PERCOLATING_FERRET"
           },
           "claimed" : {

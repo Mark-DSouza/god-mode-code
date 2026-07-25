@@ -98,6 +98,27 @@ class UserEndpointTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("a browser that is already someone does not become someone else")
+    void creatingTwiceDoesNotOrphanTheFirstUser() {
+        ResponseEntity<User> first = http.postForEntity("/api/users", null, User.class);
+        String cookie = recognitionCookieFrom(first);
+
+        ResponseEntity<User> again =
+                http.exchange("/api/users", HttpMethod.POST, withCookie(cookie), User.class);
+
+        // The endpoint is the one thing on the site that is unsafe to repeat, and
+        // a browser can repeat it — a double-submit, a retried request, a second
+        // tab racing the first. Creating a second User there would strand every
+        // Run the visitor had already recorded (ADR-0007), so an arrival that is
+        // already someone is simply told who they are.
+        assertThat(again.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(again.getBody()).isEqualTo(first.getBody());
+        assertThat(again.getHeaders().getFirst(HttpHeaders.SET_COOKIE))
+                .as("the browser already holds the right key; overwriting it can only lose it")
+                .isNull();
+    }
+
+    @Test
     @DisplayName("a cookie nobody was ever issued recognises nobody")
     void aForgedCookieRecognisesNobody() {
         ResponseEntity<User> forged = http.exchange(

@@ -2,6 +2,7 @@ package dev.markdsouza.godmodecode.user;
 
 import java.util.List;
 import java.util.Set;
+import java.util.random.RandomGenerator;
 import java.util.regex.Pattern;
 
 /**
@@ -73,13 +74,20 @@ public record HandleWords(List<String> gerunds, List<String> creatures) {
      */
     public static final int MAX_SUFFIX = 100;
 
-    private static final Pattern WORD = Pattern.compile("^[A-Z]+$");
-
     /**
-     * A list this short is not worth generating from: fewer distinct pairs than
-     * this and suffixes stop being the exception the design calls for.
+     * The floor the committed lists must clear, checked where they are loaded
+     * rather than here. Below roughly this many pairs the suffix stops being the
+     * exception the design calls for.
+     *
+     * It cannot be an invariant of this record, because the collision tests
+     * legitimately construct one holding a single pair. A "unless the list is
+     * tiny" escape hatch on the invariant would let a production list truncated
+     * to one word start the application and hand every visitor the same Handle,
+     * which is the failure it was supposed to catch.
      */
-    private static final int MIN_WORDS_PER_LIST = 50;
+    public static final int MIN_DISTINCT_PAIRS = 2_000;
+
+    private static final Pattern WORD = Pattern.compile("^[A-Z]+$");
 
     static {
         // The two caps and the budget have to agree, and they are stated
@@ -103,6 +111,19 @@ public record HandleWords(List<String> gerunds, List<String> creatures) {
         return gerunds.size() * creatures.size();
     }
 
+    /**
+     * The draw lives here, next to the lists, rather than in the caller — which
+     * would have to reach through the record twice to index it, and would be the
+     * place a future weighting or exclusion had to be bolted on.
+     */
+    String anyGerund(RandomGenerator random) {
+        return gerunds.get(random.nextInt(gerunds.size()));
+    }
+
+    String anyCreature(RandomGenerator random) {
+        return creatures.get(random.nextInt(creatures.size()));
+    }
+
     private static List<String> validated(List<String> words, String what, int min, int max) {
         if (words == null || words.isEmpty()) {
             throw new IllegalArgumentException("The " + what + " list is empty");
@@ -121,12 +142,6 @@ public record HandleWords(List<String> gerunds, List<String> creatures) {
         }
         if (words.size() != Set.copyOf(words).size()) {
             throw new IllegalArgumentException("The " + what + " list repeats a word");
-        }
-        // A single-pair list is exactly what the collision tests install, so the
-        // floor only applies to lists big enough to be a real one.
-        if (words.size() > 1 && words.size() < MIN_WORDS_PER_LIST) {
-            throw new IllegalArgumentException("The " + what + " list has only " + words.size()
-                    + " words; below " + MIN_WORDS_PER_LIST + " collisions stop being the exception");
         }
         return List.copyOf(words);
     }

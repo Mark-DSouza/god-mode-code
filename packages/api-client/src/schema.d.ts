@@ -15,7 +15,9 @@ export interface paths {
         put?: never;
         /**
          * Create an Unclaimed User
-         * @description Creates a User with no credentials attached and a generated Handle, and sets the cookie that recognises this browser as them on later visits. Called by a visitor who arrives without one; nothing is asked of them.
+         * @description Creates a User with no credentials attached and a generated Handle, and sets the cookie that recognises this browser as them on later visits. Nothing is asked of the visitor.
+         *
+         *     A browser that already holds a valid cookie is told who it is instead, with 200 — so a retry, a double submit or a second tab cannot strand the Runs the first User already has.
          */
         post: operations["create"];
         delete?: never;
@@ -68,7 +70,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description A player, whether or not they have Claimed their identity */
+        /** @description Anyone who has played, whether or not they have Claimed their identity */
         User: {
             /**
              * Format: uuid
@@ -77,7 +79,7 @@ export interface components {
              */
             id: string;
             /**
-             * @description Display name
+             * @description The User's Handle
              * @example PERCOLATING_FERRET
              */
             handle: string;
@@ -121,10 +123,21 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
+            cookie?: {
+                gmc_user?: string;
+            };
         };
         requestBody?: never;
         responses: {
+            /** @description This browser was already someone, and still is */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
             /** @description The Unclaimed User that was created */
             201: {
                 headers: {

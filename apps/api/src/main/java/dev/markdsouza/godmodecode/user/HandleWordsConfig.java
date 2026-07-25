@@ -22,10 +22,22 @@ public class HandleWordsConfig {
 
     @Bean
     HandleWords handleWords() {
-        // Validation happens in the record's constructor, so a word list that
-        // breaks the length budget fails the application's startup rather than
-        // one Leaderboard row, months later.
-        return new HandleWords(read("handles/gerunds.txt"), read("handles/creatures.txt"));
+        // Shape and length are the record's own invariants, so a word list that
+        // breaks the budget fails the application's startup rather than one
+        // Leaderboard row, months later.
+        HandleWords words = new HandleWords(read("handles/gerunds.txt"), read("handles/creatures.txt"));
+
+        // Size is checked here instead, because it is a property of the
+        // committed lists rather than of the type: the collision tests build a
+        // legitimate one-pair HandleWords, and a rule with an exemption for
+        // small lists would wave through a production list truncated to one
+        // word — the exact accident worth catching.
+        if (words.distinctPairs() < HandleWords.MIN_DISTINCT_PAIRS) {
+            throw new IllegalStateException("The committed word lists make only "
+                    + words.distinctPairs() + " Handles; below " + HandleWords.MIN_DISTINCT_PAIRS
+                    + " the collision suffix stops being the exception");
+        }
+        return words;
     }
 
     private static List<String> read(String path) {

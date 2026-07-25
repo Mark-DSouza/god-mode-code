@@ -6,7 +6,7 @@ export type { paths, components } from "./schema.js";
 /** The health payload, named so callers do not restate the generated path type. */
 export type Health = paths["/api/health"]["get"]["responses"][200]["content"]["application/json"];
 
-/** A player, Claimed or otherwise. One shape for both states (ADR-0007). */
+/** Anyone who has played, Claimed or otherwise. One shape for both states (ADR-0007). */
 export type User = paths["/api/users/me"]["get"]["responses"][200]["content"]["application/json"];
 
 /**

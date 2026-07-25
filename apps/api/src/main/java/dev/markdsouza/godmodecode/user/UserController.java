@@ -43,8 +43,12 @@ public class UserController {
             summary = "Create an Unclaimed User",
             description = """
                     Creates a User with no credentials attached and a generated Handle, and sets \
-                    the cookie that recognises this browser as them on later visits. Called by a \
-                    visitor who arrives without one; nothing is asked of them.
+                    the cookie that recognises this browser as them on later visits. Nothing is \
+                    asked of the visitor.
+
+                    A browser that already holds a valid cookie is told who it is instead, with \
+                    200 — so a retry, a double submit or a second tab cannot strand the Runs the \
+                    first User already has.
                     """)
     @ApiResponses({
         @ApiResponse(
@@ -52,9 +56,27 @@ public class UserController {
                 description = "The Unclaimed User that was created",
                 content = @Content(
                         mediaType = MediaType.APPLICATION_JSON_VALUE,
+                        schema = @Schema(implementation = User.class))),
+        @ApiResponse(
+                responseCode = "200",
+                description = "This browser was already someone, and still is",
+                content = @Content(
+                        mediaType = MediaType.APPLICATION_JSON_VALUE,
                         schema = @Schema(implementation = User.class)))
     })
-    public ResponseEntity<User> create() {
+    public ResponseEntity<User> create(
+            @CookieValue(name = RecognitionCookie.NAME, required = false) String recognitionKey) {
+        // This is the one request on the site that cannot be safely repeated, and
+        // browsers repeat requests. Checking first costs a single indexed lookup
+        // and removes the whole class of "reload created a second me".
+        Optional<User> alreadySomeone =
+                Optional.ofNullable(recognitionKey).flatMap(users::recognise);
+        if (alreadySomeone.isPresent()) {
+            // No Set-Cookie: the browser already holds the right key, and
+            // reissuing one can only lose it.
+            return ResponseEntity.ok(alreadySomeone.get());
+        }
+
         UserService.Arrival arrival = users.createUnclaimedUser();
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header(HttpHeaders.SET_COOKIE, cookie.carrying(arrival.recognitionKey()).toString())

@@ -11,6 +11,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,12 +59,27 @@ class HandleCollisionTest extends AbstractIntegrationTest {
     @Autowired
     JdbcTemplate jdbc;
 
+    /**
+     * Only this class's Handles, never the whole table.
+     *
+     * Every integration test in the suite shares one PostgreSQL, and the
+     * numbering below only holds if this pair starts free — but `DELETE FROM
+     * users` would quietly reach into whatever another class had created, which
+     * is correct today only because nothing runs them in parallel.
+     */
+    @BeforeEach
+    void releaseTheWordPair() {
+        jdbc.update("DELETE FROM users WHERE handle::text ~ ?", "^" + ONLY_HANDLE);
+    }
+
+    private int usersHolding() {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM users WHERE handle::text ~ ?", Integer.class, "^" + ONLY_HANDLE);
+    }
+
     @Test
     @DisplayName("the first Handle is clean and only the ones after it carry a suffix")
     void onlyCollisionsAreSuffixed() {
-        // Runs against a table this class has to itself, so the numbering below
-        // is the numbering a fresh word pair actually produces.
-        jdbc.execute("DELETE FROM users");
 
         List<String> issued = new ArrayList<>();
         for (int visitor = 0; visitor < 4; visitor++) {
@@ -87,7 +103,6 @@ class HandleCollisionTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("sixteen visitors arriving at once all get different Handles")
     void concurrentArrivalsNeverShareAHandle() throws Exception {
-        jdbc.execute("DELETE FROM users");
 
         int arrivals = 16;
         // Released only when every thread has reached it, so the requests contend
@@ -114,14 +129,12 @@ class HandleCollisionTest extends AbstractIntegrationTest {
         assertThat(issued).hasSize(arrivals).doesNotHaveDuplicates();
         // Sixteen arrivals, sixteen rows: nobody was quietly dropped to make the
         // Handles unique.
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM users", Integer.class))
-                .isEqualTo(arrivals);
+        assertThat(usersHolding()).isEqualTo(arrivals);
     }
 
     @Test
     @DisplayName("the database, not the application, is what refuses a duplicate Handle")
     void theDatabaseRefusesADuplicate() {
-        jdbc.execute("DELETE FROM users");
         jdbc.update(
                 "INSERT INTO users (handle, recognition_key_hash) VALUES (?, ?)",
                 ONLY_HANDLE,

@@ -10,6 +10,13 @@
 #
 # This image exists so `compose.e2e.yaml` can bring the whole stack up from a
 # clean clone without a Go toolchain installed. Do not deploy it.
+#
+# It cannot judge, and that is the point. The judge needs a container runtime to
+# start sandboxes, and this image is given none. ADR-0005 would allow mounting
+# the socket locally for convenience; compose.e2e.yaml declines to, and explains
+# why. So this image detects it has no runtime at startup and serves DEGRADED,
+# refusing Solve Runs rather than accepting work it cannot do. For real Judging,
+# run the binary on a host — which is how it is deployed.
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src

@@ -1,0 +1,42 @@
+{
+  "id": "hash-map-seen-lookup",
+  "title": "Store what you've seen, look up what you need",
+  "family": "Hash Map",
+  "seniority": "Junior",
+  "entryPoint": "pair_sum",
+  "scaffold": "def pair_sum(numbers, target):",
+  "exampleTests": [
+    {
+      "name": "the pair is the first two numbers",
+      "call": "pair_sum([2, 7, 11, 15], 9)",
+      "expected": "[0, 1]"
+    },
+    {
+      "name": "no pair sums to the target",
+      "call": "pair_sum([1, 2, 3], 100)",
+      "expected": "[]"
+    }
+  ],
+  "hiddenTests": [
+    {
+      "name": "the pair is not the first two numbers",
+      "call": "pair_sum([3, 2, 4], 6)",
+      "expected": "[1, 2]"
+    },
+    {
+      "name": "the same value twice",
+      "call": "pair_sum([3, 3], 6)",
+      "expected": "[0, 1]"
+    },
+    {
+      "name": "negative numbers",
+      "call": "pair_sum([-1, -2, -3, -4], -6)",
+      "expected": "[1, 3]"
+    },
+    {
+      "name": "the pair is at the end of a long input",
+      "call": "pair_sum(list(range(1, 2001)), 3999)",
+      "expected": "[1998, 1999]"
+    }
+  ]
+}

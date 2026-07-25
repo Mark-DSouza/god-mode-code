@@ -64,11 +64,10 @@ no origin allowlist, and no class of bug that only appears in production. This
 was forced by a certificate constraint and turned out to be better anyway
 (ADR-0002).
 
-Nothing in this repository should introduce a second origin for the API. An
-end-to-end test asserts that every request the page makes is same-origin, with
-one documented exemption: the design system's font tokens `@import` Google
-Fonts, so `googleapis.com` and `gstatic.com` are allowed. Any other origin fails
-the build.
+Nothing in this repository should introduce a second origin. An end-to-end test
+asserts that every request the page makes is same-origin, with no exemptions —
+the three webfonts are self-hosted rather than pulled from Google Fonts, so
+there is no third party left to allow.
 
 The one place a host is configurable is Vite's dev proxy (`API_ORIGIN`), which
 exists so the dev server can forward `/api` to a backend on another port. It has

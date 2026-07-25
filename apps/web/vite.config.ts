@@ -26,5 +26,12 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: true,
+    // Never inline fonts. Vite base64s any asset under 4KB into the stylesheet,
+    // which catches the small `latin-ext` subsets — and an inlined @font-face
+    // src defeats its own `unicode-range`, so every visitor downloads glyphs
+    // they will almost certainly never render, inside the one file that blocks
+    // rendering. Kept as separate files they are fetched on demand and cached
+    // independently of the CSS.
+    assetsInlineLimit: (filePath) => !filePath.endsWith(".woff2"),
   },
 });

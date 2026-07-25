@@ -14,6 +14,14 @@
  * skeleton. Deviation 3 is split: the ambient chrome is handled here, and
  * DigitalRain's own default lives with the component, because a user who turns
  * the rain back on in Settings must still get rain.
+ *
+ * One further substitution, not an ADR-0010 accessibility fix and so recorded
+ * separately: the design system's `tokens/fonts.css` is a single `@import` of a
+ * Google Fonts URL, and `src/fonts.css` self-hosts those same three families
+ * instead. The faces, weights and family names are unchanged — only where the
+ * bytes come from. It removes a third-party origin from the critical path of
+ * every page load, a render that depends on a CDN being reachable, and a source
+ * of nondeterminism for the visual regression testing in issue #23.
  */
 
 :root {

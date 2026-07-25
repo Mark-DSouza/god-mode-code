@@ -30,16 +30,13 @@ test("every request the page makes is same-origin", async ({ page }) => {
   const foreignOrigins = requested.filter((href) => {
     const url = new URL(href);
     if (!url.protocol.startsWith("http")) return false;
-    // Google Fonts is loaded by the design system's font tokens and is the one
-    // documented third party. Everything else must be ours.
-    if (url.hostname.endsWith("gstatic.com") || url.hostname.endsWith("googleapis.com")) {
-      return false;
-    }
     return url.origin !== pageOrigin;
   });
 
-  // There is exactly one origin by design. A second one appearing here means
-  // CORS has been reintroduced somewhere (ADR-0002).
+  // Exactly one origin, with no exemptions. This assertion used to allow Google
+  // Fonts, because the design system's font tokens `@import` them; those three
+  // families are now self-hosted, so there is no third party left to allow and
+  // any origin appearing here means CORS has been reintroduced (ADR-0002).
   expect(foreignOrigins).toEqual([]);
 
   // Guards the guard: if nothing was recorded, the assertion above passes

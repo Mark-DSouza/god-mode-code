@@ -17,7 +17,11 @@
  * Anyone comparing this against the shipped tokens and finding a discrepancy
  * should read ADR-0010 before "correcting" it back.
  */
-@import "../../../mockups-and-design-system/design_system/tokens/fonts.css";
+/* SUBSTITUTED — see deviations.css. The design system's fonts.css is a single
+ * `@import` of a Google Fonts URL; this is the self-hosted equivalent. It is
+ * the one token file not imported verbatim, and manifest.test.ts fails if a
+ * second one is ever swapped without being recorded. */
+@import "./fonts.css";
 @import "../../../mockups-and-design-system/design_system/tokens/colors.css";
 @import "../../../mockups-and-design-system/design_system/tokens/typography.css";
 @import "../../../mockups-and-design-system/design_system/tokens/spacing.css";

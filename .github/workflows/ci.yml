@@ -23,6 +23,7 @@ jobs:
       judge: ${{ steps.filter.outputs.judge }}
       contract: ${{ steps.filter.outputs.contract }}
       stack: ${{ steps.filter.outputs.stack }}
+      infra: ${{ steps.filter.outputs.infra }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -67,6 +68,13 @@ jobs:
               - '!apps/web/src/styles/**'
               - '!packages/design-tokens/**'
               - '!mockups-and-design-system/**'
+              # The cloud definitions are not part of the local stack. Only
+              # `infra/caddy` is, and it is shared with production.
+              - '!infra/terraform/**'
+            infra:
+              - *shared
+              - 'infra/terraform/**'
+              - '.github/workflows/deploy.yml'
 
   web:
     needs: changes
@@ -145,6 +153,32 @@ jobs:
       # neither matches.
       - run: ./scripts/check-contract-drift.sh
 
+  infra:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+          # The wrapper rewrites stdout, which makes a failing `test` report
+          # unreadable. Nothing here needs its outputs.
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive
+        working-directory: infra/terraform
+      # No backend: this job never touches state and must never need
+      # credentials to run on a pull request.
+      - run: terraform init -backend=false
+        working-directory: infra/terraform
+      - run: terraform validate
+        working-directory: infra/terraform
+      # The security and cost invariants, against a plan with mocked providers.
+      # No AWS account, no credentials, no money — which is what lets them run
+      # on every pull request rather than only when somebody remembers.
+      - run: terraform test
+        working-directory: infra/terraform
+
   e2e:
     needs: changes
     if: needs.changes.outputs.stack == 'true'
@@ -171,7 +205,7 @@ jobs:
   # One status to require on the branch, so a skipped job does not read as a
   # missing check. `always()` is what lets this run when upstream jobs skip.
   ci:
-    needs: [web, api, judge, contract, e2e]
+    needs: [web, api, judge, contract, infra, e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:

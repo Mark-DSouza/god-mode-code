@@ -25,6 +25,20 @@ e2e/playwright-report/
 e2e/blob-report/
 e2e/.cache/
 
+# Terraform
+#
+# The lock file IS committed — it is what pins provider versions across
+# machines — but everything below is either local cache, state, or a file
+# holding real values for the account this is applied to.
+infra/terraform/**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+backend.hcl
+crash.log
+crash.*.log
+
 # Local environment overrides
 .env
 .env.local

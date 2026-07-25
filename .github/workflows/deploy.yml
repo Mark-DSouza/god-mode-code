@@ -1,0 +1,142 @@
+name: Deploy
+
+# Pushing to the default branch is the deploy. There is no separate release
+# step and nothing to click.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Never cancel a deploy in flight. Cancelling one halfway through leaves the
+  # host in whatever state the script had reached, which is the one situation
+  # where "cancel-in-progress" costs more than it saves.
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  # Required for the OIDC token exchanged for a short-lived AWS role. This is
+  # what replaces a stored access key.
+  id-token: write
+
+env:
+  IMAGE_PREFIX: ghcr.io/mark-dsouza/god-mode-code
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    # Native arm64, because the instances are Graviton (ADR-0001). Building
+    # under QEMU emulation instead would take the JVM image from about two
+    # minutes to well over ten.
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        include:
+          - name: api
+            context: apps/api
+            dockerfile: apps/api/Dockerfile
+          # The web build context is the repository root: the app is a
+          # workspace package and its token layer imports the design system
+          # from outside its own directory.
+          - name: web
+            context: .
+            dockerfile: apps/web/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          # Tagged with the commit SHA and nothing else that moves. The deploy
+          # compares the requested reference against what is running to decide
+          # whether the proxy needs replacing, and a mutable tag like `latest`
+          # would make that comparison always look unchanged.
+          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  deploy:
+    name: Deploy to production
+    needs: build
+    runs-on: ubuntu-latest
+    # Skipped until the infrastructure has actually been applied and the role
+    # it creates has been recorded as a repository variable. Without this, every
+    # merge would fail on a missing role long before there is anything to
+    # deploy to.
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Find the application instance
+        id: instance
+        # By tag rather than by a stored id: changing the bootstrap script
+        # replaces the instance, and a stored id would then point at something
+        # that no longer exists.
+        run: |
+          set -euo pipefail
+          instance_id="$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=gmc-prod-app" \
+              "Name=instance-state-name,Values=running" \
+            --query 'Reservations[].Instances[].InstanceId' \
+            --output text)"
+
+          if [ -z "$instance_id" ] || [ "$(echo "$instance_id" | wc -w)" -ne 1 ]; then
+            echo "Expected exactly one running application instance, found: '$instance_id'" >&2
+            exit 1
+          fi
+
+          echo "id=$instance_id" >>"$GITHUB_OUTPUT"
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+
+          command_id="$(aws ssm send-command \
+            --document-name gmc-prod-deploy \
+            --instance-ids "${{ steps.instance.outputs.id }}" \
+            --parameters \
+              apiImage="$IMAGE_PREFIX/api:${{ github.sha }}",webImage="$IMAGE_PREFIX/web:${{ github.sha }}" \
+            --query 'Command.CommandId' \
+            --output text)"
+
+          echo "Systems Manager command: $command_id"
+
+          # The waiter polls until the invocation leaves a pending state. It
+          # exits non-zero on anything that is not Success, which is what makes
+          # a failed deploy — including one that rolled itself back — a failed
+          # workflow rather than a green tick over a broken site.
+          set +e
+          aws ssm wait command-executed \
+            --command-id "$command_id" \
+            --instance-id "${{ steps.instance.outputs.id }}"
+          waiter_status=$?
+          set -e
+
+          # The script's own output is the useful part whether it passed or
+          # failed, so it is always printed before the job's result is decided.
+          aws ssm get-command-invocation \
+            --command-id "$command_id" \
+            --instance-id "${{ steps.instance.outputs.id }}" \
+            --query '{status: Status, stdout: StandardOutputContent, stderr: StandardErrorContent}' \
+            --output text
+
+          exit $waiter_status

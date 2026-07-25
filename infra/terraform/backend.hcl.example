@@ -1,0 +1,14 @@
+# Copy to backend.hcl and fill in, then:
+#
+#   terraform init -backend-config=backend.hcl
+#
+# These are not in versions.tf because the bucket name is account-specific.
+# Keeping them out is what lets the whole stack be stood up in a different
+# account without editing the configuration, which is the property that keeps
+# the hosting decision reversible (ADR-0001).
+#
+# The bucket is created by the bootstrap module, which prints exactly these two
+# lines as its `backend_config` output.
+
+bucket = "gmc-terraform-state-CHANGE-ME"
+region = "ap-south-1"

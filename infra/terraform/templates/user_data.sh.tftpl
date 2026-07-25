@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#
+# Host bootstrap. Runs once, at first boot.
+#
+# This installs only what does not change between deploys — the container
+# runtime, the tunnel daemon, the shared network, the registry credential — and
+# starts no application containers at all.
+#
+# That division is deliberate. Writing down how to start the application here
+# as well as in the deploy document would mean two definitions that drift, and
+# the bootstrap copy would be the one nobody notices is wrong. Instead the host
+# comes up ready and the first deploy brings the application, which means the
+# deploy path is exercised on day one rather than being a rarely-taken branch
+# first tested during an incident.
+#
+# Note for anyone editing: this file is rendered by `templatefile`. A doubled
+# dollar-brace escapes to a literal shell variable; a single one is interpolated
+# by Terraform and must name a variable actually passed in. That applies inside
+# comments too, which is easy to forget.
+set -euo pipefail
+
+exec > >(tee /var/log/gmc-bootstrap.log | logger -t gmc-bootstrap -s 2>/dev/console) 2>&1
+
+echo "==> Installing the container runtime"
+dnf install -y docker
+systemctl enable --now docker
+
+echo "==> Installing cloudflared"
+# Straight from Cloudflare's own repository rather than a third-party mirror.
+# This daemon is the only thing on the box that terminates public traffic.
+rpm --import https://pkg.cloudflare.com/cloudflare-main.gpg
+cat >/etc/yum.repos.d/cloudflared.repo <<'REPO'
+[cloudflared]
+name=cloudflared
+baseurl=https://pkg.cloudflare.com/cloudflared/rpm
+enabled=1
+type=rpm
+gpgcheck=1
+gpgkey=https://pkg.cloudflare.com/cloudflare-main.gpg
+REPO
+dnf install -y cloudflared
+
+echo "==> Reading configuration from Parameter Store"
+# This works because of the instance profile, not because of any credential on
+# disk. There is no credential on disk.
+get_param() {
+  aws ssm get-parameter \
+    --region "${region}" \
+    --name "$1" \
+    --with-decryption \
+    --query 'Parameter.Value' \
+    --output text
+}
+
+TUNNEL_TOKEN="$(get_param "${parameter_prefix}/tunnel/token")"
+REGISTRY_TOKEN="$(get_param "${parameter_prefix}/registry/token")"
+
+echo "==> Preparing the application directory"
+install -d -m 0750 /opt/gmc
+
+# Needed on every deploy, not just this one, so it is kept rather than
+# re-fetched. Root-only: the containers run as unprivileged users and cannot
+# read it, and it is never passed to one.
+umask 077
+printf '%s' "$REGISTRY_TOKEN" >/opt/gmc/registry-token
+chmod 0600 /opt/gmc/registry-token
+
+echo "==> Creating the container network"
+# A user-defined bridge, so Caddy can reach the backend by the name `api`
+# rather than by an address that changes every time the container is replaced.
+docker network inspect gmc >/dev/null 2>&1 || docker network create gmc
+
+echo "==> Starting the tunnel"
+# Writes a root-owned systemd unit containing the token. It is never written to
+# /opt/gmc or anywhere a container can see.
+#
+# Started last, on purpose: once this is up the hostname resolves to this box,
+# and it should not begin advertising itself before the runtime beneath it is
+# ready.
+cloudflared service install "$TUNNEL_TOKEN"
+systemctl enable --now cloudflared
+
+echo "==> Bootstrap complete; awaiting first deploy"

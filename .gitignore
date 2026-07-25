@@ -1,0 +1,8 @@
+# Design bundle archives — superseded by the extracted trees alongside them
+mockups-and-design-system/*.zip
+
+# Byte-identical copy of ui_mockups/design_handoff_godmodecode/
+mockups-and-design-system/design_system/uploads/god_mode_code_ui_mockups/
+
+# Windows NTFS alternate data streams
+*:Zone.Identifier

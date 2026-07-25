@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="stylesheet" href="_ds/god-mode-code-design-system-ca0aa4ce-962f-4c4e-83ad-836e0eba571d/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/god-mode-code-design-system-ca0aa4ce-962f-4c4e-83ad-836e0eba571d/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/god-mode-code-design-system-ca0aa4ce-962f-4c4e-83ad-836e0eba571d/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/god-mode-code-design-system-ca0aa4ce-962f-4c4e-83ad-836e0eba571d/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/god-mode-code-design-system-ca0aa4ce-962f-4c4e-83ad-836e0eba571d/tokens/effects.css">
+  <link rel="stylesheet" href="_ds/god-mode-code-design-system-ca0aa4ce-962f-4c4e-83ad-836e0eba571d/tokens/base.css">
+  <link rel="stylesheet" href="_ds/god-mode-code-design-system-ca0aa4ce-962f-4c4e-83ad-836e0eba571d/styles.css">
+  <script src="_ds/god-mode-code-design-system-ca0aa4ce-962f-4c4e-83ad-836e0eba571d/_ds_bundle.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body{margin:0;background:radial-gradient(120% 90% at 50% 0%,#060a06 0%,#020302 60%,#000 100%);color:var(--ink-1);font-family:var(--font-mono);-webkit-font-smoothing:antialiased}
+    a{color:var(--rain-green);text-decoration:none}a:hover{color:var(--rain-bright);text-shadow:var(--glow-sm)}
+    ::selection{background:color-mix(in srgb,var(--rain-green) 40%,transparent)}
+    .gal{padding:64px 72px 120px;display:flex;flex-direction:column;gap:64px}
+    .mast{border-bottom:1px solid var(--line);padding-bottom:34px;max-width:900px}
+    .grp{display:flex;flex-direction:column;gap:26px}
+    .glabel{display:flex;align-items:baseline;gap:14px;font-family:var(--font-terminal);letter-spacing:.22em;text-transform:uppercase;color:var(--ink-2);font-size:13px}
+    .glabel b{color:var(--rain-green);text-shadow:var(--glow-sm);font-weight:400}
+    .glabel span{flex:1;height:1px;background:var(--line)}
+    .row{display:flex;flex-wrap:wrap;gap:46px;align-items:flex-start}
+    .fig{display:flex;flex-direction:column;gap:14px}
+    .win{background:#000;border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;box-shadow:0 24px 70px -20px rgba(0,0,0,.9),0 0 0 1px rgba(0,255,65,.04)}
+    .tbar{display:flex;align-items:center;gap:12px;padding:11px 16px;background:color-mix(in srgb,var(--surface-1) 90%,transparent);border-bottom:1px solid var(--line)}
+    .tdots{display:flex;gap:6px}
+    .tdot{width:9px;height:9px;border-radius:50%;border:1px solid var(--line-bright)}
+    .turl{flex:1;text-align:center;font-family:var(--font-terminal);font-size:12px;letter-spacing:.1em;color:var(--ink-2)}
+    .scr{position:relative;width:960px;height:600px;overflow:hidden;background:#000}
+    .scr-m{position:relative;width:344px;height:744px;overflow:hidden;background:#000}
+    .rain{position:absolute;inset:0;opacity:.5;pointer-events:none;z-index:0}
+    .cont .sc-host-x{--surface-1:color-mix(in srgb,#070B07 90%,transparent);--surface-2:color-mix(in srgb,#0B110B 90%,transparent);--surface-3:color-mix(in srgb,#10190F 90%,transparent);--bg-card:color-mix(in srgb,#0B110B 90%,transparent)}
+    .cont{position:relative;z-index:1;height:100%;overflow:hidden;box-sizing:border-box}
+    .cap{font-family:var(--font-terminal);letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:var(--ink-1);display:flex;align-items:center;gap:10px}
+    .cap i{font-style:normal;font-size:10px;color:var(--void);background:var(--rain-green);padding:3px 6px;border-radius:3px;letter-spacing:.1em;box-shadow:var(--glow-sm)}
+    .capd{font-family:var(--font-mono);font-size:11px;letter-spacing:0;text-transform:none;color:var(--ink-3);max-width:940px;line-height:1.5}
+    .hd{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--void) 66%,transparent);backdrop-filter:blur(4px)}
+    .hd-mark{display:flex;align-items:center;gap:9px}
+    .hd-blk{font-family:var(--font-crt);font-size:30px;color:var(--rain-green);text-shadow:var(--glow-md);line-height:.7}
+    .hd-word{font-family:var(--font-terminal);font-size:18px;letter-spacing:.16em;color:var(--rain-shine);text-shadow:var(--glow-sm)}
+    .hd-nav{display:flex;align-items:center;gap:4px;font-family:var(--font-terminal);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+    .hd-nav a{padding:8px 12px;color:var(--ink-2)}
+    .hd-nav a.on{color:var(--rain-green);text-shadow:var(--glow-sm)}
+    .hd-av{width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--line-bright);border-radius:3px;color:var(--rain-green);font-family:var(--font-terminal);font-size:13px}
+    .hd-sep{width:1px;height:20px;background:var(--line);margin:0 6px}
+    .badge{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-terminal);font-size:11px;letter-spacing:.16em;text-transform:uppercase;padding:4px 10px;border-radius:999px}
+    .b-green{color:var(--rain-green);border:1px solid color-mix(in srgb,var(--rain-green) 40%,transparent)}
+    .b-warn{color:var(--warning);border:1px solid color-mix(in srgb,var(--warning) 45%,transparent)}
+    .b-err{color:var(--error);border:1px solid color-mix(in srgb,var(--error) 45%,transparent)}
+    .b-neut{color:var(--ink-2);border:1px solid var(--line)}
+    .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+    .kbd{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;font-family:var(--font-terminal);font-size:11px;color:var(--ink-1);background:color-mix(in srgb,var(--surface-2) 90%,transparent);border:1px solid var(--line-bright);border-bottom-width:3px;border-radius:3px}
+    .snum{font-family:var(--font-crt);line-height:.78;color:var(--rain-green);text-shadow:var(--glow-md)}
+    .slabel{font-family:var(--font-terminal);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+    .sunit{font-family:var(--font-mono);font-size:13px;color:var(--ink-3);margin-left:5px}
+    @keyframes gmc-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  </style>
+</helmet>
+
+<div class="gal">
+
+  <div class="mast">
+    <div style="display:flex;align-items:center;gap:11px;margin-bottom:20px">
+      <span class="hd-blk" style="font-size:40px">▚</span>
+      <span style="font-family:var(--font-terminal);font-size:26px;letter-spacing:.16em;color:var(--rain-shine);text-shadow:var(--glow-md)">GOD_MODE_CODE</span>
+    </div>
+    <div style="font-family:var(--font-terminal);letter-spacing:.28em;text-transform:uppercase;color:var(--rain-green);font-size:13px;text-shadow:var(--glow-sm);margin-bottom:12px">UI Mockups · Full Screen Set</div>
+    <p style="font-family:var(--font-mono);font-size:14px;line-height:1.7;color:var(--ink-2);max-width:760px;margin:0">Every screen of the speed-typing product rendered in the GOD_MODE_CODE system — green phosphor on a black void, live digital rain behind each frame. Access, the run flow and its states, results, leaderboard, profile, settings and system states. Desktop and mobile.</p>
+  </div>
+
+  <!-- ============ 01 ACCESS ============ -->
+  <div class="grp">
+    <div class="glabel"><b>01</b> Access <span></span></div>
+    <div class="row">
+
+      <!-- Sign in -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/jack-in</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rCalm }}" speed="{{ sCalm }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="display:flex;align-items:center;justify-content:center;padding:40px">
+              <div style="width:400px;background:color-mix(in srgb,var(--surface-2) 80%,transparent);border:1px solid var(--line-bright);border-radius:var(--radius-md);box-shadow:var(--box-glow);padding:38px 34px;text-align:center">
+                <div class="hd-mark" style="justify-content:center;margin-bottom:24px"><span class="hd-blk">▚</span><span class="hd-word">GOD_MODE_CODE</span></div>
+                <div style="font-family:var(--font-terminal);font-size:24px;letter-spacing:.1em;color:var(--ink-max);text-shadow:var(--glow-sm);margin-bottom:6px">JACK IN</div>
+                <div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin-bottom:26px">enter the grid — the rain is waiting</div>
+                <div style="display:flex;flex-direction:column;gap:14px;text-align:left">
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Input" prefix="&gt;" placeholder="operator handle" defaultValue="neo_anderson" hint-size="100%,44px"></x-import>
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Input" prefix="#" type="password" placeholder="access key" defaultValue="········" hint-size="100%,44px"></x-import>
+                  <div style="margin-top:6px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" size="lg" block="{{ T }}" hint-size="100%,48px">Enter the Grid</x-import></div>
+                  <div style="text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--ink-3);margin-top:4px">no identity yet? <a href="#">create one</a></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>1a</i> Sign in / Jack in</div>
+        <div class="capd">Access gate. Terminal <b>Input</b> fields with a <code>&gt;</code> prompt prefix and glowing focus ring; primary <b>Button</b> in filled phosphor.</div>
+      </div>
+
+      <!-- Signal lost error -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/offline</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rFaint }}" speed="{{ sCalm }}" color="#0a3a14" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;gap:22px">
+              <div style="font-family:var(--font-crt);font-size:120px;line-height:.8;color:var(--error);text-shadow:0 0 24px color-mix(in srgb,var(--error) 70%,transparent);animation:gmc-pulse 1.4s steps(2) infinite">!</div>
+              <div>
+                <div style="font-family:var(--font-terminal);font-size:26px;letter-spacing:.14em;color:var(--error);margin-bottom:8px">SIGNAL LOST</div>
+                <div style="font-family:var(--font-mono);font-size:13px;color:var(--ink-2);max-width:340px;line-height:1.6">The grid dropped the connection. Your run could not be logged. Reconnect to continue.</div>
+              </div>
+              <div style="display:flex;gap:12px">
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" hint-size="auto,44px">Reconnect</x-import>
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" variant="ghost" hint-size="auto,44px">Work Offline</x-import>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>1b</i> System error · Signal lost</div>
+        <div class="capd">Full-screen fault state — the one moment the palette lets <b>--error</b> red take the void, pulsing on a dimmed rain.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 02 HOME & SELECTION ============ -->
+  <div class="grp">
+    <div class="glabel"><b>02</b> Home &amp; Selection <span></span></div>
+    <div class="row">
+
+      <!-- Home -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode</div></div>
+          <div class="scr" style="height:664px">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rCalm }}" speed="{{ sCalm }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont">
+              <div class="hd"><div class="hd-mark"><span class="hd-blk">▚</span><span class="hd-word">GOD_MODE_CODE</span></div><div class="hd-nav"><a class="on">Leaderboard</a><a>About</a><span class="hd-sep"></span><span class="hd-av">YU</span></div></div>
+              <div style="padding:34px 44px;text-align:center">
+                <div class="badge b-green" style="margin-bottom:16px"><span class="dot"></span>System online</div>
+                <h1 style="font-family:var(--font-terminal);font-size:44px;letter-spacing:.05em;color:var(--ink-max);text-shadow:var(--glow-md);margin:0 0 12px">HOW FAST CAN YOU TYPE?</h1>
+                <p style="font-family:var(--font-mono);font-size:15px;color:var(--ink-2);max-width:520px;margin:0 auto 24px;line-height:1.5">Pick a discipline. The rain falls while you type. Beat your best WPM.</p>
+                <div style="display:flex;justify-content:center;margin-bottom:22px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Tabs" value="code" items="{{ homeTabs }}" onChange="{{ noop }}" hint-size="320px,40px"></x-import></div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:26px;text-align:left">
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ChallengeCard" glyph="❝❞" title="Quotes" meta="240 passages" description="Motivational one-liners to warm up your fingers." hint-size="100%,168px"></x-import>
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ChallengeCard" glyph="{ }" title="Code" meta="88 blocks" description="Short blocks pulled from real open-source repos." selected="{{ T }}" style="{{ selCard }}" hint-size="100%,168px"></x-import>
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ChallengeCard" glyph="¶" title="Prose" meta="60 passages" description="Profound paragraphs from the canon of literature." hint-size="100%,168px"></x-import>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:14px">
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" size="lg" hint-size="160px,48px">Start Run</x-import>
+                  <span style="font-family:var(--font-mono);font-size:12px;color:var(--ink-3)">or hit <span class="kbd">⏎</span> to begin · <span class="kbd">Esc</span> to reset</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>2a</i> Home / discipline select</div>
+        <div class="capd">Landing. <b>Tabs</b> + three <b>ChallengeCard</b> tiles (Code selected, green edge bloom) over the translucent fixed <b>Header</b>.</div>
+      </div>
+
+      <!-- Discipline detail -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/code</div></div>
+          <div class="scr" style="height:724px">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rCalm }}" speed="{{ sCalm }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:26px 34px;display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;align-items:center;gap:10px;font-family:var(--font-mono);font-size:12px;color:var(--ink-3)"><a href="#">godmodecode</a><span>/</span><span style="color:var(--rain-green)">code</span></div>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+                <div>
+                  <h1 style="font-family:var(--font-terminal);font-size:23px;letter-spacing:.08em;color:var(--ink-max);text-shadow:var(--glow-sm);margin:0">CODE PROBLEMS</h1>
+                  <div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin-top:4px;max-width:360px;line-height:1.5">Filter by difficulty, pick your language, then type your solution into an empty stub.</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+                  <span class="slabel">Language</span>
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Select" value="py" options="{{ langOptions }}" onChange="{{ noop }}" hint-size="170px,40px"></x-import>
+                </div>
+              </div>
+              <div><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Tabs" value="all" items="{{ diffTabs }}" onChange="{{ noop }}" hint-size="360px,40px"></x-import></div>
+              <div style="display:grid;grid-template-columns:1fr 1.35fr;gap:20px;align-items:start;flex:1;min-height:0">
+                <div style="border:1px solid var(--line);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-1) 90%,transparent);overflow:hidden;display:flex;flex-direction:column">
+                  <div style="padding:11px 16px;border-bottom:1px solid var(--line);font-family:var(--font-terminal);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);display:flex;justify-content:space-between"><span>88 problems</span><span style="color:var(--ink-2)">newest ▼</span></div>
+                  <sc-for list="{{ problems }}" as="p" hint-placeholder-count="5">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line-faint);background:{{ p.bg }};border-left:{{ p.mark }}">
+                      <div style="display:flex;flex-direction:column;gap:3px">
+                        <span style="font-family:var(--font-mono);font-size:13px;color:{{ p.nameColor }}">{{ p.name }}</span>
+                        <span style="font-family:var(--font-mono);font-size:10px;color:var(--ink-3)">{{ p.meta }}</span>
+                      </div>
+                      <span style="font-family:var(--font-terminal);font-size:9px;letter-spacing:.12em;color:{{ p.diffColor }};border:1px solid currentColor;padding:3px 7px;border-radius:999px;white-space:nowrap">{{ p.diff }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div style="border:1px solid var(--line-bright);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-2) 78%,transparent);box-shadow:var(--box-glow);padding:18px 20px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                      <span style="font-family:var(--font-terminal);font-size:18px;letter-spacing:.06em;color:var(--ink-max)">TWO SUM</span>
+                      <span style="font-family:var(--font-terminal);font-size:9px;letter-spacing:.12em;color:var(--rain-green);border:1px solid currentColor;padding:3px 7px;border-radius:999px">JUNIOR</span>
+                    </div>
+                    <div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-2);line-height:1.6">Return the indices of the two numbers in <span style="color:var(--ink-1)">nums</span> that add up to <span style="color:var(--ink-1)">target</span>. Exactly one solution exists; you may not reuse an element.</div>
+                  </div>
+                  <div style="border:1px solid var(--line);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-1) 90%,transparent);overflow:hidden">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--line);font-family:var(--font-terminal);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)"><span>solution.py — empty stub</span><span style="color:var(--rain-green)">▸ type here</span></div>
+                    <div style="display:flex;font-family:var(--font-mono);font-size:13px;line-height:1.85">
+                      <div style="padding:14px 10px;text-align:right;color:var(--ink-3);background:color-mix(in srgb,var(--surface-2) 60%,transparent);user-select:none">1<br>2<br>3</div>
+<div style="padding:14px 16px;color:var(--ink-1);white-space:pre">def two_sum(nums, target):
+    <span style="color:var(--ink-3)"># type your solution</span>
+    <span style="display:inline-block;width:9px;height:1.05em;background:var(--rain-green);box-shadow:var(--glow-md);vertical-align:text-bottom;animation:gmc-caret 1s steps(1) infinite"></span></div>
+                    </div>
+                  </div>
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" size="lg" block="{{ T }}" hint-size="100%,48px">Start Run</x-import>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>2b</i> Code · Problem browser</div>
+        <div class="capd">A filterable list of code problems (difficulty is a <b>filter</b>, not a passage) with a <b>language</b> select, and an empty <b>stub</b> you type your own solution into — no writing over finished code.</div>
+      </div>
+
+      <!-- Countdown -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/code/run</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rMid }}" speed="{{ sMid }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:40px;text-align:center">
+              <div class="badge b-neut" style="margin-bottom:10px">Code · Principal</div>
+              <div style="font-family:var(--font-terminal);font-size:14px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-2)">Get ready</div>
+              <div class="snum" style="font-size:200px;color:var(--rain-shine);text-shadow:0 0 40px var(--rain-green),0 0 12px #fff">3</div>
+              <div style="font-family:var(--font-mono);font-size:14px;color:var(--ink-3);opacity:.85;max-width:440px;margin-top:6px;filter:blur(.3px)">export function clamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }</div>
+              <div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-3);margin-top:18px">start typing to begin the clock</div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>2c</i> Countdown / pre-run</div>
+        <div class="capd">The clock arms. Oversized <b>--font-crt</b> numeral with white-cored shine glow; rain steps up as the run begins.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 03 THE RUN ============ -->
+  <div class="grp">
+    <div class="glabel"><b>03</b> The Run <span></span></div>
+    <div class="row">
+
+      <!-- Idle -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/quotes/run</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rMid }}" speed="{{ sCalm }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:40px 44px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px">
+                <div style="display:flex;gap:44px">
+                  <div><div class="snum" style="font-size:44px">0<span class="sunit">wpm</span></div><div class="slabel">Speed</div></div>
+                  <div><div class="snum" style="font-size:44px">100<span class="sunit">%</span></div><div class="slabel">Accuracy</div></div>
+                  <div><div class="snum" style="font-size:44px;color:var(--rain-shine)">0<span class="sunit">s</span></div><div class="slabel">Time</div></div>
+                </div>
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.IconButton" label="Abort" variant="outline" hint-size="40px,40px"><i data-lucide="x"></i></x-import>
+              </div>
+              <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Card" scanlines="{{ T }}" padding="var(--space-6)" style="{{ typeCardStyle }}" hint-size="100%,200px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.TypingField" text="Do or do not. There is no try." typed="" hint-size="100%,60px"></x-import></x-import>
+              <div style="margin-top:22px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ProgressBar" value="{{ p0 }}" showLabel="{{ T }}" hint-size="100%,20px"></x-import></div>
+              <div style="text-align:center;margin-top:18px;font-family:var(--font-mono);font-size:12px;color:var(--ink-3)">start typing to begin the clock</div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>3a</i> Run · Idle</div>
+        <div class="capd">Armed and waiting. <b>TypingField</b> shows the full passage dim with the block caret at glyph one; stats zeroed.</div>
+      </div>
+
+      <!-- Mid-run -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/code/run</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rHot }}" speed="{{ sHot }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:40px 44px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px">
+                <div style="display:flex;gap:44px">
+                  <div><div class="snum" style="font-size:44px">78<span class="sunit">wpm</span></div><div class="slabel">Speed</div></div>
+                  <div><div class="snum" style="font-size:44px">99.1<span class="sunit">%</span></div><div class="slabel">Accuracy</div></div>
+                  <div><div class="snum" style="font-size:44px;color:var(--rain-shine)">12<span class="sunit">s</span></div><div class="slabel">Time</div></div>
+                </div>
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.IconButton" label="Abort" variant="outline" hint-size="40px,40px"><i data-lucide="x"></i></x-import>
+              </div>
+              <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Card" scanlines="{{ T }}" padding="var(--space-6)" style="{{ typeCardStyle }}" hint-size="100%,200px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.TypingField" text="for (let i = 0; i &lt; n; i++) { grid[i] = new Array(n).fill(0); }" typed="for (let i = 0; i &lt; n; i++) { gri" hint-size="100%,60px"></x-import></x-import>
+              <div style="margin-top:22px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ProgressBar" value="{{ p55 }}" showLabel="{{ T }}" hint-size="100%,20px"></x-import></div>
+              <div style="text-align:center;margin-top:18px;font-family:var(--font-mono);font-size:12px;color:var(--ink-3)">keep going — the rain is with you</div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>3b</i> Run · Mid-type</div>
+        <div class="capd">Live typing. Correct glyphs glow green with the caret mid-passage; the rain has sped up with WPM. <b>ProgressBar</b> at 55%.</div>
+      </div>
+
+      <!-- Error -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/code/run</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rHot }}" speed="{{ sHot }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:40px 44px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px">
+                <div style="display:flex;gap:44px">
+                  <div><div class="snum" style="font-size:44px">64<span class="sunit">wpm</span></div><div class="slabel">Speed</div></div>
+                  <div><div class="snum" style="font-size:44px;color:var(--error);text-shadow:0 0 14px color-mix(in srgb,var(--error) 60%,transparent)">88.9<span class="sunit">%</span></div><div class="slabel">Accuracy</div></div>
+                  <div><div class="snum" style="font-size:44px;color:var(--error);text-shadow:0 0 14px color-mix(in srgb,var(--error) 60%,transparent)">3</div><div class="slabel">Errors</div></div>
+                </div>
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.IconButton" label="Abort" variant="outline" hint-size="40px,40px"><i data-lucide="x"></i></x-import>
+              </div>
+              <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Card" scanlines="{{ T }}" padding="var(--space-6)" style="{{ typeCardErrStyle }}" hint-size="100%,200px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.TypingField" text="const sum = arr.reduce((a, b) =&gt; a + b, 0);" typed="const som" hint-size="100%,60px"></x-import></x-import>
+              <div style="margin-top:22px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ProgressBar" value="{{ p20 }}" tone="error" showLabel="{{ T }}" hint-size="100%,20px"></x-import></div>
+              <div style="text-align:center;margin-top:18px;font-family:var(--font-mono);font-size:12px;color:var(--error)">wrong glyph — backspace to fix, accuracy is falling</div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>3c</i> Run · Wrong keystroke</div>
+        <div class="capd">The red pill. A mistyped glyph flashes <b>--error</b> red inside the field, error count climbs, and the track recolors.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 04 RESULTS ============ -->
+  <div class="grp">
+    <div class="glabel"><b>04</b> Results <span></span></div>
+    <div class="row">
+
+      <!-- Complete -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/code/result</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rMid }}" speed="{{ sMid }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:34px 44px;display:flex;flex-direction:column;gap:20px">
+              <div style="text-align:center"><span class="badge b-warn">Run logged</span></div>
+              <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ResultPanel" verdict="RUN COMPLETE" wpm="{{ rc.wpm }}" accuracy="{{ rc.accuracy }}" time="{{ rc.time }}" errors="{{ rc.errors }}" hint-size="100%,220px"></x-import>
+              <div style="border:1px solid var(--line);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-1) 90%,transparent);padding:18px 20px">
+                <div style="font-family:var(--font-terminal);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);margin-bottom:12px">Global leaderboard</div>
+                <sc-for list="{{ boardTop }}" as="r" hint-placeholder-count="3">
+                  <div style="display:grid;grid-template-columns:26px 1fr auto auto;align-items:center;gap:14px;padding:7px 10px;border-radius:var(--radius-sm)">
+                    <span style="font-family:var(--font-crt);font-size:19px;color:var(--rain-green)">{{ r.rank }}</span>
+                    <span style="font-family:var(--font-mono);font-size:13px;color:var(--ink-1)">{{ r.user }}</span>
+                    <span style="font-family:var(--font-crt);font-size:18px;color:var(--ink-max)">{{ r.wpm }}</span>
+                    <span style="font-family:var(--font-mono);font-size:11px;color:var(--ink-2);min-width:44px;text-align:right">{{ r.acc }}%</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;justify-content:center;gap:14px">
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" size="lg" hint-size="auto,48px">Run Again</x-import>
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" variant="secondary" size="lg" hint-size="auto,48px">Change Mode</x-import>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>4a</i> Result · Complete</div>
+        <div class="capd"><b>ResultPanel</b> four-up <b>Stat</b> grid over a leaderboard snippet. Amber <b>Badge</b> confirms the run was logged.</div>
+      </div>
+
+      <!-- New best -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/code/result</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rHot }}" speed="{{ sHot }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:34px 44px;display:flex;flex-direction:column;gap:20px">
+              <div style="text-align:center"><span class="badge b-warn" style="animation:gmc-pulse 1.6s ease-in-out infinite"><span class="dot"></span>New personal best</span>
+              <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ResultPanel" verdict="NEW BEST" isBest="{{ T }}" wpm="{{ rb.wpm }}" accuracy="{{ rb.accuracy }}" time="{{ rb.time }}" errors="{{ rb.errors }}" hint-size="100%,220px"></x-import>
+              <div style="display:flex;gap:16px;align-items:center;border:1px solid var(--line-bright);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-2) 76%,transparent);box-shadow:var(--box-glow);padding:18px 22px">
+                <span style="font-family:var(--font-crt);font-size:44px;color:var(--warning);text-shadow:0 0 16px color-mix(in srgb,var(--warning) 60%,transparent);line-height:1">↑ 39</span>
+                <div>
+                  <div style="font-family:var(--font-terminal);font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-max)">Fastest run yet · Code</div>
+                  <div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin-top:3px">Previous best 112 wpm. You climb to rank #2 on today's board.</div>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:center;gap:14px">
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" size="lg" hint-size="auto,48px">Run Again</x-import>
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" variant="ghost" size="lg" hint-size="auto,48px">Share Run</x-import>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>4b</i> Result · New personal best</div>
+        <div class="capd">The reward state. <b>ResultPanel</b> flips its <code>isBest</code> flag on, a pulsing amber badge and a delta callout mark the record.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 05 DATA ============ -->
+  <div class="grp">
+    <div class="glabel"><b>05</b> Data <span></span></div>
+    <div class="row">
+
+      <!-- Leaderboard -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/leaderboard</div></div>
+          <div class="scr" style="height:772px">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rCalm }}" speed="{{ sCalm }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont">
+              <div class="hd"><div class="hd-mark"><span class="hd-blk">▚</span><span class="hd-word">GOD_MODE_CODE</span></div><div class="hd-nav"><a class="on">Leaderboard</a><a>About</a><span class="hd-sep"></span><span class="hd-av">YU</span></div></div>
+              <div style="padding:28px 40px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+                  <h1 style="font-family:var(--font-terminal);font-size:26px;letter-spacing:.1em;color:var(--ink-max);text-shadow:var(--glow-sm);margin:0">GLOBAL LEADERBOARD</h1>
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Select" value="all" options="{{ discOptions }}" onChange="{{ noop }}" hint-size="150px,40px"></x-import>
+                </div>
+                <div style="margin-bottom:18px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Tabs" value="today" items="{{ rangeTabs }}" onChange="{{ noop }}" hint-size="300px,40px"></x-import></div>
+                <div style="border:1px solid var(--line);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-1) 90%,transparent);overflow:hidden">
+                  <div style="display:grid;grid-template-columns:44px 1fr 100px 90px 90px;gap:14px;padding:12px 18px;border-bottom:1px solid var(--line);font-family:var(--font-terminal);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)"><span>Rank</span><span>Operator</span><span style="text-align:right">WPM</span><span style="text-align:right">Acc</span><span style="text-align:right">Mode</span></div>
+                  <sc-for list="{{ boardFull }}" as="r" hint-placeholder-count="8">
+                    <div style="display:grid;grid-template-columns:44px 1fr 100px 90px 90px;gap:14px;align-items:center;padding:11px 18px;background:{{ r.bg }};border-left:{{ r.mark }}">
+                      <span style="font-family:var(--font-crt);font-size:22px;color:{{ r.rankColor }}">{{ r.rank }}</span>
+                      <span style="font-family:var(--font-mono);font-size:13px;color:{{ r.userColor }}">{{ r.user }}</span>
+                      <span style="font-family:var(--font-crt);font-size:22px;color:var(--ink-max);text-align:right">{{ r.wpm }}</span>
+                      <span style="font-family:var(--font-mono);font-size:12px;color:var(--ink-2);text-align:right">{{ r.acc }}%</span>
+                      <span style="font-family:var(--font-terminal);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);text-align:right">{{ r.mode }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>5a</i> Leaderboard</div>
+        <div class="capd">Ranked board with discipline <b>Select</b> and time-range <b>Tabs</b>. Your row is pinned in a green-tinted highlight.</div>
+      </div>
+
+      <!-- Profile -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/u/neo_anderson</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rCalm }}" speed="{{ sCalm }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont">
+              <div class="hd"><div class="hd-mark"><span class="hd-blk">▚</span><span class="hd-word">GOD_MODE_CODE</span></div><div class="hd-nav"><a>Leaderboard</a><a>About</a><span class="hd-sep"></span><span class="hd-av">YU</span></div></div>
+              <div style="padding:28px 40px;display:flex;flex-direction:column;gap:22px">
+                <div style="display:flex;align-items:center;gap:18px">
+                  <div style="width:64px;height:64px;display:grid;place-items:center;border:1px solid var(--line-bright);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-2) 90%,transparent);box-shadow:var(--box-glow);font-family:var(--font-terminal);font-size:22px;color:var(--rain-green);text-shadow:var(--glow-sm)">NA</div>
+                  <div style="flex:1">
+                    <div style="font-family:var(--font-terminal);font-size:22px;letter-spacing:.08em;color:var(--ink-max)">neo_anderson</div>
+                    <div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin-top:2px">jacked in 314 days ago · 1,208 runs logged</div>
+                  </div>
+                  <span class="badge b-green"><span class="dot"></span>18-day streak</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+                  <div style="border:1px solid var(--line);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-1) 90%,transparent);padding:18px"><div class="snum" style="font-size:46px">148<span class="sunit">wpm</span></div><div class="slabel">All-time best</div></div>
+                  <div style="border:1px solid var(--line);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-1) 90%,transparent);padding:18px"><div class="snum" style="font-size:46px">126<span class="sunit">wpm</span></div><div class="slabel">30-day avg</div></div>
+                  <div style="border:1px solid var(--line);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-1) 90%,transparent);padding:18px"><div class="snum" style="font-size:46px;color:var(--warning);text-shadow:0 0 14px color-mix(in srgb,var(--warning) 55%,transparent)">99.2<span class="sunit">%</span></div><div class="slabel">Best accuracy</div></div>
+                </div>
+                <div style="border:1px solid var(--line);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-1) 90%,transparent);padding:20px">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px"><div style="font-family:var(--font-terminal);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)">Last 14 runs · WPM</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-3)">peak 148</div></div>
+                  <div style="display:flex;align-items:flex-end;gap:8px;height:120px">
+                    <sc-for list="{{ bars }}" as="b" hint-placeholder-count="14">
+                      <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%">
+                        <div style="width:100%;height:{{ b.h }}%;background:{{ b.fill }};box-shadow:{{ b.glow }};border-radius:2px 2px 0 0"></div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>5b</i> Profile / stats history</div>
+        <div class="capd">Operator profile: bests as CRT <b>Stat</b> readouts, a streak <b>Badge</b>, and a phosphor bar chart of recent runs (best run glows brightest).</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 06 SYSTEM ============ -->
+  <div class="grp">
+    <div class="glabel"><b>06</b> System <span></span></div>
+    <div class="row">
+
+      <!-- Settings -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/settings</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rCalm }}" speed="{{ sCalm }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:32px 40px;display:flex;flex-direction:column;gap:18px">
+              <h1 style="font-family:var(--font-terminal);font-size:24px;letter-spacing:.1em;color:var(--ink-max);text-shadow:var(--glow-sm);margin:0">SETTINGS</h1>
+              <div style="border:1px solid var(--line);border-radius:var(--radius-md);background:color-mix(in srgb,var(--surface-1) 90%,transparent);overflow:hidden">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)"><div><div style="font-family:var(--font-mono);font-size:14px;color:var(--ink-1)">Digital rain</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-3);margin-top:2px">the falling code behind every screen</div></div><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Switch" checked="{{ T }}" onChange="{{ noop }}" hint-size="52px,28px"></x-import></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)"><div><div style="font-family:var(--font-mono);font-size:14px;color:var(--ink-1)">Live WPM readout</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-3);margin-top:2px">show speed while typing</div></div><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Switch" checked="{{ T }}" onChange="{{ noop }}" hint-size="52px,28px"></x-import></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)"><div><div style="font-family:var(--font-mono);font-size:14px;color:var(--ink-1)">Keystroke sound</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-3);margin-top:2px">mechanical click on each key</div></div><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Switch" checked="{{ F }}" onChange="{{ noop }}" hint-size="52px,28px"></x-import></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px"><div><div style="font-family:var(--font-mono);font-size:14px;color:var(--ink-1)">Default difficulty</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-3);margin-top:2px">applied to new runs</div></div><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Select" value="hard" options="{{ diffOptions }}" onChange="{{ noop }}" hint-size="150px,40px"></x-import></div>
+              </div>
+              <div style="border:1px solid color-mix(in srgb,var(--error) 45%,transparent);border-radius:var(--radius-md);background:color-mix(in srgb,var(--error-dim) 40%,transparent);padding:18px 20px;display:flex;align-items:center;justify-content:space-between">
+                <div><div style="font-family:var(--font-terminal);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--error)">Danger zone</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-2);margin-top:3px">Wipe every logged run and reset all bests. Irreversible.</div></div>
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" variant="danger" hint-size="auto,44px">Wipe All Runs</x-import>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>6a</i> Settings</div>
+        <div class="capd">Preferences with terminal <b>Switch</b> toggles and a <b>Select</b>, closing on a red-bordered danger zone and a <b>danger Button</b>.</div>
+      </div>
+
+      <!-- Reset dialog -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/settings</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rCalm }}" speed="{{ sCalm }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="position:relative">
+              <div style="position:absolute;inset:0;background:color-mix(in srgb,var(--void) 72%,transparent);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:40px">
+                <div style="width:420px;background:color-mix(in srgb,var(--surface-2) 90%,transparent);border:1px solid var(--rain-green);border-radius:var(--radius-md);box-shadow:var(--box-glow),0 30px 60px -20px #000;padding:26px 28px">
+                  <div style="font-family:var(--font-terminal);font-size:18px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-max);text-shadow:var(--glow-sm);margin-bottom:12px">Wipe all runs?</div>
+                  <div style="font-family:var(--font-mono);font-size:13px;color:var(--ink-2);line-height:1.6;margin-bottom:24px">This clears every recorded run, every best and your position on the board. The rain forgets you. This cannot be undone.</div>
+                  <div style="display:flex;justify-content:flex-end;gap:12px">
+                    <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" variant="ghost" hint-size="auto,44px">Cancel</x-import>
+                    <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" variant="danger" hint-size="auto,44px">Wipe Everything</x-import>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>6b</i> Confirm dialog</div>
+        <div class="capd"><b>Dialog</b> pattern — a glowing green-bordered modal over a blurred scrim, the rain still faintly readable behind it.</div>
+      </div>
+
+      <!-- Empty state -->
+      <div class="fig">
+        <div class="win"><div class="tbar"><div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div><div class="turl">▚ markdsouza.dev/godmodecode/u/new_operator</div></div>
+          <div class="scr">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rFaint }}" speed="{{ sCalm }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;gap:20px">
+              <div style="font-family:var(--font-crt);font-size:96px;line-height:.8;color:var(--ink-3)">_</div>
+              <div>
+                <div style="font-family:var(--font-terminal);font-size:22px;letter-spacing:.1em;color:var(--ink-max);margin-bottom:8px">NO RUNS LOGGED YET</div>
+                <div style="font-family:var(--font-mono);font-size:13px;color:var(--ink-2);max-width:360px;line-height:1.6">Your history is empty. Complete a run and the rain starts keeping score.</div>
+              </div>
+              <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" size="lg" hint-size="auto,48px">Start Your First Run</x-import>
+              <span style="font-family:var(--font-mono);font-size:11px;color:var(--ink-3)">or hit <span class="kbd">⏎</span> to begin</span>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>6c</i> Empty state · No history</div>
+        <div class="capd">First-visit profile. A single dim caret glyph, calm rain dropped to a whisper, and one clear primary action.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 07 MOBILE ============ -->
+  <div class="grp">
+    <div class="glabel"><b>07</b> Mobile <span></span></div>
+    <div class="row">
+
+      <!-- Mobile home -->
+      <div class="fig">
+        <div class="win"><div class="tbar" style="justify-content:center"><div class="turl">▚ markdsouza.dev/godmodecode</div></div>
+          <div class="scr-m">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rCalm }}" speed="{{ sCalm }}" fontSize="{{ mRain }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:0">
+              <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-family:var(--font-terminal);font-size:11px;color:var(--ink-2);border-bottom:1px solid var(--line-faint)"><span>9:41</span><span>◐ ▮▮▮</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)"><div class="hd-mark"><span class="hd-blk" style="font-size:22px">▚</span><span class="hd-word" style="font-size:13px">GOD_MODE_CODE</span></div><span class="hd-av" style="width:28px;height:28px;font-size:11px">YU</span></div>
+              <div style="padding:26px 20px;text-align:center">
+                <div class="badge b-green" style="margin-bottom:14px"><span class="dot"></span>Online</div>
+                <h1 style="font-family:var(--font-terminal);font-size:26px;letter-spacing:.04em;color:var(--ink-max);text-shadow:var(--glow-sm);margin:0 0 18px;line-height:1.15">HOW FAST CAN YOU TYPE?</h1>
+                <div style="display:flex;flex-direction:column;gap:12px;text-align:left;margin-bottom:22px">
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ChallengeCard" glyph="❝❞" title="Quotes" meta="240" description="Warm-up one-liners." style="{{ cardM }}" hint-size="100%,96px"></x-import>
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ChallengeCard" glyph="{ }" title="Code" meta="88" description="Short blocks from real repos." selected="{{ T }}" style="{{ selCardM }}" hint-size="100%,96px"></x-import>
+                  <div style="display:flex;align-items:center;gap:8px;padding:9px 11px;border:1px solid color-mix(in srgb,var(--warning) 40%,transparent);border-radius:var(--radius-sm);background:color-mix(in srgb,var(--warning-dim) 45%,transparent)"><span style="font-family:var(--font-terminal);color:var(--warning);font-size:13px;line-height:1">!</span><span style="font-family:var(--font-mono);font-size:10px;color:var(--warning);line-height:1.4">Code mode is built for a physical keyboard — best played on desktop.</span></div>
+                </div>
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" size="lg" block="{{ T }}" hint-size="100%,48px">Start Run</x-import>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>7a</i> Mobile · Home</div>
+        <div class="capd">Discipline tiles stack vertically; full-width primary <b>Button</b> anchors the fold.</div>
+      </div>
+
+      <!-- Mobile run -->
+      <div class="fig">
+        <div class="win"><div class="tbar" style="justify-content:center"><div class="turl">▚ markdsouza.dev/godmodecode/quotes/run</div></div>
+          <div class="scr-m">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rHot }}" speed="{{ sHot }}" fontSize="{{ mRain }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:0">
+              <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-family:var(--font-terminal);font-size:11px;color:var(--ink-2);border-bottom:1px solid var(--line-faint)"><span>9:41</span><span>◐ ▮▮▮</span></div>
+              <div style="padding:22px 20px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px">
+                  <div><div class="snum" style="font-size:40px">92<span class="sunit">wpm</span></div><div class="slabel">Speed</div></div>
+                  <div><div class="snum" style="font-size:40px">99<span class="sunit">%</span></div><div class="slabel">Acc</div></div>
+                  <div><div class="snum" style="font-size:40px;color:var(--rain-shine)">9<span class="sunit">s</span></div><div class="slabel">Time</div></div>
+                </div>
+                <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Card" scanlines="{{ T }}" padding="var(--space-5)" style="{{ typeCardStyle }}" hint-size="100%,200px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.TypingField" text="Do or do not. There is no try." typed="Do or do not. The" size="md" hint-size="100%,80px"></x-import></x-import>
+                <div style="margin-top:20px"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.ProgressBar" value="{{ p55 }}" showLabel="{{ T }}" hint-size="100%,20px"></x-import></div>
+                <div style="text-align:center;margin-top:16px;font-family:var(--font-mono);font-size:11px;color:var(--ink-3)">the rain is with you</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>7b</i> Mobile · Run</div>
+        <div class="capd">Stats compress to a three-up row above the <b>TypingField</b> at <code>md</code> size; rain runs hot.</div>
+      </div>
+
+      <!-- Mobile result best -->
+      <div class="fig">
+        <div class="win"><div class="tbar" style="justify-content:center"><div class="turl">▚ markdsouza.dev/godmodecode/code/result</div></div>
+          <div class="scr-m">
+            <div class="rain"><x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.DigitalRain" intensity="{{ rHot }}" speed="{{ sMid }}" fontSize="{{ mRain }}" hint-size="100%,100%"></x-import></div>
+            <div class="cont" style="padding:0">
+              <div style="height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-family:var(--font-terminal);font-size:11px;color:var(--ink-2);border-bottom:1px solid var(--line-faint)"><span>9:41</span><span>◐ ▮▮▮</span></div>
+              <div style="padding:26px 20px;display:flex;flex-direction:column;gap:18px;align-items:center;text-align:center">
+                <span class="badge b-warn" style="animation:gmc-pulse 1.6s ease-in-out infinite"><span class="dot"></span>New best</span>
+                <div style="font-family:var(--font-terminal);font-size:16px;letter-spacing:.12em;color:var(--ink-max);text-shadow:var(--glow-sm)">NEW BEST</div>
+                <div class="snum" style="font-size:120px">151<span class="sunit" style="font-size:18px">wpm</span></div>
+                <div style="display:flex;gap:26px">
+                  <div><div class="snum" style="font-size:38px;color:var(--warning);text-shadow:0 0 12px color-mix(in srgb,var(--warning) 55%,transparent)">99.6<span class="sunit">%</span></div><div class="slabel">Accuracy</div></div>
+                  <div><div class="snum" style="font-size:38px;color:var(--rain-green)">0</div><div class="slabel">Errors</div></div>
+                </div>
+                <div style="width:100%;display:flex;flex-direction:column;gap:10px;margin-top:6px">
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" size="lg" block="{{ T }}" hint-size="100%,48px">Run Again</x-import>
+                  <x-import component-from-global-scope="GODMODECODEDesignSystem_ca0aa4.Button" variant="ghost" block="{{ T }}" hint-size="100%,44px">Share Run</x-import>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><i>7c</i> Mobile · New best</div>
+        <div class="capd">The reward, mobile-scaled: a single hero WPM numeral with accuracy and errors beneath, stacked full-width actions.</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    const draw = () => { try { window.lucide && window.lucide.createIcons(); } catch (e) {} };
+    [200, 700, 1600, 3000].forEach(t => setTimeout(draw, t));
+  }
+  renderVals() {
+    const noop = () => {};
+    const board = [
+      { rank: 1, user: "neo_anderson", wpm: 148, acc: 99.2, mode: "Code", me: false },
+      { rank: 2, user: "trinity", wpm: 141, acc: 98.7, mode: "Prose", me: false },
+      { rank: 3, user: "morpheus", wpm: 133, acc: 99.9, mode: "Quotes", me: false },
+      { rank: 4, user: "cypher", wpm: 128, acc: 94.1, mode: "Code", me: false },
+      { rank: 5, user: "you", wpm: 112, acc: 98.4, mode: "Code", me: true },
+      { rank: 6, user: "tank", wpm: 108, acc: 97.2, mode: "Prose", me: false },
+      { rank: 7, user: "dozer", wpm: 101, acc: 95.5, mode: "Quotes", me: false },
+      { rank: 8, user: "switch", wpm: 97, acc: 99.1, mode: "Code", me: false },
+    ];
+    const boardFull = board.map(r => ({
+      ...r,
+      bg: r.me ? "color-mix(in srgb, var(--rain-green) 10%, transparent)" : "transparent",
+      mark: r.me ? "2px solid var(--rain-green)" : "2px solid transparent",
+      rankColor: r.rank <= 3 ? "var(--rain-green)" : "var(--ink-3)",
+      userColor: r.me ? "var(--rain-bright)" : "var(--ink-1)",
+      user: r.me ? "you  ←" : r.user,
+    }));
+    const boardTop = board.slice(0, 3).map(r => ({ rank: r.rank, user: r.user, wpm: r.wpm, acc: r.acc }));
+
+    // profile bar chart — last 14 runs, peak run glows
+    const raw = [96, 104, 88, 118, 110, 126, 121, 133, 119, 140, 131, 148, 129, 136];
+    const peak = Math.max(...raw);
+    const bars = raw.map(v => {
+      const isPeak = v === peak;
+      return {
+        h: Math.round((v / peak) * 100),
+        fill: isPeak ? "var(--rain-green)" : "color-mix(in srgb, var(--rain-green) 42%, var(--surface-3))",
+        glow: isPeak ? "var(--glow-sm)" : "none",
+      };
+    });
+
+    const diffCol = d => d === "JUNIOR" ? "var(--rain-green)" : d === "SENIOR" ? "var(--warning)" : "var(--error)";
+    const problems = [
+      { name: "Two Sum", diff: "JUNIOR", meta: "acc 71% · 4.2k solved", sel: true },
+      { name: "Valid Parentheses", diff: "JUNIOR", meta: "acc 65% · 3.8k solved", sel: false },
+      { name: "Merge Intervals", diff: "SENIOR", meta: "acc 48% · 1.9k solved", sel: false },
+      { name: "LRU Cache", diff: "PRINCIPAL", meta: "acc 22% · 610 solved", sel: false },
+      { name: "Word Ladder II", diff: "PRINCIPAL", meta: "acc 14% · 240 solved", sel: false },
+    ].map(p => ({
+      name: p.name, diff: p.diff, meta: p.meta, diffColor: diffCol(p.diff),
+      bg: p.sel ? "color-mix(in srgb, var(--rain-green) 10%, transparent)" : "transparent",
+      mark: p.sel ? "2px solid var(--rain-green)" : "2px solid transparent",
+      nameColor: p.sel ? "var(--rain-bright)" : "var(--ink-1)",
+    }));
+    const selCard = { borderColor: "var(--rain-green)", boxShadow: "0 0 0 1.5px var(--rain-green), var(--box-glow)", background: "color-mix(in srgb, var(--rain-green) 10%, transparent)" };
+
+    return {
+      noop, T: true, F: false,
+      problems,
+      selCard,
+      selCardM: { ...selCard, minHeight: 96 },
+      cardM: { minHeight: 96 },
+      langOptions: [{ value: "py", label: "PYTHON" }, { value: "js", label: "JAVASCRIPT" }, { value: "ts", label: "TYPESCRIPT" }, { value: "go", label: "GO" }, { value: "rs", label: "RUST" }],
+      diffTabs: [{ id: "all", label: "All" }, { id: "easy", label: "Junior" }, { id: "normal", label: "Senior" }, { id: "hard", label: "Principal" }],
+      rFaint: 0.28, rCalm: 0.5, rMid: 0.72, rHot: 0.96,
+      sCalm: 0.75, sMid: 1.25, sHot: 1.9,
+      mRain: 13,
+      p0: 0, p20: 20, p55: 55,
+      homeTabs: [{ id: "quotes", label: "Quotes" }, { id: "code", label: "Code" }, { id: "prose", label: "Prose" }],
+      rangeTabs: [{ id: "today", label: "Today" }, { id: "week", label: "This Week" }, { id: "all", label: "All Time" }],
+      diffOptions: [{ value: "easy", label: "JUNIOR" }, { value: "normal", label: "SENIOR" }, { value: "hard", label: "PRINCIPAL" }],
+      discOptions: [{ value: "all", label: "ALL MODES" }, { value: "quotes", label: "QUOTES" }, { value: "code", label: "CODE" }, { value: "prose", label: "PROSE" }],
+      rc: { wpm: 128, accuracy: 98.4, time: 14, errors: 2 },
+      rb: { wpm: 151, accuracy: 99.6, time: 11, errors: 0 },
+      board, boardFull, boardTop, bars,
+      typeCardStyle: { minHeight: 190, display: "flex", alignItems: "center", background: "color-mix(in srgb, var(--surface-1) 72%, transparent)" },
+      typeCardErrStyle: { minHeight: 190, display: "flex", alignItems: "center", background: "color-mix(in srgb, var(--surface-1) 72%, transparent)", borderColor: "color-mix(in srgb, var(--error) 40%, var(--line))" },
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+/* GOD_MODE_CODE — Effects: phosphor glow, scanlines, motion.
+   The signature look is bloom — green light bleeding off every lit glyph —
+   plus faint CRT scanlines and a slow flicker. */
+:root {
+  /* ---- Phosphor glow (green bloom). Layered text-shadow. ---- */
+  --glow-sm:  0 0 4px color-mix(in srgb, var(--rain-green) 70%, transparent);
+  --glow-md:  0 0 6px color-mix(in srgb, var(--rain-green) 80%, transparent),
+              0 0 14px color-mix(in srgb, var(--rain-green) 45%, transparent);
+  --glow-lg:  0 0 8px color-mix(in srgb, var(--rain-green) 90%, transparent),
+              0 0 22px color-mix(in srgb, var(--rain-green) 55%, transparent),
+              0 0 44px color-mix(in srgb, var(--rain-green) 30%, transparent);
+  --glow-shine: 0 0 10px #fff, 0 0 20px var(--rain-glow), 0 0 40px var(--rain-green);
+  --glow-error: 0 0 6px color-mix(in srgb, var(--error) 80%, transparent),
+                0 0 16px color-mix(in srgb, var(--error) 45%, transparent);
+
+  /* ---- Box glow (for focused/active controls) ---- */
+  --box-glow: 0 0 0 1px var(--rain-green), 0 0 12px color-mix(in srgb, var(--rain-green) 40%, transparent);
+  --box-glow-lg: 0 0 0 1px var(--rain-green), 0 0 24px color-mix(in srgb, var(--rain-green) 45%, transparent);
+
+  /* ---- Elevation: terminals barely elevate; a hairline + faint outer glow ---- */
+  --elev-1: 0 1px 0 var(--line-faint), 0 8px 24px #000a;
+  --elev-2: 0 0 0 1px var(--line), 0 12px 40px #000c;
+
+  /* ---- Scanline overlay (use as background-image) ---- */
+  --scanlines: repeating-linear-gradient( to bottom, transparent 0, transparent 2px, rgba(0, 0, 0, 0.28) 3px, rgba(0, 0, 0, 0.28) 4px ); /* @kind other */
+
+  /* ---- Motion ---- */
+  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* @kind other */
+  --ease-snap: cubic-bezier(0.5, 0, 0.1, 1); /* @kind other */
+  --dur-fast: 90ms; /* @kind other */
+  --dur-med:  180ms; /* @kind other */
+  --dur-slow: 340ms; /* @kind other */
+
+  --z-rain: 0; /* @kind other */
+  --z-content: 10; /* @kind other */
+  --z-overlay: 100; /* @kind other */
+  --z-modal: 1000; /* @kind other */
+}
+
+@keyframes gmc-flicker {
+  0%, 96%, 100% { opacity: 1; }
+  97% { opacity: 0.82; }
+  98% { opacity: 1; }
+  99% { opacity: 0.9; }
+}
+@keyframes gmc-caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes gmc-pulse-glow {
+  0%, 100% { text-shadow: var(--glow-sm); }
+  50% { text-shadow: var(--glow-lg); }
+}

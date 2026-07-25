@@ -1,0 +1,44 @@
+/* GOD_MODE_CODE — Base reset + brand defaults.
+   Kept minimal; only what every surface needs. */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--text-body);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  font-feature-settings: "liga" 0, "calt" 0; /* no ligatures on the typing grid */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: var(--rain-green); color: var(--ink-on); text-shadow: none; }
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  color: var(--text-heading);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  margin: 0;
+}
+
+a {
+  color: var(--rain-green);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--rain-green) 35%, transparent);
+  transition: color var(--dur-fast) var(--ease-out), text-shadow var(--dur-fast) var(--ease-out);
+}
+a:hover {
+  color: var(--rain-bright);
+  text-shadow: var(--glow-sm);
+  border-bottom-color: var(--rain-bright);
+}
+
+code, pre, kbd, samp { font-family: var(--font-code); }
+
+/* Custom scrollbar — thin phosphor track */
+* { scrollbar-width: thin; scrollbar-color: var(--line-bright) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--line-bright); border-radius: 0; }
+*::-webkit-scrollbar-track { background: transparent; }

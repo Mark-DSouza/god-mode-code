@@ -64,7 +64,7 @@ describe("becoming someone", () => {
     const header = screen.getByRole("banner");
     expect(header).toContainElement(handle);
 
-    const tile = screen.getByTestId("identity-avatar");
+    const tile = screen.getByTestId("user-avatar");
     expect(header).toContainElement(tile);
     expect(tile).toHaveTextContent("SM");
     // Decorative: the Handle beside it already says who this is, and a screen
@@ -72,7 +72,30 @@ describe("becoming someone", () => {
     expect(tile).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("says so, rather than rendering blank, when it cannot work out who you are", async () => {
+  it("stays one User when two tabs of a new browser arrive at the same moment", async () => {
+    const backend = backendWithNobodyYet();
+
+    // Two independent query caches, which is what two tabs are: React Query's
+    // own deduplication does not reach across them, so nothing but the cross-tab
+    // lock stops both from reading 404 and both from creating.
+    const firstTab = renderApp(<App />);
+    const secondTab = renderApp(<App />);
+
+    await waitFor(() => {
+      const shown = screen.getAllByTestId("user-handle").map((el) => el.textContent);
+      expect(shown).toEqual(["SPIRALING_MANTIS", "SPIRALING_MANTIS"]);
+    });
+
+    // The whole defect in one assertion. Two creations would mean two Users,
+    // one of them holding a cookie the browser has already thrown away — and
+    // every Run attributed to it lost with it (ADR-0007).
+    expect(backend.creations()).toBe(1);
+
+    firstTab.unmount();
+    secondTab.unmount();
+  });
+
+  it("says so, rather than rendering blank, when it cannot work out which User you are", async () => {
     server.use(http.get("/api/users/me", () => new HttpResponse(null, { status: 500 })));
 
     renderApp(<App />);
@@ -80,7 +103,7 @@ describe("becoming someone", () => {
     // A 500 is not the documented "you are nobody yet", so nothing is created —
     // creating a second User because one lookup failed would strand the Runs the
     // first one already has.
-    await waitFor(() => expect(screen.getByTestId("identity-handle")).toHaveTextContent("—"));
+    await waitFor(() => expect(screen.getByTestId("user-handle")).toHaveTextContent("—"));
   });
 
   it("shows the same Handle on a return visit, and does not create a second User", async () => {
@@ -105,7 +128,7 @@ describe("becoming someone", () => {
     // above hands back the same User without ever reading a cookie. That the
     // cookie exists, is HttpOnly and outlives a restart is asserted at the HTTP
     // boundary (UserEndpointTest) and against a real browser profile
-    // (e2e/tests/identity.spec.ts).
+    // (e2e/tests/user.spec.ts).
   });
 
   it("does not create a User when the backend already knows this browser", async () => {

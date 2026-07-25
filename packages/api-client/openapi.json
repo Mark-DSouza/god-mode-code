@@ -10,11 +10,11 @@
     "description" : "Same origin as the application"
   } ],
   "tags" : [ {
+    "name" : "Users",
+    "description" : "Anyone who has played, Claimed or otherwise"
+  }, {
     "name" : "Health",
     "description" : "Liveness and dependency status"
-  }, {
-    "name" : "Users",
-    "description" : "Identity, Claimed or otherwise"
   } ],
   "paths" : {
     "/api/users" : {
@@ -24,7 +24,7 @@
         "description" : "Creates a User with no credentials attached and a generated Handle, and sets the cookie that recognises this browser as them on later visits. Nothing is asked of the visitor.\n\nA browser that already holds a valid cookie is told who it is instead, with 200 — so a retry, a double submit or a second tab cannot strand the Runs the first User already has.\n",
         "operationId" : "create",
         "parameters" : [ {
-          "name" : "gmc_user",
+          "name" : "gmc_recognition",
           "in" : "cookie",
           "required" : false,
           "schema" : {
@@ -62,7 +62,7 @@
         "description" : "Returns the User the request's cookie identifies. 404 means this browser has never been here, or was here longer ago than the cookie lasts — the caller's cue to create one.\n",
         "operationId" : "me",
         "parameters" : [ {
-          "name" : "gmc_user",
+          "name" : "gmc_recognition",
           "in" : "cookie",
           "required" : false,
           "schema" : {
@@ -121,7 +121,7 @@
     "schemas" : {
       "User" : {
         "type" : "object",
-        "description" : "Anyone who has played, whether or not they have Claimed their identity",
+        "description" : "Anyone who has played, whether or not they have Claimed",
         "properties" : {
           "id" : {
             "type" : "string",

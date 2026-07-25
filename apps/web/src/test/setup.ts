@@ -33,7 +33,43 @@ beforeAll(() => {
   // on every call. Returning null is the documented "no 2D context" path, which
   // DigitalRain already handles.
   HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
+
+  installWebLocks();
 });
+
+/**
+ * A Web Locks implementation for jsdom, which ships none.
+ *
+ * Real enough to be worth testing against: one holder per name, the rest queued
+ * in arrival order, the lock released when the callback's promise settles either
+ * way. That is the whole contract `acrossTabs` relies on, and without it the
+ * cross-tab test would exercise only the no-API fallback — which is the branch
+ * that does not serialise anything.
+ *
+ * Same reasoning as `matchMedia` above: a browser API the code under test
+ * genuinely depends on, stood up rather than stubbed away.
+ */
+function installWebLocks(): void {
+  if (globalThis.navigator?.locks) return;
+
+  const queues = new Map<string, Promise<unknown>>();
+
+  const request = (name: string, callback: () => unknown): Promise<unknown> => {
+    const waitFor = queues.get(name) ?? Promise.resolve();
+    // `.catch` so one holder throwing does not wedge the queue for the rest.
+    const held = waitFor.catch(() => undefined).then(() => callback());
+    queues.set(
+      name,
+      held.catch(() => undefined),
+    );
+    return held;
+  };
+
+  Object.defineProperty(globalThis.navigator, "locks", {
+    configurable: true,
+    value: { request },
+  });
+}
 
 /**
  * Points `matchMedia` at a given reduced-motion answer.

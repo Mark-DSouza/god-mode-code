@@ -12,17 +12,26 @@ import org.springframework.stereotype.Component;
  * on every request to the one origin the whole application lives at (ADR-0002),
  * so nothing has to remember to attach it; and {@code HttpOnly} keeps it out of
  * reach of any script, which local storage cannot do at all — one injected
- * script there is every visitor's identity, permanently.
+ * script there is every visitor's Recognition Key, permanently.
  */
 @Component
 public class RecognitionCookie {
 
-    public static final String NAME = "gmc_user";
+    /**
+     * Named for what it carries — a Recognition Key — and deliberately not for
+     * the User.
+     *
+     * This value is emphatically not the User's id, and a cookie named after the
+     * identifier it is not invites exactly the substitution the design exists to
+     * prevent. The name reaches the wire and the generated client, so it is the
+     * copy of the vocabulary hardest to correct later.
+     */
+    public static final String NAME = "gmc_recognition";
 
     /**
      * A year and a bit. The value has to outlive a browser restart, which is what
      * separates it from a session cookie — those are discarded when the browser
-     * closes, and an identity that evaporates overnight is not an identity.
+     * closes, and a User who evaporates overnight is not a User.
      *
      * 400 days rather than "forever": Chrome caps cookie lifetime at 400 days and
      * silently truncates anything longer, so asking for more would only make the
@@ -32,7 +41,7 @@ public class RecognitionCookie {
 
     private final boolean secure;
 
-    RecognitionCookie(@Value("${gmc.identity.cookie-secure:true}") boolean secure) {
+    RecognitionCookie(@Value("${gmc.recognition.cookie-secure:true}") boolean secure) {
         this.secure = secure;
     }
 

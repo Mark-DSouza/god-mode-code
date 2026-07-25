@@ -17,7 +17,12 @@ import java.util.regex.Pattern;
  * supported, and nothing narrower needs to be: below 320 there is no layout that
  * fits a rank, an avatar tile, a Handle and a WPM figure on one line at all.
  *
- * The row at that width spends its 320 pixels like this:
+ * <h2>PROVISIONAL — the row this is budgeted against does not exist yet</h2>
+ *
+ * There is no Leaderboard in the codebase. The column widths below are a
+ * <em>designed</em> budget read off the mockups, not a measurement of anything
+ * that renders, and they are stated here so that the number they produce can be
+ * argued with rather than inherited:
  *
  * <pre>
  *   320  viewport
@@ -41,10 +46,18 @@ import java.util.regex.Pattern;
  * spends 11 on the gerund, which fixes the two caps: gerunds up to 11
  * characters, creatures up to 6.
  *
- * <p>These are enforced here rather than trusted, because the failure mode of a
- * word one character too long is a Leaderboard row that wraps for one player in
- * a thousand — invisible in review, and impossible to fix afterwards without
- * renaming people.
+ * <p><b>When the Leaderboard lands, measure the real row and revisit these
+ * numbers.</b> Raising the cap later renames nobody — every existing Handle
+ * still fits — so the risk of being conservative now is small and the risk of
+ * being wrong the other way is a row that wraps.
+ *
+ * <p>What <em>is</em> measured today is the header, which does render a Handle at
+ * 320px: {@code e2e/tests/user.spec.ts} asserts in Chromium that the longest
+ * Handle this class can produce neither overflows the viewport nor truncates.
+ *
+ * <p>The caps are enforced here rather than trusted, because the failure mode of
+ * a word one character too long is a row that wraps for one User in a thousand —
+ * invisible in review, and impossible to fix afterwards without renaming people.
  */
 public record HandleWords(List<String> gerunds, List<String> creatures) {
 
@@ -67,10 +80,12 @@ public record HandleWords(List<String> gerunds, List<String> creatures) {
 
     /**
      * The highest numeric suffix a colliding Handle may reach, and therefore the
-     * number of Users a single word pair can hold. With the committed lists that
-     * is over a million Handles — far past anything this site will see, and the
-     * cap keeps a pathological run of collisions from turning one signup into an
-     * unbounded number of inserts.
+     * number of Users a single word pair can hold: one hundred, not more.
+     *
+     * The committed lists make 12,430 pairs, so the site's ceiling is 1,243,000
+     * Handles — but that is the product, not this number. A single pair holds a
+     * hundred, and the cap is what stops a pathological run of collisions from
+     * turning one arriving visitor into an unbounded number of inserts.
      */
     public static final int MAX_SUFFIX = 100;
 
@@ -95,7 +110,7 @@ public record HandleWords(List<String> gerunds, List<String> creatures) {
         // catches someone raising one of them in isolation.
         int longestBase = MAX_GERUND_LENGTH + 1 + MAX_CREATURE_LENGTH;
         if (longestBase > MAX_BASE_LENGTH) {
-            throw new ExceptionInInitializerError("The longest GERUND_CREATURE is " + longestBase
+            throw new IllegalStateException("The longest GERUND_CREATURE is " + longestBase
                     + " characters, which does not fit the " + MAX_BASE_LENGTH
                     + " a Leaderboard row leaves once the suffix is reserved");
         }

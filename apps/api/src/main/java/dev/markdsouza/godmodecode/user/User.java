@@ -16,7 +16,7 @@ import java.util.UUID;
  * @param handle  the Handle, {@code GERUND_CREATURE} while Unclaimed.
  * @param claimed whether credentials have been attached.
  */
-@Schema(description = "Anyone who has played, whether or not they have Claimed their identity")
+@Schema(description = "Anyone who has played, whether or not they have Claimed")
 public record User(
         @Schema(
                         description = "Stable identifier",

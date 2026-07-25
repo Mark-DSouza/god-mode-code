@@ -20,12 +20,12 @@ CREATE TABLE users (
     -- The federated subject from the identity provider once the User is Claimed
     -- (ADR-0011). NULL is the Unclaimed state, and NULLs do not collide under a
     -- UNIQUE constraint in PostgreSQL — so every Unclaimed User coexists happily
-    -- while no two Claimed Users can share an identity.
+    -- while no two Claimed Users can share a credential.
     credential_subject text,
 
     -- SHA-256, hex, of the opaque key the browser holds in a cookie. Hashed
     -- rather than stored raw for the same reason a password would be: a leaked
-    -- database should not hand over every visitor's identity. It is deliberately
+    -- database should not hand over every visitor's Recognition Key. It is deliberately
     -- not the id — the id will appear in public Leaderboard payloads, and an
     -- identifier that is also a bearer secret is forgeable the moment it is
     -- published.
@@ -37,14 +37,26 @@ CREATE TABLE users (
     -- rather than by application logic alone" is this line. Generation races
     -- lose here, not in a check-then-insert the application performs.
     CONSTRAINT users_handle_unique UNIQUE (handle),
+
+    -- Looking a visitor up by the cookie they present is the hottest read on the
+    -- site — it happens on every page load — and this constraint's index is what
+    -- serves it. There is deliberately no second index on the column; adding one
+    -- would be dead weight.
     CONSTRAINT users_recognition_key_hash_unique UNIQUE (recognition_key_hash),
+
     CONSTRAINT users_credential_subject_unique UNIQUE (credential_subject),
 
     -- 22 characters is the width a Handle has to fit in a Leaderboard row at the
-    -- narrowest supported viewport; the derivation lives in HandleWords. The cap
-    -- is repeated here because the word lists are only one way a Handle can be
-    -- set — a rename on Claiming is the other, and it must not be able to
-    -- produce a Handle that breaks the layout.
+    -- narrowest supported viewport; the derivation, and the fact that it is still
+    -- provisional, live in HandleWords. The cap is repeated here because the word
+    -- lists are only one way a Handle can be set — a rename on Claiming is the
+    -- other, and it must not be able to produce a Handle that breaks the layout.
+    --
+    -- The floor is 3 for the same reason and no other: nothing generated is
+    -- shorter than 8 (a 4-letter gerund, the separator, a 3-letter creature), so
+    -- this bound exists purely for the Handle someone chooses on Claiming. Three
+    -- is where a Handle stops being one — two characters is an initial, and a
+    -- Leaderboard of them identifies nobody.
     CONSTRAINT users_handle_length CHECK (length(handle) BETWEEN 3 AND 22),
 
     -- Deliberately the character set and not the GERUND_CREATURE shape. That
@@ -57,9 +69,5 @@ CREATE TABLE users (
     CONSTRAINT users_handle_charset CHECK (handle ~ '^[A-Za-z0-9_]+$')
 );
 
--- Looking a visitor up by the cookie they present is the single hottest read on
--- the site: it happens on every page load. The UNIQUE constraint above already
--- creates the index that serves it, so there is nothing further to add — this
--- comment exists so the next person does not add a redundant one.
 COMMENT ON COLUMN users.recognition_key_hash IS
     'SHA-256 (hex) of the opaque key held by the browser. Never the raw key.';

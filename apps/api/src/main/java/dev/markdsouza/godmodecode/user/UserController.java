@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/users")
-@Tag(name = "Users", description = "Identity, Claimed or otherwise")
+@Tag(name = "Users", description = "Anyone who has played, Claimed or otherwise")
 public class UserController {
 
     private final UserService users;

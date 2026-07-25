@@ -46,7 +46,7 @@ public class HandleGenerator {
         String base = words.anyGerund(random) + "_" + words.anyCreature(random);
 
         return IntStream.rangeClosed(1, HandleWords.MAX_SUFFIX)
-                .mapToObj(attempt -> attempt == 1 ? base : base + "_" + attempt)
+                .mapToObj(suffix -> suffix == 1 ? base : base + "_" + suffix)
                 .toList();
     }
 }

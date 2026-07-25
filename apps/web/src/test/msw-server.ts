@@ -23,7 +23,7 @@ export const healthUp: Health = {
 
 /**
  * A browser that has been here before, which is the uninteresting case and
- * therefore the right default: tests about anything other than identity should
+ * therefore the right default: tests about anything other than the current User should
  * not have to think about it, and no POST handler is registered, so a test that
  * unexpectedly creates a User fails on an unhandled request.
  */

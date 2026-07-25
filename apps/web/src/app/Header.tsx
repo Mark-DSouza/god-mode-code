@@ -1,4 +1,4 @@
-import { useCurrentUser } from "../api/identity.ts";
+import { useCurrentUser } from "../api/user.ts";
 import { Avatar, Wordmark } from "../design-system/index.ts";
 
 /** Shown where a Handle would be when the backend never answered. */
@@ -31,7 +31,7 @@ export function Header() {
   const user = useCurrentUser();
   const handle = user.data?.handle;
   // An empty header is indistinguishable from a rendering fault. A dash says
-  // "we could not work out who you are", which is the truth and is recoverable
+  // "we could not work out which User you are", which is the truth and is recoverable
   // by reloading — there is nothing else to offer until there is a screen to
   // send anyone to.
   const shown = handle ?? (user.isError ? UNKNOWN : "");
@@ -46,7 +46,7 @@ export function Header() {
             jumps sideways when the Handle lands. */}
         <div className="flex min-w-0 items-center gap-2">
           <Avatar
-            data-testid="identity-avatar"
+            data-testid="user-avatar"
             // Decorative. The Handle beside it is the accessible answer to "who
             // am I", and announcing the initials first only says it twice.
             aria-hidden="true"
@@ -55,7 +55,7 @@ export function Header() {
             initials={handle ? initialsFor(handle) : ""}
           />
           <span
-            data-testid="identity-handle"
+            data-testid="user-handle"
             className="truncate font-display text-2xs tracking-wide text-heading uppercase [text-shadow:var(--glow-sm)] min-[480px]:text-xs"
           >
             {shown}

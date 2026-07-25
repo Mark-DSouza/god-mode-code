@@ -4,6 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.markdsouza.godmodecode.AbstractIntegrationTest;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -83,12 +88,17 @@ class UserEndpointTest extends AbstractIntegrationTest {
         assertThat(setCookie).isNotNull();
         // A session cookie — one with no Max-Age — is discarded when the browser
         // closes, which is precisely the criterion this must not fail. The
-        // attribute being present, and large, is what makes the identity survive
-        // a restart rather than only a reload.
+        // attribute being present, and large, is what makes the User survive a
+        // restart rather than only a reload.
         assertThat(setCookie).containsPattern("Max-Age=(\\d{7,})");
         assertThat(setCookie).contains("HttpOnly");
         assertThat(setCookie).contains("SameSite=Lax");
         assertThat(setCookie).contains("Path=/");
+        // Secure is the default and the deployed setting, so it is asserted here
+        // rather than only argued for in application.yaml — a flag with a
+        // paragraph of justification and no test is a flag that can be flipped
+        // by accident.
+        assertThat(setCookie).contains("Secure");
 
         // The cookie carries an opaque key, never the User's id. The id is
         // published in Leaderboard payloads, so an id that also recognised the
@@ -116,6 +126,40 @@ class UserEndpointTest extends AbstractIntegrationTest {
         assertThat(again.getHeaders().getFirst(HttpHeaders.SET_COOKIE))
                 .as("the browser already holds the right key; overwriting it can only lose it")
                 .isNull();
+    }
+
+    @Test
+    @DisplayName("two tabs of the same browser arriving at once stay one User")
+    void concurrentArrivalsFromOneBrowserStayOneUser() throws Exception {
+        // The browser has been here, so both tabs carry the same Recognition Key
+        // — which is the situation the server can actually resolve. Two tabs that
+        // have *never* been here carry nothing to tell them apart, and no server
+        // can distinguish them; that half is closed in the browser, by the
+        // cross-tab lock in apps/web/src/api/user.ts.
+        String cookie = recognitionCookieFrom(http.postForEntity("/api/users", null, User.class));
+
+        int tabs = 8;
+        CyclicBarrier allAtOnce = new CyclicBarrier(tabs);
+        List<Callable<User>> arrivals = java.util.Collections.nCopies(tabs, () -> {
+            allAtOnce.await();
+            return http.exchange("/api/users", HttpMethod.POST, withCookie(cookie), User.class)
+                    .getBody();
+        });
+
+        List<User> resolved;
+        try (ExecutorService pool = Executors.newFixedThreadPool(tabs)) {
+            resolved = pool.invokeAll(arrivals).stream()
+                    .map(UserEndpointTest::valueOf)
+                    .toList();
+        }
+
+        // Every tab is the same person, and the browser is still holding one key
+        // that names one row. Anything else strands a User's Runs on a record
+        // nothing will ever look up again (ADR-0007).
+        assertThat(resolved).doesNotContainNull().containsOnly(resolved.getFirst());
+        Integer rowsForThisBrowser = jdbc.queryForObject(
+                "SELECT count(*) FROM users WHERE id = ?", Integer.class, resolved.getFirst().id());
+        assertThat(rowsForThisBrowser).isEqualTo(1);
     }
 
     @Test
@@ -147,6 +191,17 @@ class UserEndpointTest extends AbstractIntegrationTest {
                 String.class,
                 created.getBody().id());
         assertThat(storedHash).hasSize(64).matches("^[0-9a-f]+$");
+    }
+
+    private static User valueOf(Future<User> arrival) {
+        try {
+            return arrival.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        } catch (Exception e) {
+            throw new IllegalStateException("A tab did not resolve to a User", e);
+        }
     }
 
     /** The cookie value the backend just handed out, without its attributes. */

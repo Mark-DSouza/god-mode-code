@@ -70,7 +70,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Anyone who has played, whether or not they have Claimed their identity */
+        /** @description Anyone who has played, whether or not they have Claimed */
         User: {
             /**
              * Format: uuid
@@ -124,7 +124,7 @@ export interface operations {
             header?: never;
             path?: never;
             cookie?: {
-                gmc_user?: string;
+                gmc_recognition?: string;
             };
         };
         requestBody?: never;
@@ -155,7 +155,7 @@ export interface operations {
             header?: never;
             path?: never;
             cookie?: {
-                gmc_user?: string;
+                gmc_recognition?: string;
             };
         };
         requestBody?: never;

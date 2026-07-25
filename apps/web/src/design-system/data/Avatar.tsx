@@ -13,7 +13,7 @@ export interface AvatarProps extends Omit<HTMLAttributes<HTMLDivElement>, "child
 }
 
 /**
- * A square terminal identity tile.
+ * A square terminal tile carrying a User's initials.
  *
  * One of the gaps the design system leaves — the mockups hand-build it — so it
  * is written here in the same class-based form as the rest of `design-system`

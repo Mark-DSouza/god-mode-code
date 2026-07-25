@@ -63,9 +63,26 @@ resource "aws_ssm_document" "deploy" {
 
 # GitHub's OIDC issuer. Federation rather than an access key means there is no
 # long-lived credential in repository secrets to leak, rotate or forget.
+#
+# An account may only have one provider per issuer URL, so if this account has
+# ever been wired to GitHub Actions before, `apply` fails with
+# `EntityAlreadyExists`. That is correct behaviour and not worth a toggle — the
+# fix is to adopt the existing one rather than make a second:
+#
+#   terraform import aws_iam_openid_connect_provider.github \
+#     arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com
+#
+# Applying into the dedicated account this stack assumes (ADR-0001) will not
+# hit it.
 resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
+
+  # The certificate thumbprint for GitHub's issuer. AWS stopped relying on this
+  # value for issuers it can validate through its own trusted CAs, but the API
+  # still stores one, and omitting it lets the provider populate a value that
+  # then shows up as a permanent diff. Pinned rather than computed so a
+  # rotation is a visible change here instead of a silent one.
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
 }
 

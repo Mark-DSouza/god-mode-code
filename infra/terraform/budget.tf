@@ -47,27 +47,17 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  # Alerts fire on *forecast* as well as actual spend. By the time actual spend
-  # has crossed 90% of the limit the month is nearly over and the money is
-  # already gone; a forecast crossing is the one that can still be acted on.
+  # Every threshold, on both actual and forecast spend. Forecast matters more
+  # than it sounds: by the time actual spend has crossed 90% of the limit the
+  # month is nearly over and the money is already gone, whereas a forecast
+  # crossing is the one that can still be acted on.
   dynamic "notification" {
-    for_each = var.budget_alert_thresholds
+    for_each = setproduct(var.budget_alert_thresholds, ["ACTUAL", "FORECASTED"])
     content {
       comparison_operator        = "GREATER_THAN"
-      threshold                  = notification.value
+      threshold                  = notification.value[0]
       threshold_type             = "PERCENTAGE"
-      notification_type          = "ACTUAL"
-      subscriber_email_addresses = [var.budget_notification_email]
-    }
-  }
-
-  dynamic "notification" {
-    for_each = var.budget_alert_thresholds
-    content {
-      comparison_operator        = "GREATER_THAN"
-      threshold                  = notification.value
-      threshold_type             = "PERCENTAGE"
-      notification_type          = "FORECASTED"
+      notification_type          = notification.value[1]
       subscriber_email_addresses = [var.budget_notification_email]
     }
   }

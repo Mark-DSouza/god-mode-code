@@ -139,6 +139,19 @@ resource "aws_instance" "app" {
   # application code never replaces the instance.
   user_data_replace_on_change = true
 
+  # The bootstrap script reads these at first boot. Only the prefix is
+  # interpolated into the script, which is a string and creates no dependency
+  # edge, so without this Terraform is free to create the instance first — and
+  # a bootstrap that loses that race aborts on `set -euo pipefail`, leaving a
+  # host with no tunnel and nothing reporting why.
+  depends_on = [
+    aws_ssm_parameter.tunnel_token,
+    aws_ssm_parameter.registry_token,
+    aws_ssm_parameter.database_url,
+    aws_ssm_parameter.database_username,
+    aws_ssm_parameter.database_password,
+  ]
+
   tags = {
     Name = "gmc-${var.environment}-app"
     # The budget action selects on this. An instance without it is an instance

@@ -15,13 +15,16 @@
 #   * Rendered by `templatefile`. A doubled dollar-brace escapes to a literal
 #     shell variable; a single one is interpolated by Terraform. That applies
 #     inside comments too, which is easy to forget.
-#   * `{{ name }}` is a Systems Manager document parameter, substituted before
-#     this ever reaches a shell. That is why nothing here uses `docker
-#     --format`: its Go templates use the same braces, and Systems Manager
-#     would try to resolve them as parameters and reject the document. Deployed
-#     image references are tracked in marker files instead, which is both
-#     simpler and exact, because continuous integration tags every image with
-#     an immutable commit SHA.
+#   * Doubled curly braces are Systems Manager document parameters, resolved
+#     before this ever reaches a shell. Every one of them must be a parameter
+#     the document declares — Systems Manager validates that and rejects the
+#     document otherwise, including occurrences inside comments, so this one
+#     deliberately describes the syntax rather than writing it out.
+#
+#     That is also why nothing here uses `docker --format`: Go templates use
+#     the same braces. Deployed image references are tracked in marker files
+#     instead, which is both simpler and exact, because continuous integration
+#     tags every image with an immutable commit SHA.
 set -euo pipefail
 
 API_IMAGE="{{ apiImage }}"
@@ -31,8 +34,20 @@ PREFIX="${parameter_prefix}"
 
 log() { echo "[deploy] $*"; }
 
+get_param() {
+  aws ssm get-parameter --region "$REGION" --name "$1" \
+    --with-decryption --query 'Parameter.Value' --output text
+}
+
 log "Authenticating to the registry"
-docker login ${registry} --username oauth2 --password-stdin </opt/gmc/registry-token
+# Read fresh on every deploy rather than from a copy written at first boot.
+# Terraform creates this parameter with a placeholder — its real value is a
+# GitHub token written out of band afterwards — so a host that cached it at
+# boot would have cached the placeholder and never been able to pull an image
+# again. Reading it here also means rotating the token takes effect on the next
+# deploy instead of requiring the instance to be rebuilt.
+get_param "$PREFIX/registry/token" |
+  docker login ${registry} --username oauth2 --password-stdin
 
 # ---------------------------------------------------------------------------
 # Pull everything first. Nothing is stopped until every image is on disk.
@@ -75,11 +90,6 @@ fi
 # ---------------------------------------------------------------------------
 # The backend.
 # ---------------------------------------------------------------------------
-
-get_param() {
-  aws ssm get-parameter --region "$REGION" --name "$1" \
-    --with-decryption --query 'Parameter.Value' --output text
-}
 
 DB_URL="$(get_param "$PREFIX/database/url")"
 DB_USER="$(get_param "$PREFIX/database/username")"

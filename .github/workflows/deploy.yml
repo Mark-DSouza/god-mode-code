@@ -23,7 +23,14 @@ permissions:
   id-token: write
 
 env:
+  # These are derived from `var.environment` and `var.region` in
+  # infra/terraform, and are repeated here because a workflow cannot read
+  # Terraform state. Changing either variable means changing these too —
+  # `terraform output` prints the values that must match.
   IMAGE_PREFIX: ghcr.io/mark-dsouza/god-mode-code
+  DEPLOY_DOCUMENT: gmc-prod-deploy
+  INSTANCE_NAME_TAG: gmc-prod-app
+  AWS_REGION: ap-south-1
 
 jobs:
   build:
@@ -83,7 +90,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ap-south-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Find the application instance
         id: instance
@@ -94,7 +101,7 @@ jobs:
           set -euo pipefail
           instance_id="$(aws ec2 describe-instances \
             --filters \
-              "Name=tag:Name,Values=gmc-prod-app" \
+              "Name=tag:Name,Values=$INSTANCE_NAME_TAG" \
               "Name=instance-state-name,Values=running" \
             --query 'Reservations[].Instances[].InstanceId' \
             --output text)"
@@ -111,7 +118,7 @@ jobs:
           set -euo pipefail
 
           command_id="$(aws ssm send-command \
-            --document-name gmc-prod-deploy \
+            --document-name "$DEPLOY_DOCUMENT" \
             --instance-ids "${{ steps.instance.outputs.id }}" \
             --parameters \
               apiImage="$IMAGE_PREFIX/api:${{ github.sha }}",webImage="$IMAGE_PREFIX/web:${{ github.sha }}" \
@@ -119,6 +126,19 @@ jobs:
             --output text)"
 
           echo "Systems Manager command: $command_id"
+
+          # SendCommand returns before the invocation is queryable, and the
+          # waiter treats InvocationDoesNotExist as a failure rather than as
+          # "not yet" — so waiting immediately can fail a deploy that is
+          # perfectly healthy. Poll until it exists first.
+          for _ in $(seq 1 30); do
+            if aws ssm get-command-invocation \
+                 --command-id "$command_id" \
+                 --instance-id "${{ steps.instance.outputs.id }}" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
 
           # The waiter polls until the invocation leaves a pending state. It
           # exits non-zero on anything that is not Success, which is what makes

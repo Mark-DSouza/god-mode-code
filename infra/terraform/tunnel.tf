@@ -1,10 +1,11 @@
 # The tunnel.
 #
-# This is what makes "no inbound ports" possible. `cloudflared` runs on the
-# instance and dials *out* to Cloudflare's edge, and requests for the hostname
-# are handed back down that existing connection. The instance never listens on
-# a public address, so its origin address is not merely firewalled — it is not
-# discoverable, and there is nothing to port-scan (ADR-0002).
+# ADR-0002 settled that one hostname serves the whole application and that a
+# Cloudflare Tunnel is what exposes it. This is what that buys beyond the
+# single origin: `cloudflared` runs on the instance and dials *out* to
+# Cloudflare's edge, and requests for the hostname come back down that existing
+# connection. The instance never listens on a public address, so the origin is
+# not merely firewalled — there is nothing to port-scan.
 #
 # TLS terminates at Cloudflare's edge, which is why Caddy runs with
 # `auto_https off`: a second handshake over the loopback interface would protect
@@ -41,11 +42,15 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "main" {
         service = "http://localhost:80"
 
         origin_request = {
-          # Caddy answers immediately or not at all; it is on the same host.
+          # Connecting is a loopback TCP handshake to a process on this same
+          # host, so ten seconds is already far beyond anything but Caddy being
+          # gone. It is a ceiling on how long a request waits to discover that,
+          # not a budget the connection is expected to use.
           connect_timeout = 10
-          # Caddy stays up across a deploy and returns its own error while
-          # Spring Boot restarts, so cloudflared should pass that through
-          # rather than retry into a longer outage (ADR-0009).
+          # Size of the pool of connections held open to Caddy. Reusing them
+          # avoids a handshake per request on a burstable instance whose CPU is
+          # the scarce resource; sixteen is comfortably above what a single
+          # small instance serves concurrently.
           keep_alive_connections = 16
         }
       },

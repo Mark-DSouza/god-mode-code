@@ -10,8 +10,6 @@
 # written to its filesystem.
 
 locals {
-  parameter_prefix = "/gmc/${var.environment}"
-
   # Assembled here rather than on the instance so there is exactly one
   # definition of how the application addresses its database. `sslmode=require`
   # matches the `rds.force_ssl` parameter group — without it the connection is

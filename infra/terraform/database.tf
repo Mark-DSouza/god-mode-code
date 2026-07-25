@@ -57,7 +57,11 @@ resource "aws_db_instance" "main" {
   storage_type      = "gp3"
   storage_encrypted = true
 
-  db_subnet_group_name   = aws_db_subnet_group.main.name
+  db_subnet_group_name = aws_db_subnet_group.main.name
+  # Without this the instance silently uses the default parameter group and
+  # `rds.force_ssl` never takes effect, leaving the group above an orphan and
+  # the `sslmode=require` in the connection URL the only thing asking for TLS.
+  parameter_group_name   = aws_db_parameter_group.main.name
   vpc_security_group_ids = [aws_security_group.db.id]
   publicly_accessible    = false
 

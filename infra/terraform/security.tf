@@ -2,9 +2,11 @@
 #
 # The application instance has **no ingress rules whatsoever**. Not 443, not 22.
 # Traffic arrives over a tunnel that `cloudflared` establishes outbound from the
-# instance, so the origin address is never exposed and there is no listening
-# port on the public internet to find (ADR-0002). Administrative access is
-# Session Manager, which is also outbound-initiated.
+# instance — ADR-0002 chose that tunnel as how the single hostname is served,
+# and closing the instance entirely to inbound traffic is the consequence this
+# stack takes from it: with nothing listening, the origin address is not merely
+# firewalled but undiscoverable. Administrative access is Session Manager,
+# which is also outbound-initiated.
 #
 # `ingress = []` is written explicitly rather than simply omitted, and the
 # difference matters twice. An omitted block is unmanaged, so a rule added by

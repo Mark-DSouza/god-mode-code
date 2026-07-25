@@ -44,8 +44,8 @@ run "application_host_accepts_no_inbound_traffic" {
 
   assert {
     # The headline property of this whole stack. Traffic reaches the
-    # application over an outbound-initiated tunnel, so there is nothing to
-    # open and nothing to scan (ADR-0002). If this ever fails, the origin
+    # application over the outbound-initiated tunnel ADR-0002 chose, so there
+    # is nothing to open and nothing to scan. If this ever fails, the origin
     # address is exposed and the tunnel has become decorative.
     condition     = length(aws_security_group.app.ingress) == 0
     error_message = "The application security group has an inbound rule. It must have none; traffic arrives through the tunnel."
@@ -152,6 +152,17 @@ run "the_deploy_document_only_accepts_this_project_s_own_images" {
   assert {
     condition     = strcontains(aws_ssm_document.deploy.content, "mark-dsouza/god-mode-code/web:")
     error_message = "The deploy document must restrict the proxy image to this project's registry namespace."
+  }
+
+  assert {
+    # Systems Manager resolves every doubled-curly-brace occurrence in a
+    # document against its declared parameters and rejects the whole document
+    # if one does not match — including occurrences inside shell comments. The
+    # script uses exactly two, one per declared parameter. Anything else means
+    # either a typo or a `docker --format` Go template, and the failure only
+    # surfaces at apply time as an opaque InvalidDocumentContent.
+    condition     = length(regexall("\\{\\{[^}]*\\}\\}", aws_ssm_document.deploy.content)) == 2
+    error_message = "The deploy document contains a curly-brace placeholder that is not one of its two declared parameters."
   }
 }
 

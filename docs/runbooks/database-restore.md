@@ -87,6 +87,19 @@ The step people skip, and the only one that proves anything. A restored
 instance that reports `available` has proved that RDS can create an instance,
 not that your data survived.
 
+First get the restored instance's address. It is a different host from
+production, so take it from the drill instance rather than from the
+`/gmc/prod/database/url` parameter, which is a JDBC URL for the live database
+and not what you want to connect to here:
+
+```bash
+DRILL_HOST=$(aws rds describe-db-instances \
+  --db-instance-identifier "$DRILL" \
+  --query 'DBInstances[0].Endpoint.Address' --output text)
+
+echo "$DRILL_HOST"
+```
+
 The instance has no public route, so connect from the application host through
 Session Manager:
 
@@ -98,15 +111,21 @@ INSTANCE_ID=$(aws ec2 describe-instances \
 aws ssm start-session --target "$INSTANCE_ID"
 ```
 
-Then, on the host:
+That session is a fresh root shell on the host, so nothing set above is in
+scope. Paste the address you just printed, and set the region explicitly —
+the instance profile supplies credentials but not a default region:
 
 ```bash
-ENDPOINT=$(aws ssm get-parameter --name /gmc/prod/database/url --query Parameter.Value --output text)
-PASSWORD=$(aws ssm get-parameter --name /gmc/prod/database/password --with-decryption --query Parameter.Value --output text)
+export AWS_DEFAULT_REGION=ap-south-1
+DRILL_HOST=<paste the address printed above>
 
-# The restored instance keeps the source's master credentials.
-docker run --rm -it -e PGPASSWORD="$PASSWORD" postgres:17-alpine \
-  psql -h <drill-endpoint> -U godmodecode -d godmodecode -c '\dt'
+# The restored instance keeps the source's master credentials, so this is the
+# same password the live database uses.
+PASSWORD=$(aws ssm get-parameter --name /gmc/prod/database/password \
+  --with-decryption --query Parameter.Value --output text)
+
+docker run --rm -i -e PGPASSWORD="$PASSWORD" postgres:17-alpine \
+  psql -h "$DRILL_HOST" -U godmodecode -d godmodecode -c '\dt'
 ```
 
 Check, at minimum:

@@ -49,9 +49,11 @@ Two properties are worth stating plainly, because most of the rest follows from
 them:
 
 - **Nothing listens on a public address.** The application instance has no
-  inbound security group rules — not 443, not 22. Traffic arrives down a tunnel
-  `cloudflared` dials outbound, so the origin is never exposed (ADR-0002), and
-  administrative access is Session Manager, which is also outbound-initiated.
+  inbound security group rules — not 443, not 22. Traffic arrives down the
+  tunnel ADR-0002 chose to serve the single hostname, dialled outbound by
+  `cloudflared`, so with nothing listening the origin is undiscoverable rather
+  than merely firewalled. Administrative access is Session Manager, which is
+  also outbound-initiated.
 - **Deploying needs no standing credential.** Continuous integration exchanges a
   GitHub OIDC token for a short-lived role and sends one Systems Manager
   command. There is no SSH key and no access key anywhere.

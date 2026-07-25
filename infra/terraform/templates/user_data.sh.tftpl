@@ -53,17 +53,14 @@ get_param() {
 }
 
 TUNNEL_TOKEN="$(get_param "${parameter_prefix}/tunnel/token")"
-REGISTRY_TOKEN="$(get_param "${parameter_prefix}/registry/token")"
 
 echo "==> Preparing the application directory"
+# Holds the marker files recording which image references are deployed. The
+# registry token is deliberately NOT cached here: Terraform creates that
+# parameter with a placeholder and its real value is written out of band
+# afterwards, so anything cached at first boot would be the placeholder. The
+# deploy reads it from Parameter Store each time instead.
 install -d -m 0750 /opt/gmc
-
-# Needed on every deploy, not just this one, so it is kept rather than
-# re-fetched. Root-only: the containers run as unprivileged users and cannot
-# read it, and it is never passed to one.
-umask 077
-printf '%s' "$REGISTRY_TOKEN" >/opt/gmc/registry-token
-chmod 0600 /opt/gmc/registry-token
 
 echo "==> Creating the container network"
 # A user-defined bridge, so Caddy can reach the backend by the name `api`

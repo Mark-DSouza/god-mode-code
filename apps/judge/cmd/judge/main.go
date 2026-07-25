@@ -9,23 +9,37 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/api"
+	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/judging"
+	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/metrics"
+	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/pattern"
+	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/sandbox"
 )
 
 const (
 	defaultAddr = ":9090"
 
+	// Two containers alongside the supervisor is what fits in the 1GB instance
+	// this service is sized for (ADR-0005).
+	defaultWorkers = 2
+
 	// Generous relative to a request, because a judge execution is bounded by
 	// its own wall-clock timeout well inside this.
 	readHeaderTimeout = 5 * time.Second
 	shutdownTimeout   = 15 * time.Second
+
+	// How long to wait on the container runtime at startup before concluding
+	// there isn't one.
+	runtimeProbeTimeout = 10 * time.Second
 )
 
 func main() {
@@ -41,10 +55,58 @@ func main() {
 func run(log *slog.Logger) error {
 	addr := envOr("JUDGE_ADDR", defaultAddr)
 	version := envOr("JUDGE_VERSION", "dev")
+	registry := metrics.NewRegistry(version)
+
+	catalogue, err := pattern.Embedded()
+	if err != nil {
+		// Fatal on purpose. A judge with a broken catalogue would answer every
+		// Solve Run with an Error, which looks like an outage while reading
+		// like a healthy service.
+		return fmt.Errorf("loading the Pattern catalogue: %w", err)
+	}
+	log.Info("loaded the Pattern catalogue",
+		slog.Int("patterns", catalogue.Len()), slog.Any("ids", catalogue.IDs()))
+
+	options := []api.Option{api.WithLogger(log), api.WithMetrics(registry)}
+
+	runner := sandbox.New(sandbox.Options{
+		Limits:  limitsFromEnv(log),
+		Logger:  log,
+		Metrics: registry,
+	})
+	defer func() { _ = runner.Close() }()
+
+	// Probed once at startup rather than discovered on the first Solve Run. A
+	// judge that cannot judge should say so on /health, not accept work and
+	// return an Error for all of it.
+	probeCtx, cancelProbe := context.WithTimeout(context.Background(), runtimeProbeTimeout)
+	err = runner.Available(probeCtx)
+	cancelProbe()
+
+	if err != nil {
+		// Not fatal. In the containerised local stack the judge deliberately
+		// has no runtime — giving it one would mean mounting the container
+		// socket, which is the most direct escape path available to the code
+		// this service exists to contain (ADR-0005). It serves DEGRADED there.
+		log.Warn("no container runtime; serving without judging", slog.Any("error", err))
+	} else {
+		workers := intFromEnv(log, "JUDGE_WORKERS", defaultWorkers)
+		options = append(options, api.WithJudge(judging.New(judging.Options{
+			Sandbox:  runner,
+			Patterns: catalogue,
+			Workers:  workers,
+			Metrics:  registry,
+			Logger:   log,
+		})))
+		log.Info("judging enabled",
+			slog.Int("workers", workers),
+			slog.String("image", sandbox.DefaultImage),
+			slog.String("containerLabel", runner.Label()))
+	}
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           api.New(version, api.WithLogger(log)).Handler(),
+		Handler:           api.New(version, options...).Handler(),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
@@ -80,4 +142,37 @@ func envOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// limitsFromEnv lets an operator tune the sandbox without a rebuild. The
+// defaults are the ones the tests exercise; anything set here is a deliberate
+// loosening and is logged as such.
+func limitsFromEnv(log *slog.Logger) sandbox.Limits {
+	limits := sandbox.DefaultLimits()
+	limits.Memory = envOr("JUDGE_MEMORY", limits.Memory)
+	limits.CPUs = envOr("JUDGE_CPUS", limits.CPUs)
+	limits.TmpfsSize = envOr("JUDGE_TMPFS_SIZE", limits.TmpfsSize)
+	limits.Pids = intFromEnv(log, "JUDGE_PIDS", limits.Pids)
+	limits.MaxOutputBytes = int64(intFromEnv(log, "JUDGE_MAX_OUTPUT_BYTES", int(limits.MaxOutputBytes)))
+
+	if seconds := intFromEnv(log, "JUDGE_TIMEOUT_SECONDS", int(limits.Wall.Seconds())); seconds > 0 {
+		limits.Wall = time.Duration(seconds) * time.Second
+	}
+	return limits
+}
+
+// intFromEnv reads a positive integer, falling back loudly. A typo in a limit
+// must not silently become a smaller limit — or a larger one.
+func intFromEnv(log *slog.Logger, key string, fallback int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		log.Warn("ignoring an unreadable setting",
+			slog.String("key", key), slog.String("value", raw), slog.Int("using", fallback))
+		return fallback
+	}
+	return value
 }

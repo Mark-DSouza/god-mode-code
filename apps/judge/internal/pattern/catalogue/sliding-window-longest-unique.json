@@ -1,0 +1,36 @@
+{
+  "id": "sliding-window-longest-unique",
+  "title": "Grow the window until it breaks, then shrink from the left",
+  "family": "Sliding Window",
+  "seniority": "Senior",
+  "entryPoint": "longest_unique",
+  "scaffold": "def longest_unique(text):",
+  "exampleTests": [
+    {
+      "name": "the window has to slide past a repeat",
+      "expression": "longest_unique('abcabcbb') == 3"
+    },
+    {
+      "name": "nothing to window over",
+      "expression": "longest_unique('') == 0"
+    }
+  ],
+  "hiddenTests": [
+    {
+      "name": "every character repeats",
+      "expression": "longest_unique('bbbbb') == 1"
+    },
+    {
+      "name": "the answer is not a prefix",
+      "expression": "longest_unique('pwwkew') == 3"
+    },
+    {
+      "name": "no character repeats at all",
+      "expression": "longest_unique('abcdef') == 6"
+    },
+    {
+      "name": "the left edge must jump forward, not step",
+      "expression": "longest_unique('dvdf') == 3"
+    }
+  ]
+}

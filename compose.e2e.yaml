@@ -58,9 +58,22 @@ services:
     environment:
       JUDGE_ADDR: ":9090"
       JUDGE_VERSION: e2e
-    # LOCAL ONLY. Production runs the judge as a bare process on an isolated
-    # instance with no credentials and no egress; it is not containerised there,
-    # and its container socket is never mounted anywhere (ADR-0005, issue #13).
+    # LOCAL ONLY, and deliberately unable to judge.
+    #
+    # Production runs the judge as a bare process on an isolated instance with
+    # no credentials and no egress. It is not containerised there, and no
+    # container socket is mounted anywhere — mounting one is the most direct
+    # escape path available to the code the judge exists to contain (ADR-0005).
+    #
+    # That constraint does not relax because this is a laptop, so this container
+    # gets no socket either. The judge detects that at startup and serves with
+    # judging disabled: /health reports DEGRADED with "judging": false, and
+    # POST /judgings answers 503. It is here so the whole stack still boots from
+    # a clean clone with no Go toolchain, and so the backend has something real
+    # at JUDGE_URL to fail against.
+    #
+    # To exercise real Judging, run the judge natively: `./scripts/dev.sh`, or
+    # `cd apps/judge && go run ./cmd/judge`.
 
   web:
     build:

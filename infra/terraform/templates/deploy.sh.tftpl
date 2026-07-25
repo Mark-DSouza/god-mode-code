@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+#
+# Deploy. Delivered as a Systems Manager document and invoked by continuous
+# integration, so shipping needs no inbound port, no SSH key, and no long-lived
+# credential on a runner.
+#
+# The ordering below is the point of this script and is not incidental: both
+# images are pulled while the old container is still serving. A pull can take
+# tens of seconds on a burstable instance, so pulling after the stop would turn
+# a restart into a download and stretch a ~15 second outage into minutes
+# (ADR-0009).
+#
+# Two conventions worth knowing before editing:
+#
+#   * Rendered by `templatefile`. A doubled dollar-brace escapes to a literal
+#     shell variable; a single one is interpolated by Terraform. That applies
+#     inside comments too, which is easy to forget.
+#   * Doubled curly braces are Systems Manager document parameters, resolved
+#     before this ever reaches a shell. Every one of them must be a parameter
+#     the document declares — Systems Manager validates that and rejects the
+#     document otherwise, including occurrences inside comments, so this one
+#     deliberately describes the syntax rather than writing it out.
+#
+#     That is also why nothing here uses `docker --format`: Go templates use
+#     the same braces. Deployed image references are tracked in marker files
+#     instead, which is both simpler and exact, because continuous integration
+#     tags every image with an immutable commit SHA.
+set -euo pipefail
+
+API_IMAGE="{{ apiImage }}"
+WEB_IMAGE="{{ webImage }}"
+REGION="${region}"
+PREFIX="${parameter_prefix}"
+
+log() { echo "[deploy] $*"; }
+
+get_param() {
+  aws ssm get-parameter --region "$REGION" --name "$1" \
+    --with-decryption --query 'Parameter.Value' --output text
+}
+
+log "Authenticating to the registry"
+# Read fresh on every deploy rather than from a copy written at first boot.
+# Terraform creates this parameter with a placeholder — its real value is a
+# GitHub token written out of band afterwards — so a host that cached it at
+# boot would have cached the placeholder and never been able to pull an image
+# again. Reading it here also means rotating the token takes effect on the next
+# deploy instead of requiring the instance to be rebuilt.
+get_param "$PREFIX/registry/token" |
+  docker login ${registry} --username oauth2 --password-stdin
+
+# ---------------------------------------------------------------------------
+# Pull everything first. Nothing is stopped until every image is on disk.
+# ---------------------------------------------------------------------------
+
+log "Pulling $API_IMAGE"
+docker pull "$API_IMAGE"
+
+log "Pulling $WEB_IMAGE"
+docker pull "$WEB_IMAGE"
+
+# ---------------------------------------------------------------------------
+# The reverse proxy, but only when it actually changed.
+# ---------------------------------------------------------------------------
+
+# Caddy serves the SPA and is what keeps the site answering while Spring Boot
+# restarts. Replacing it on every backend deploy would throw that away, so it
+# is touched only when its image differs — that is, on a frontend change
+# (ADR-0009).
+DEPLOYED_WEB="$(cat /opt/gmc/web-image 2>/dev/null || true)"
+WEB_RUNNING="$(docker ps --quiet --filter name=^/gmc-web$)"
+
+if [ "$DEPLOYED_WEB" != "$WEB_IMAGE" ] || [ -z "$WEB_RUNNING" ]; then
+  log "Reverse proxy changed or absent; replacing it"
+  docker rm --force gmc-web >/dev/null 2>&1 || true
+  docker run --detach \
+    --name gmc-web \
+    --restart unless-stopped \
+    --network gmc \
+    --publish 127.0.0.1:80:80 \
+    --env CADDY_PORT=80 \
+    --env API_UPSTREAM=api:8080 \
+    --env SITE_ROOT=/srv \
+    "$WEB_IMAGE"
+  printf '%s' "$WEB_IMAGE" >/opt/gmc/web-image
+else
+  log "Reverse proxy unchanged; leaving it running"
+fi
+
+# ---------------------------------------------------------------------------
+# The backend.
+# ---------------------------------------------------------------------------
+
+DB_URL="$(get_param "$PREFIX/database/url")"
+DB_USER="$(get_param "$PREFIX/database/username")"
+DB_PASSWORD="$(get_param "$PREFIX/database/password")"
+
+start_api() {
+  docker run --detach \
+    --name gmc-api \
+    --restart unless-stopped \
+    --network gmc \
+    --network-alias api \
+    --memory 900m \
+    --env DATABASE_URL="$DB_URL" \
+    --env DATABASE_USER="$DB_USER" \
+    --env DATABASE_PASSWORD="$DB_PASSWORD" \
+    --env GMC_VERSION="$1" \
+    "$1"
+}
+
+# Recorded before anything is stopped, so a failed deploy can be put back.
+PREVIOUS_API="$(cat /opt/gmc/api-image 2>/dev/null || true)"
+
+log "Stopping the running backend"
+# SIGTERM, then up to 40 seconds before SIGKILL. Spring Boot drains in-flight
+# requests inside its own 30 second shutdown phase, so this window is
+# deliberately longer — a shorter one would sever exactly the requests the
+# graceful shutdown exists to protect (ADR-0009).
+docker stop --time 40 gmc-api >/dev/null 2>&1 || true
+docker rm gmc-api >/dev/null 2>&1 || true
+
+log "Starting $API_IMAGE"
+start_api "$API_IMAGE"
+printf '%s' "$API_IMAGE" >/opt/gmc/api-image
+
+# ---------------------------------------------------------------------------
+# Verify, through the proxy.
+# ---------------------------------------------------------------------------
+
+# Through Caddy on the loopback interface rather than against the container
+# directly, because that is the path real traffic takes. A backend that is
+# healthy but unreachable through the proxy is not a successful deploy.
+log "Waiting for health"
+healthy=false
+for _ in $(seq 1 60); do
+  if curl --fail --silent --show-error --max-time 3 http://127.0.0.1/api/health >/dev/null 2>&1; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+
+if [ "$healthy" = true ]; then
+  log "Healthy. Deploy complete."
+  # Reclaims what this deploy replaced. A 20GB root volume fills quietly
+  # otherwise, and it does so at the least convenient moment — the next deploy.
+  docker image prune --force >/dev/null 2>&1 || true
+  exit 0
+fi
+
+log "Backend did not become healthy within 120 seconds"
+
+if [ -n "$PREVIOUS_API" ]; then
+  log "Rolling back to $PREVIOUS_API"
+  docker rm --force gmc-api >/dev/null 2>&1 || true
+  start_api "$PREVIOUS_API"
+  printf '%s' "$PREVIOUS_API" >/opt/gmc/api-image
+fi
+
+# Non-zero, so the Systems Manager command and the workflow that sent it both
+# fail visibly. A deploy that quietly restored the previous version is still a
+# failed deploy.
+exit 1

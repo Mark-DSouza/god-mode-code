@@ -1,5 +1,5 @@
 import { useHealth } from "../api/health.ts";
-import { Badge, Card, Kbd, Stat, Wordmark } from "../design-system/index.ts";
+import { Badge, Card, Kbd, Wordmark } from "../design-system/index.ts";
 import { RainBackdrop } from "./RainBackdrop.tsx";
 
 /**
@@ -33,7 +33,11 @@ export function App() {
             </p>
           </div>
 
-          <Card glow scanlines className="flex flex-col gap-5" aria-labelledby="status-heading">
+          {/* No `glow`. In the mockups the bright green ring is the selected
+              state — it is what marks the chosen discipline tile apart from the
+              two beside it. A resting panel carries the hairline border only,
+              and glowing this one would mean "selected" with nothing to select. */}
+          <Card scanlines className="flex flex-col gap-5" aria-labelledby="status-heading">
             <div className="flex items-center justify-between gap-4">
               <h2
                 id="status-heading"
@@ -48,24 +52,21 @@ export function App() {
               />
             </div>
 
-            {/* A plain grid, not a <dl>. Stat renders its own value and label
-                as sibling spans, so wrapping it in a description list would
-                produce a <dl> with no <dt>/<dd> children at all — invalid, and
-                announced as an empty list by a screen reader. */}
+            {/* Not `Stat`. That component is the oversized CRT numeral readout —
+                every use of it in the design is a number (78 wpm, 99.1%, 12s),
+                and VT323 is a numeral face. Setting a status word and a version
+                string in it reads as a rendering fault rather than a style.
+                These are labelled values, so they are set as labelled values. */}
             <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
-              <Stat
-                align="left"
-                size="sm"
-                accent={health.data?.database === "UP" ? "green" : "error"}
-                value={health.isPending ? "—" : (health.data?.database ?? "?")}
+              <Readout
                 label="Database"
+                value={health.isPending ? "—" : (health.data?.database ?? "?")}
+                tone={health.data?.database === "UP" ? "accent" : "error"}
               />
-              <Stat
-                align="left"
-                size="sm"
-                accent="white"
-                value={health.isPending ? "—" : (health.data?.version ?? "?")}
+              <Readout
                 label="Version"
+                value={health.isPending ? "—" : (health.data?.version ?? "?")}
+                tone="heading"
               />
             </div>
           </Card>
@@ -76,6 +77,34 @@ export function App() {
         </main>
       </div>
     </>
+  );
+}
+
+/**
+ * A labelled value, using the design's label treatment: a small uppercased
+ * wide-tracked caption under the value, the same pairing the run screen puts
+ * beneath SPEED and ACCURACY.
+ */
+function Readout({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "accent" | "error" | "heading";
+}) {
+  const toneClass = {
+    accent: "text-accent [text-shadow:var(--glow-sm)]",
+    error: "text-error [text-shadow:var(--glow-error)]",
+    heading: "text-heading",
+  }[tone];
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className={`font-display text-lg tracking-wide ${toneClass}`}>{value}</span>
+      <span className="font-display text-2xs tracking-wider text-muted uppercase">{label}</span>
+    </div>
   );
 }
 

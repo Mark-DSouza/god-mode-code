@@ -45,7 +45,7 @@ type report struct {
 func buildHarness(p pattern.Pattern, source, nonce string) ([]byte, error) {
 	tests := make([]harnessTest, 0, len(p.ExampleTests)+len(p.HiddenTests))
 	// Example Tests first: they are the contract the player was shown, so when
-	// a submission is wrong in an obvious way the revealed failure is the one
+	// submitted source is wrong in an obvious way the revealed failure is the one
 	// they can act on.
 	for _, test := range p.ExampleTests {
 		tests = append(tests, harnessTest{Name: test.Name, Expression: test.Expression, Revealed: true})

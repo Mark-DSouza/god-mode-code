@@ -51,9 +51,9 @@ type Health struct {
 	Judging bool `json:"judging"`
 }
 
-// Problem is the shape of every error response, so the backend has one thing to
+// Fault is the shape of every error response, so the backend has one thing to
 // parse rather than a different body per status code.
-type Problem struct {
+type Fault struct {
 	Error string `json:"error"`
 }
 
@@ -157,7 +157,7 @@ func (s *Server) handleJudging(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSourceBytes+4<<10))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
-		s.writeJSON(w, r, http.StatusBadRequest, Problem{Error: "could not read the request: " + err.Error()})
+		s.writeJSON(w, r, http.StatusBadRequest, Fault{Error: "could not read the request: " + err.Error()})
 		return
 	}
 
@@ -165,35 +165,35 @@ func (s *Server) handleJudging(w http.ResponseWriter, r *http.Request) {
 	// the same answer whether or not this judge happens to be able to judge.
 	switch {
 	case request.PatternID == "":
-		s.writeJSON(w, r, http.StatusBadRequest, Problem{Error: "patternId is required"})
+		s.writeJSON(w, r, http.StatusBadRequest, Fault{Error: "patternId is required"})
 		return
 	case request.Source == "":
-		s.writeJSON(w, r, http.StatusBadRequest, Problem{Error: "source is required"})
+		s.writeJSON(w, r, http.StatusBadRequest, Fault{Error: "source is required"})
 		return
 	case len(request.Source) > maxSourceBytes:
 		s.writeJSON(w, r, http.StatusRequestEntityTooLarge,
-			Problem{Error: "source is larger than this judge accepts"})
+			Fault{Error: "source is larger than this judge accepts"})
 		return
 	}
 
 	if s.judge == nil {
 		s.writeJSON(w, r, http.StatusServiceUnavailable,
-			Problem{Error: "this judge has no container runtime and cannot judge Solve Runs"})
+			Fault{Error: "this judge has no container runtime and cannot judge Solve Runs"})
 		return
 	}
 
 	judged, err := s.judge.Judge(r.Context(), request)
 	switch {
 	case errors.Is(err, judging.ErrUnknownPattern):
-		s.writeJSON(w, r, http.StatusNotFound, Problem{Error: "no such Pattern"})
+		s.writeJSON(w, r, http.StatusNotFound, Fault{Error: "no such Pattern"})
 	case errors.Is(err, judging.ErrBusy):
 		// 503 with Retry-After, not 500: the backend should come back, and this
 		// is the judge's only way to say so.
 		w.Header().Set("Retry-After", "1")
-		s.writeJSON(w, r, http.StatusServiceUnavailable, Problem{Error: "the judge is at capacity"})
+		s.writeJSON(w, r, http.StatusServiceUnavailable, Fault{Error: "the judge is at capacity"})
 	case err != nil:
 		s.log.ErrorContext(r.Context(), "judging failed", slog.Any("error", err))
-		s.writeJSON(w, r, http.StatusInternalServerError, Problem{Error: "judging failed"})
+		s.writeJSON(w, r, http.StatusInternalServerError, Fault{Error: "judging failed"})
 	default:
 		s.writeJSON(w, r, http.StatusOK, judged)
 	}

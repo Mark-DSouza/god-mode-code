@@ -68,6 +68,12 @@ var ErrUnknownPattern = errors.New("unknown Pattern")
 // ErrBusy is returned when every worker is taken and the queue wait ran out.
 var ErrBusy = errors.New("no judging capacity")
 
+// reapGrace bounds how long a worker slot is held open for a container that is
+// being killed. `docker rm --force` is a SIGKILL and takes milliseconds; if it
+// has not returned in this long the daemon itself is in trouble, and holding
+// the pool closed waiting for it would turn one stuck container into an outage.
+const reapGrace = 30 * time.Second
+
 // Sandbox is the container runtime seam. It is an interface so this package can
 // be reasoned about without Docker — but note that the judge's own tests
 // deliberately do not use that freedom. A stubbed runtime would prove only that
@@ -134,7 +140,7 @@ func New(opts Options) *Judge {
 // Judge executes submitted source and returns a Verdict.
 //
 // The error is reserved for requests that never became a Judging — an unknown
-// Pattern, or no capacity. A submission that times out, exhausts memory or
+// Pattern, or no capacity. Submitted source that times out, exhausts memory or
 // never compiles is a perfectly good Judging with a telling Verdict.
 func (j *Judge) Judge(ctx context.Context, request Request) (Judging, error) {
 	p, known := j.patterns.Lookup(request.PatternID)
@@ -152,9 +158,32 @@ func (j *Judge) Judge(ctx context.Context, request Request) (Judging, error) {
 		}
 		return Judging{}, err
 	}
-	defer release()
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			release()
+		}
+	}()
 
-	judged := j.execute(ctx, p, request.Source, total)
+	judged, reaped := j.execute(ctx, p, request.Source, total)
+	if reaped != nil {
+		// The container outlived its request and is being killed. The request
+		// is answered now — that is the point of abandoning it — but the worker
+		// slot stays taken until the container is really gone, because until
+		// then it is still holding its share of a 1GB host (ADR-0005). Freeing
+		// the slot on the reply would let a burst of wedged Solve Runs put more
+		// containers on the box than the pool is supposed to allow.
+		handedOff = true
+		go func() {
+			defer release()
+			select {
+			case <-reaped:
+			case <-time.After(reapGrace):
+				j.log.Error("a sandbox container outlived its reap grace; freeing its worker anyway",
+					slog.Duration("grace", reapGrace))
+			}
+		}()
+	}
 	judged.PatternID = p.ID
 	// Measured from the request, not from `docker run`: queueing is time the
 	// player waited, and a duration that hides it is a duration that lies.
@@ -205,23 +234,25 @@ func (j *Judge) acquire(ctx context.Context) (func(), error) {
 	}
 }
 
-func (j *Judge) execute(ctx context.Context, p pattern.Pattern, source string, total int) Judging {
+// execute runs one Solve Run. The second return is the sandbox's reap signal,
+// non-nil only when a container had to be abandoned; see Judge.
+func (j *Judge) execute(ctx context.Context, p pattern.Pattern, source string, total int) (Judging, <-chan struct{}) {
 	// Fresh per execution, so nothing carries from one Solve Run to the next.
 	nonce := "\x1egmc-judge-" + randomHex(12) + ":"
 
 	program, err := buildHarness(p, source, nonce)
 	if err != nil {
 		j.log.ErrorContext(ctx, "could not build the harness", slog.Any("error", err))
-		return Judging{Verdict: VerdictError, TestsTotal: total, Detail: "the judge could not prepare this Pattern"}
+		return Judging{Verdict: VerdictError, TestsTotal: total, Detail: "the judge could not prepare this Pattern"}, nil
 	}
 
 	execution, err := j.sandbox.Run(ctx, program)
 	if err != nil {
 		j.log.ErrorContext(ctx, "the sandbox would not start", slog.Any("error", err))
-		return Judging{Verdict: VerdictError, TestsTotal: total, Detail: "the judge could not start a sandbox"}
+		return Judging{Verdict: VerdictError, TestsTotal: total, Detail: "the judge could not start a sandbox"}, nil
 	}
 
-	return j.verdictOf(ctx, execution, nonce, total)
+	return j.verdictOf(ctx, execution, nonce, total), execution.Reaped
 }
 
 // verdictOf reads an Execution as a Verdict.
@@ -239,6 +270,15 @@ func (j *Judge) verdictOf(ctx context.Context, execution sandbox.Execution, nonc
 			Verdict:    VerdictTimeout,
 			TestsTotal: total,
 			Detail:     fmt.Sprintf("execution did not finish within %s", limits.Wall),
+		}
+
+	case execution.Cancelled:
+		// Nobody is waiting for this — the caller hung up. It is an Error
+		// rather than a Timeout so it cannot be read as the judge being slow.
+		return Judging{
+			Verdict:    VerdictError,
+			TestsTotal: total,
+			Detail:     "the request was cancelled before judging finished",
 		}
 
 	case execution.OutputTruncated:

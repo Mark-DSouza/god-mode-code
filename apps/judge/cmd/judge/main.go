@@ -69,12 +69,18 @@ func run(log *slog.Logger) error {
 
 	options := []api.Option{api.WithLogger(log), api.WithMetrics(registry)}
 
+	limits := limitsFromEnv(log)
+	if err := limits.Validate(); err != nil {
+		// Fatal, because the alternative is a service that starts, reports
+		// itself healthy, and then returns an Error for every Solve Run.
+		return fmt.Errorf("sandbox limits: %w", err)
+	}
+
 	runner := sandbox.New(sandbox.Options{
-		Limits:  limitsFromEnv(log),
+		Limits:  limits,
 		Logger:  log,
 		Metrics: registry,
 	})
-	defer func() { _ = runner.Close() }()
 
 	// Probed once at startup rather than discovered on the first Solve Run. A
 	// judge that cannot judge should say so on /health, not accept work and
@@ -88,8 +94,14 @@ func run(log *slog.Logger) error {
 		// has no runtime — giving it one would mean mounting the container
 		// socket, which is the most direct escape path available to the code
 		// this service exists to contain (ADR-0005). It serves DEGRADED there.
+		//
 		log.Warn("no container runtime; serving without judging", slog.Any("error", err))
+		// Shut the runner down rather than leave it running: its reaper would
+		// otherwise fail to reach the daemon every thirty seconds for the life
+		// of the process, filling the one log stream this host keeps.
+		_ = runner.Close()
 	} else {
+		defer func() { _ = runner.Close() }()
 		workers := intFromEnv(log, "JUDGE_WORKERS", defaultWorkers)
 		options = append(options, api.WithJudge(judging.New(judging.Options{
 			Sandbox:  runner,
@@ -98,10 +110,20 @@ func run(log *slog.Logger) error {
 			Metrics:  registry,
 			Logger:   log,
 		})))
+		// The effective limits are logged in full, not just the overridden
+		// ones: when something escapes, the first question is what the sandbox
+		// was actually set to, and this host's stdout is the only place that
+		// answer lives (ADR-0005).
 		log.Info("judging enabled",
 			slog.Int("workers", workers),
 			slog.String("image", sandbox.DefaultImage),
-			slog.String("containerLabel", runner.Label()))
+			slog.String("containerLabel", runner.Label()),
+			slog.String("memory", limits.Memory),
+			slog.String("cpus", limits.CPUs),
+			slog.Int("pids", limits.Pids),
+			slog.String("tmpfsSize", limits.TmpfsSize),
+			slog.Int64("maxOutputBytes", limits.MaxOutputBytes),
+			slog.Duration("wall", limits.Wall))
 	}
 
 	server := &http.Server{
@@ -144,9 +166,10 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// limitsFromEnv lets an operator tune the sandbox without a rebuild. The
-// defaults are the ones the tests exercise; anything set here is a deliberate
-// loosening and is logged as such.
+// limitsFromEnv lets an operator tune the sandbox without a rebuild — which
+// matters on a host chosen for how little memory it has. The defaults are the
+// ones the tests exercise; whatever comes out of here is validated before the
+// service starts and logged in full once it does.
 func limitsFromEnv(log *slog.Logger) sandbox.Limits {
 	limits := sandbox.DefaultLimits()
 	limits.Memory = envOr("JUDGE_MEMORY", limits.Memory)

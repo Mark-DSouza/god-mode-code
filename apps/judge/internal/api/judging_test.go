@@ -57,7 +57,10 @@ const correctSolution = `def pair_sum(numbers, target):
     return []
 `
 
-var ensureImageOnce sync.Once
+var (
+	ensureImageOnce sync.Once
+	ensureImageErr  error
+)
 
 // requireContainerRuntime fails rather than skips when Docker is absent, so
 // that a full test run cannot quietly stop proving anything. Use -short to opt
@@ -71,6 +74,9 @@ func requireContainerRuntime(t *testing.T) {
 		t.Fatalf("container-backed tests need docker on PATH (use -short to skip): %v", err)
 	}
 
+	// The failure is remembered rather than raised inside the Once. t.Fatalf
+	// unwinds the calling goroutine, which would leave the Once marked done and
+	// every later test failing somewhere else for no visible reason.
 	ensureImageOnce.Do(func() {
 		if exec.Command("docker", "image", "inspect", sandbox.DefaultImage).Run() == nil {
 			return
@@ -79,9 +85,12 @@ func requireContainerRuntime(t *testing.T) {
 		defer cancel()
 		out, err := exec.CommandContext(ctx, "docker", "pull", sandbox.DefaultImage).CombinedOutput()
 		if err != nil {
-			t.Fatalf("pulling %s: %v\n%s", sandbox.DefaultImage, err, out)
+			ensureImageErr = fmt.Errorf("pulling %s: %w\n%s", sandbox.DefaultImage, err, out)
 		}
 	})
+	if ensureImageErr != nil {
+		t.Fatal(ensureImageErr)
+	}
 }
 
 // judgeOptions are the knobs a test bends. Everything else stays at the
@@ -201,6 +210,44 @@ func TestCorrectSolutionPasses(t *testing.T) {
 	}
 }
 
+// A second Pattern, from a different Family with a different entry point and a
+// different shape of answer. It is here so the catalogue is exercised as a
+// catalogue: a judge that had the first Pattern's tests baked in anywhere would
+// pass every other test in this file and fail this one.
+func TestASecondPatternIsJudgedOnItsOwnTests(t *testing.T) {
+	judge := startJudging(t, judgeOptions{})
+
+	const source = `def longest_unique(text):
+    seen = {}
+    best = left = 0
+    for right, character in enumerate(text):
+        if character in seen and seen[character] >= left:
+            left = seen[character] + 1
+        seen[character] = right
+        best = max(best, right - left + 1)
+    return best
+`
+	response := judge.post(t, "sliding-window-longest-unique", source)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+	var judged judging.Judging
+	if err := json.NewDecoder(response.Body).Decode(&judged); err != nil {
+		t.Fatalf("decoding the Verdict: %v", err)
+	}
+
+	if judged.Verdict != judging.VerdictPassed {
+		t.Errorf("verdict = %q (detail %q), want %q", judged.Verdict, judged.Detail, judging.VerdictPassed)
+	}
+	if judged.PatternID != "sliding-window-longest-unique" {
+		t.Errorf("patternId = %q, want the Pattern that was asked for", judged.PatternID)
+	}
+	if judged.TestsPassed != 6 || judged.TestsTotal != 6 {
+		t.Errorf("counts = %d/%d, want 6/6", judged.TestsPassed, judged.TestsTotal)
+	}
+}
+
 // A realistic mistake: the right technique, but it returns the values it
 // summed instead of their indices. Every test that finds a pair therefore
 // fails, and the one that finds none passes — 1 of 6.
@@ -269,13 +316,26 @@ func TestSourceThatDoesNotCompileIsAnError(t *testing.T) {
 // runningContainers counts the containers this judge's sandbox started that are
 // still alive — asked of Docker directly, not of the judge's own bookkeeping.
 // A judge that has lost track of a container would happily report zero.
-func (j judgeUnderTest) runningContainers(t *testing.T) int {
-	t.Helper()
+//
+// It returns an error rather than calling t.Fatalf because it is also called
+// from a watcher goroutine, and FailNow from a goroutine other than the test's
+// own unwinds that goroutine while the test waits for it forever.
+func (j judgeUnderTest) runningContainers() (int, error) {
 	out, err := exec.Command("docker", "ps", "--quiet", "--filter", "label="+j.label).Output()
 	if err != nil {
-		t.Fatalf("listing sandbox containers: %v", err)
+		return 0, fmt.Errorf("listing sandbox containers: %w", err)
 	}
-	return len(strings.Fields(string(out)))
+	return len(strings.Fields(string(out))), nil
+}
+
+// mustCountContainers is the test-goroutine-only convenience.
+func (j judgeUnderTest) mustCountContainers(t *testing.T) int {
+	t.Helper()
+	running, err := j.runningContainers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return running
 }
 
 // An infinite loop that also refuses to be asked nicely: it ignores SIGTERM and
@@ -322,7 +382,7 @@ func TestInfiniteLoopTimesOutInsteadOfHanging(t *testing.T) {
 	// The container that outlived its request must not outlive the judge's
 	// attention either.
 	deadline := time.Now().Add(20 * time.Second)
-	for judge.runningContainers(t) > 0 {
+	for judge.mustCountContainers(t) > 0 {
 		if time.Now().After(deadline) {
 			t.Fatalf("a sandbox container was still running 20s after its request was answered")
 		}
@@ -461,38 +521,79 @@ func TestConcurrentJudgingsStayWithinThePoolBound(t *testing.T) {
 
 	// Watch Docker, not the judge. The judge reporting that it kept to its own
 	// bound is not evidence; the number of containers actually alive is.
+	//
+	// Neither this goroutine nor the request goroutines below may call t.Fatalf:
+	// FailNow from a goroutine other than the test's own unwinds only that
+	// goroutine, and the test would then wait on a WaitGroup that never
+	// finishes. They report back over channels and the test does the asserting.
 	watching := make(chan struct{})
 	observed := make(chan int, 1)
+	watchErr := make(chan error, 1)
 	go func() {
 		peak := 0
+		defer func() { observed <- peak }()
 		for {
 			select {
 			case <-watching:
-				observed <- peak
 				return
 			default:
 			}
-			if running := judge.runningContainers(t); running > peak {
+			running, err := judge.runningContainers()
+			if err != nil {
+				watchErr <- err
+				return
+			}
+			if running > peak {
 				peak = running
 			}
 			time.Sleep(25 * time.Millisecond)
 		}
 	}()
 
-	verdicts := make(chan judging.Verdict, requests)
+	type outcome struct {
+		judged judging.Judging
+		err    error
+	}
+	outcomes := make(chan outcome, requests)
 	var wg sync.WaitGroup
 	started := time.Now()
 	for range requests {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			verdicts <- judge.judge(t, slowSolution).Verdict
+			body, err := json.Marshal(judging.Request{PatternID: patternID, Source: slowSolution})
+			if err != nil {
+				outcomes <- outcome{err: err}
+				return
+			}
+			response, err := http.Post(judge.URL+"/judgings", "application/json", bytes.NewReader(body))
+			if err != nil {
+				outcomes <- outcome{err: err}
+				return
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				outcomes <- outcome{err: fmt.Errorf("status = %d, want 200", response.StatusCode)}
+				return
+			}
+			var judged judging.Judging
+			if err := json.NewDecoder(response.Body).Decode(&judged); err != nil {
+				outcomes <- outcome{err: err}
+				return
+			}
+			outcomes <- outcome{judged: judged}
 		}()
 	}
 	wg.Wait()
 	elapsed := time.Since(started)
 	close(watching)
 	peak := <-observed
+
+	select {
+	case err := <-watchErr:
+		t.Fatalf("watching sandbox containers: %v", err)
+	default:
+	}
 
 	t.Logf("%d requests through %d workers took %s, peak containers %d", requests, workers, elapsed, peak)
 
@@ -505,10 +606,14 @@ func TestConcurrentJudgingsStayWithinThePoolBound(t *testing.T) {
 		t.Errorf("peak of %d containers, want the pool to actually reach %d — the test proved nothing", peak, workers)
 	}
 
-	close(verdicts)
-	for verdict := range verdicts {
-		if verdict != judging.VerdictPassed {
-			t.Errorf("verdict = %q, want every queued Solve Run to be judged normally", verdict)
+	close(outcomes)
+	for got := range outcomes {
+		if got.err != nil {
+			t.Errorf("a queued Solve Run did not complete: %v", got.err)
+			continue
+		}
+		if got.judged.Verdict != judging.VerdictPassed {
+			t.Errorf("verdict = %q, want every queued Solve Run to be judged normally", got.judged.Verdict)
 		}
 	}
 
@@ -550,7 +655,7 @@ func TestUnknownPatternIsNotFound(t *testing.T) {
 	if response.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", response.StatusCode, http.StatusNotFound)
 	}
-	if judge.runningContainers(t) != 0 {
+	if judge.mustCountContainers(t) != 0 {
 		t.Error("an unknown Pattern started a container")
 	}
 }

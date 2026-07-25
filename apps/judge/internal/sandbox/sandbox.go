@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,6 +51,16 @@ const nobodyUser = "65534:65534"
 // program. Bounded so a broken harness cannot become a second memory leak.
 const maxReportBytes = 64 << 10
 
+// dockerCommand is the container runtime client. Not configurable: the judge is
+// deployed onto one machine that this project provisions, and a runtime this
+// service has never been tested against is not a setting worth offering.
+const dockerCommand = "docker"
+
+// sweepInterval is how often abandoned containers are swept up. Frequent enough
+// that a crash does not leave a container holding memory for long, rare enough
+// that an idle judge is not talking to the daemon constantly.
+const sweepInterval = 30 * time.Second
+
 // Limits are the caps applied to every execution.
 type Limits struct {
 	// Memory is a Docker size string. Swap is pinned to the same value, which
@@ -58,7 +69,7 @@ type Limits struct {
 	// spend its whole timeout thrashing.
 	Memory string
 	// CPUs is a fraction of a core. A capped share, not a pinned core, so one
-	// spinning submission cannot starve the others.
+	// spinning Solve Run cannot starve the others.
 	CPUs string
 	// Pids caps process and thread count, which is what actually stops a fork
 	// bomb — a memory cap alone does not, because each child is cheap.
@@ -86,6 +97,36 @@ func DefaultLimits() Limits {
 	}
 }
 
+// sizePattern is Docker's size syntax: a positive integer and a unit.
+var sizePattern = regexp.MustCompile(`^[1-9][0-9]*[bkmg]$`)
+
+// Validate checks the limits are ones Docker will accept.
+//
+// It exists because these can be overridden from the environment, and a
+// malformed override is otherwise invisible until the first Solve Run — at
+// which point every Judging returns an Error and the service looks broken
+// rather than misconfigured. Better to refuse to start.
+func (l Limits) Validate() error {
+	for name, size := range map[string]string{"memory": l.Memory, "tmpfs size": l.TmpfsSize} {
+		if !sizePattern.MatchString(size) {
+			return fmt.Errorf("%s limit %q is not a Docker size such as \"128m\"", name, size)
+		}
+	}
+	cpus, err := strconv.ParseFloat(l.CPUs, 64)
+	if err != nil || cpus <= 0 {
+		return fmt.Errorf("cpu limit %q is not a positive number of cores", l.CPUs)
+	}
+	switch {
+	case l.Pids <= 0:
+		return fmt.Errorf("pids limit must be positive, got %d", l.Pids)
+	case l.MaxOutputBytes <= 0:
+		return fmt.Errorf("output cap must be positive, got %d", l.MaxOutputBytes)
+	case l.Wall <= 0:
+		return fmt.Errorf("wall-clock cap must be positive, got %s", l.Wall)
+	}
+	return nil
+}
+
 // Execution is what one container did.
 type Execution struct {
 	// ExitCode is the container's exit status, or -1 if it never reported one.
@@ -98,26 +139,32 @@ type Execution struct {
 	OutputTruncated bool
 	// Report is whatever the harness wrote on its private channel.
 	Report []byte
-	// TimedOut reports that this process, not the container, ended the run.
+	// TimedOut reports that this process, not the container, ended the run
+	// because it passed the wall-clock cap.
 	TimedOut bool
+	// Cancelled reports that the caller gave up before the cap — usually the
+	// backend hanging up. Kept apart from TimedOut so a disconnected client
+	// does not show up on a dashboard as the judge being slow.
+	Cancelled bool
 	// MemoryExhausted reports that the kernel's OOM killer ended the run.
 	MemoryExhausted bool
 	// Duration is wall-clock time from `docker run` to a decision.
 	Duration time.Duration
+	// Reaped closes once a container this Run abandoned is confirmed gone. It
+	// is nil when the container exited on its own, which is the common case.
+	//
+	// The caller is answering its request either way — that is the whole point
+	// of abandoning. This exists so whoever is accounting for how many
+	// containers exist can keep counting this one until it really does not.
+	Reaped <-chan struct{}
 }
 
 // Options configure a Runner.
 type Options struct {
-	// Image defaults to DefaultImage.
-	Image string
-	// DockerPath defaults to looking up "docker" on PATH.
-	DockerPath string
 	// Limits default to DefaultLimits.
-	Limits Limits
-	// ReapInterval is how often abandoned containers are swept up.
-	ReapInterval time.Duration
-	Logger       *slog.Logger
-	Metrics      *metrics.Registry
+	Limits  Limits
+	Logger  *slog.Logger
+	Metrics *metrics.Registry
 }
 
 // Runner starts sandbox containers and makes sure none of them outlive it.
@@ -142,25 +189,16 @@ type Runner struct {
 
 // New builds a Runner and starts its reaper.
 func New(opts Options) *Runner {
-	if opts.Image == "" {
-		opts.Image = DefaultImage
-	}
-	if opts.DockerPath == "" {
-		opts.DockerPath = "docker"
-	}
 	if opts.Limits == (Limits{}) {
 		opts.Limits = DefaultLimits()
-	}
-	if opts.ReapInterval <= 0 {
-		opts.ReapInterval = 30 * time.Second
 	}
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
 
 	r := &Runner{
-		docker: opts.DockerPath,
-		image:  opts.Image,
+		docker: dockerCommand,
+		image:  DefaultImage,
 		limits: opts.Limits,
 		// The label carries a per-process instance id, not a constant. Two
 		// judges on one host — or, far more often, two tests in one run — must
@@ -173,7 +211,7 @@ func New(opts Options) *Runner {
 	}
 
 	r.sweeping.Add(1)
-	go r.sweepLoop(opts.ReapInterval)
+	go r.sweepLoop(sweepInterval)
 	return r
 }
 
@@ -244,19 +282,26 @@ func (r *Runner) Run(ctx context.Context, program []byte) (Execution, error) {
 		abandon = "output cap"
 
 	case <-ctx.Done():
-		// The caller gave up — usually the backend hung up. Same treatment.
-		execution.TimedOut = true
+		// The caller gave up — usually the backend hung up. Same treatment for
+		// the container, but recorded as its own thing.
+		execution.Cancelled = true
 		abandon = "caller cancelled"
 	}
 
 	if abandon != "" {
 		// Kill the local client so the pipe copies finish and this goroutine is
-		// not leaked, then hand the container to the reaper. Both are done
-		// without waiting, so answering the request never depends on how
-		// cooperative the container feels.
+		// not leaked, then hand the container to the reaper. Neither is waited
+		// on, so answering the request never depends on how cooperative the
+		// container feels.
 		_ = cmd.Process.Kill()
 		go func() { <-waited }()
-		go r.reap(name, abandon)
+
+		reaped := make(chan struct{})
+		go func() {
+			defer close(reaped)
+			r.reap(name, abandon)
+		}()
+		execution.Reaped = reaped
 	}
 
 	execution.Duration = time.Since(started)

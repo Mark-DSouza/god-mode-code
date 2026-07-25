@@ -1,0 +1,59 @@
+# The single origin.
+#
+# Caddy serves the built SPA and proxies the API behind one hostname, so the
+# application never makes a cross-origin request: no preflight on every API
+# call, no origin allowlist to maintain, and no class of bug that only shows up
+# in production (ADR-0002).
+#
+# This same file serves the local end-to-end stack and production. The only
+# difference is the address it binds, which comes from the environment.
+
+{
+	admin off
+	# TLS is terminated by the tunnel, which reaches Caddy over the loopback
+	# interface. Caddy issuing its own certificate here would be a second,
+	# pointless handshake.
+	auto_https off
+}
+
+:{$CADDY_PORT:80} {
+	log {
+		output stdout
+		format json
+	}
+
+	encode zstd gzip
+
+	# API first: a more specific matcher must be evaluated before the SPA
+	# fallback, or /api/health would be answered with index.html.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:8080} {
+			# Caddy keeps serving static assets while Spring Boot restarts
+			# during a deploy, so an outage degrades the API rather than
+			# taking the whole site down (ADR-0009).
+			fail_duration 5s
+			health_uri /api/health
+			health_interval 10s
+		}
+	}
+
+	handle {
+		root * {$SITE_ROOT:/srv}
+
+		# Hashed filenames are immutable by construction, so they can be cached
+		# for a year and served from the CDN edge — which is what keeps origin
+		# egress negligible now that assets come from the instance rather than
+		# object storage (ADR-0002).
+		@immutable path /assets/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+		# index.html must never be cached, or a deploy leaves browsers holding
+		# a document that references asset hashes which no longer exist.
+		@document path /index.html /
+		header @document Cache-Control "no-cache"
+
+		# Client-side routing: unknown paths are routes, not missing files.
+		try_files {path} /index.html
+		file_server
+	}
+}

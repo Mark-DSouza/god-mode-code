@@ -13,7 +13,7 @@ Transcribing code is just typing with more punctuation — it adds no new skill.
 Writing a whole solution produces a five-minute Run in an app whose other
 Disciplines take forty seconds, and it makes Accuracy undefined; the mockup
 concedes this by hardcoding `accuracy: 97.8` because no honest value exists
-without a target text. Instead, a Pattern distills the *technique* — "store what
+without a target text. Instead, a Pattern distills the _technique_ — "store what
 you've seen, look up what you need" rather than "solve Two Sum" — presented as a
 Scaffold plus a 4–8 line editable region, and judged by executing Hidden Tests.
 Execution is the only meaningful correctness signal when there is no target to
@@ -25,7 +25,7 @@ phrasing.
 - Requires a code execution sandbox, which is why ADR-0005 exists. This is
   roughly a third of the project's effort and is not optional.
 - Solve Runs can **fail**, a lifecycle state Typing Runs do not have.
-- Curated lists (Blind 75, NeetCode 150) are usable as a *syllabus* of which
+- Curated lists (Blind 75, NeetCode 150) are usable as a _syllabus_ of which
   techniques matter. LeetCode's problem statements are copyrighted and are not
   reproduced; Pattern prompts are original descriptions of techniques, and
   techniques are not copyrightable.

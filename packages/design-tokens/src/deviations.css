@@ -1,0 +1,74 @@
+/* Deliberate deviations from the shipped design system — all of them
+ * accessibility fixes, all recorded in docs/adr/0010.
+ *
+ * ADR-0010 records four deviations, numbered here in the order that document
+ * lists them. This file implements the two with a token/foundation-layer part,
+ * keeping the ADR's numbering so a reader can map either direction:
+ *
+ *   1. --ink-3 raised for contrast              — here
+ *   2. hidden, genuinely focused <input>        — Run screen
+ *   3. DigitalRain honours reduced motion       — here, plus the component
+ *   4. non-colour indicator on wrong glyphs     — Run screen
+ *
+ * 2 and 4 are component-level and belong to the Run screen, not the walking
+ * skeleton. Deviation 3 is split: the ambient chrome is handled here, and
+ * DigitalRain's own default lives with the component, because a user who turns
+ * the rain back on in Settings must still get rain.
+ *
+ * One further substitution, not an ADR-0010 accessibility fix and so recorded
+ * separately: the design system's `tokens/fonts.css` is a single `@import` of a
+ * Google Fonts URL, and `src/fonts.css` self-hosts those same three families
+ * instead. The faces, weights and family names are unchanged — only where the
+ * bytes come from. It removes a third-party origin from the critical path of
+ * every page load, a render that depends on a CDN being reachable, and a source
+ * of nondeterminism for the visual regression testing in issue #23.
+ */
+
+:root {
+  /* DEVIATION 1 — untyped glyphs on the typing surface.
+   *
+   * Shipped value is #1C6531, which measures ~3.0:1 against --void. This token
+   * colours the text a player is actively reading under time pressure, and the
+   * mobile Run screen sets it at 19px, well inside "normal text" — so 3.0:1
+   * plainly fails WCAG AA's 4.5:1.
+   *
+   * Raised to #2A8642. The ratio is asserted by a real contrast checker in
+   * contrast.test.ts rather than trusted to arithmetic here.
+   */
+  --ink-3: #2a8642;
+}
+
+/* DEVIATION 3 — honour the operating system's reduced-motion request.
+ *
+ * The design system's signature effects animate continuously behind every
+ * screen: the rain falls, the CRT flickers, glyph glow pulses. That is
+ * difficult for anyone with vestibular sensitivity.
+ *
+ * DigitalRain additionally defaults its Settings toggle off under this
+ * preference — that is a component decision and lives with the component,
+ * because a user who explicitly turns the rain back on should get it.
+ * This rule handles the ambient chrome, which has no such toggle.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 1ms;
+    --dur-med: 1ms;
+    --dur-slow: 1ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The block caret is an exception: it is a cursor, not decoration, and a
+   * caret that does not blink is harder to locate on a dense glyph grid.
+   * Slowed rather than stopped. */
+  .gmc-caret {
+    animation: gmc-caret 1.6s step-end infinite !important;
+  }
+}

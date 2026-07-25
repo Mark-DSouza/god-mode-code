@@ -15,7 +15,7 @@ Cloud's free tier covers 10,000 active series and 50GB of logs.
 The second reason is topological, and it is the more important one: **monitoring
 should not live inside the system it monitors.** CloudWatch is adequate right up
 until the failure you are debugging is in the AWS account you are reading from.
-Uptime checks in particular *must* be external — a host that is down cannot
+Uptime checks in particular _must_ be external — a host that is down cannot
 report that it is down — and frontend errors happen in a browser, where no
 server-side sink can observe them at all.
 

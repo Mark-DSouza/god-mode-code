@@ -4,7 +4,7 @@ The frontend is a Vite + React + TypeScript bundle of static files. No Next.js,
 no React Router framework mode, no SSR of any kind.
 
 The decisive reason is not the usual SEO argument — it is that the backend is a
-JVM. Any SSR framework would introduce Node as a *second* runtime on a 2GB
+JVM. Any SSR framework would introduce Node as a _second_ runtime on a 2GB
 instance: another container, another deploy, another thing to monitor, in order
 to server-render screens (auth, run, result, profile, settings) that are all
 either private or purely interactive.
@@ -37,6 +37,6 @@ architecture.
 Static assets originate from EC2 rather than object storage. With hashed
 filenames and long `Cache-Control` they are served from Cloudflare's edge, so
 origin hits are rare and the egress is negligible — but the frontend is no longer
-*structurally* incapable of generating cost, as it was on S3. Caddy remains up
+_structurally_ incapable of generating cost, as it was on S3. Caddy remains up
 during the Spring Boot restart described in ADR-0009, so a deploy degrades the
 API rather than taking the whole site down.

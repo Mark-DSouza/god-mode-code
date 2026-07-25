@@ -6,7 +6,7 @@ because a future reader comparing our implementation against the shipped tokens
 will find discrepancies and may "correct" them back.
 
 **`--ink-3` is raised from `#1C6531` (~3.0:1 on `--void`) to `#2A8642`
-(~4.6:1).** This token colours *untyped glyphs on the typing surface* —
+(~4.6:1).** This token colours _untyped glyphs on the typing surface_ —
 the text a player is actively reading under time pressure. It fails WCAG AA for
 normal text, and while it scrapes past the large-text exemption at the `lg` size
 (24px), the mobile Run screen specifies `md` (19px), where it plainly fails. The
@@ -33,4 +33,4 @@ gestures at the fix by rendering a mistyped space as `␣`.
 
 Full WCAG 2.2 AA conformance was considered and rejected as disproportionate: a
 timed speed-typing test cannot be made meaningfully usable without sight and fine
-motor control. The line taken is that nothing should be *needlessly* inaccessible.
+motor control. The line taken is that nothing should be _needlessly_ inaccessible.

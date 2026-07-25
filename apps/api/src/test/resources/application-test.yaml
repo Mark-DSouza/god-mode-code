@@ -1,0 +1,13 @@
+# Testcontainers supplies the datasource; nothing here should point at a
+# developer's local database by accident.
+spring:
+  flyway:
+    enabled: true
+
+gmc:
+  version: test
+
+logging:
+  level:
+    org.testcontainers: INFO
+    com.github.dockerjava: WARN

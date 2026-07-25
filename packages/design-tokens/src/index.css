@@ -1,0 +1,30 @@
+/* GOD_MODE_CODE token layer.
+ *
+ * The shipped design system is the single source of truth for colour, type and
+ * spacing — its token files are imported verbatim, never forked.
+ * `deviations.css` then overrides the handful of tokens that ADR-0010
+ * deliberately moves for accessibility reasons. Import order matters:
+ * deviations must come last.
+ *
+ * The design system ships a `styles.css` that is an import manifest for exactly
+ * these files, and importing that one file would be tidier. It cannot be used:
+ * it writes `@import url("./tokens/fonts.css")`, and postcss does not rebase
+ * relative paths inside the `url()` form, so every nested import resolves
+ * against the consuming app instead of the design system. Listing the files
+ * here is the workaround; `manifest.test.ts` fails if this list and the design
+ * system's manifest ever disagree.
+ *
+ * Anyone comparing this against the shipped tokens and finding a discrepancy
+ * should read ADR-0010 before "correcting" it back.
+ */
+/* SUBSTITUTED — see deviations.css. The design system's fonts.css is a single
+ * `@import` of a Google Fonts URL; this is the self-hosted equivalent. It is
+ * the one token file not imported verbatim, and manifest.test.ts fails if a
+ * second one is ever swapped without being recorded. */
+@import "./fonts.css";
+@import "../../../mockups-and-design-system/design_system/tokens/colors.css";
+@import "../../../mockups-and-design-system/design_system/tokens/typography.css";
+@import "../../../mockups-and-design-system/design_system/tokens/spacing.css";
+@import "../../../mockups-and-design-system/design_system/tokens/effects.css";
+@import "../../../mockups-and-design-system/design_system/tokens/base.css";
+@import "./deviations.css";

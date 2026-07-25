@@ -11,8 +11,6 @@ package judging
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -21,6 +19,7 @@ import (
 
 	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/metrics"
 	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/pattern"
+	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/random"
 	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/sandbox"
 )
 
@@ -87,8 +86,8 @@ type Sandbox interface {
 type Options struct {
 	Sandbox  Sandbox
 	Patterns *pattern.Catalogue
-	// Workers bounds concurrent executions. Defaults to 2, which is what fits
-	// alongside the supervisor in 1GB.
+	// Workers bounds concurrent executions. Defaults to 2; cmd/judge explains
+	// why that number and not the one ADR-0005 estimates.
 	Workers int
 	// QueueWait is how long a request will wait for a worker before being
 	// refused. Refusing beats queueing forever: the backend has its own
@@ -124,9 +123,10 @@ func New(opts Options) *Judge {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
-	if opts.Metrics != nil {
-		opts.Metrics.SetWorkers(opts.Workers)
+	if opts.Metrics == nil {
+		opts.Metrics = metrics.Discard()
 	}
+	opts.Metrics.SetWorkers(opts.Workers)
 	return &Judge{
 		sandbox:   opts.Sandbox,
 		patterns:  opts.Patterns,
@@ -153,9 +153,7 @@ func (j *Judge) Judge(ctx context.Context, request Request) (Judging, error) {
 
 	release, err := j.acquire(ctx)
 	if err != nil {
-		if j.metrics != nil {
-			j.metrics.Rejected()
-		}
+		j.metrics.Rejected()
 		return Judging{}, err
 	}
 	handedOff := false
@@ -189,9 +187,7 @@ func (j *Judge) Judge(ctx context.Context, request Request) (Judging, error) {
 	// player waited, and a duration that hides it is a duration that lies.
 	judged.DurationMillis = time.Since(started).Milliseconds()
 
-	if j.metrics != nil {
-		j.metrics.ObserveJudging(string(judged.Verdict), time.Since(started))
-	}
+	j.metrics.ObserveJudging(string(judged.Verdict), time.Since(started))
 	// The judge's only durable record of itself. No egress means no route to an
 	// observability sink, so this line on stdout — kept locally by the service
 	// manager — is what an operator on the box has to work with (ADR-0005).
@@ -208,24 +204,18 @@ func (j *Judge) Judge(ctx context.Context, request Request) (Judging, error) {
 
 // acquire takes a worker slot, or gives up.
 func (j *Judge) acquire(ctx context.Context) (func(), error) {
-	if j.metrics != nil {
-		j.metrics.QueueEnter()
-		defer j.metrics.QueueLeave()
-	}
+	j.metrics.QueueEnter()
+	defer j.metrics.QueueLeave()
 
 	waited := time.NewTimer(j.queueWait)
 	defer waited.Stop()
 
 	select {
 	case j.workers <- struct{}{}:
-		if j.metrics != nil {
-			j.metrics.ExecutionStart()
-		}
+		j.metrics.ExecutionStart()
 		return func() {
 			<-j.workers
-			if j.metrics != nil {
-				j.metrics.ExecutionEnd()
-			}
+			j.metrics.ExecutionEnd()
 		}, nil
 	case <-waited.C:
 		return nil, ErrBusy
@@ -238,7 +228,7 @@ func (j *Judge) acquire(ctx context.Context) (func(), error) {
 // non-nil only when a container had to be abandoned; see Judge.
 func (j *Judge) execute(ctx context.Context, p pattern.Pattern, source string, total int) (Judging, <-chan struct{}) {
 	// Fresh per execution, so nothing carries from one Solve Run to the next.
-	nonce := "\x1egmc-judge-" + randomHex(12) + ":"
+	nonce := "\x1egmc-judge-" + random.Hex(12) + ":"
 
 	program, err := buildHarness(p, source, nonce)
 	if err != nil {
@@ -299,14 +289,30 @@ func (j *Judge) verdictOf(ctx context.Context, execution sandbox.Execution, nonc
 	reported, found := findReport(execution.Report, nonce)
 	if !found {
 		// The container ran and stopped without a report: killed by a limit we
-		// did not name, or the source called os._exit. Say what is true.
+		// did not name, or the harness itself died. Say what is true, and log
+		// what the source printed — on a host with no egress, this line and the
+		// operator reading it are the whole investigation (ADR-0005).
 		j.log.WarnContext(ctx, "no report from the sandbox",
 			slog.Int("exitCode", execution.ExitCode),
-			slog.String("stderr", tail(string(execution.Report), 400)))
+			slog.String("reportChannel", tail(string(execution.Report), 400)),
+			slog.String("executionOutput", tail(string(execution.Output), 400)))
 		return Judging{
 			Verdict:    VerdictError,
 			TestsTotal: total,
-			Detail:     fmt.Sprintf("execution ended without a result (exit code %d)", execution.ExitCode),
+			Detail:     fmt.Sprintf("execution ended without a Verdict (exit code %d)", execution.ExitCode),
+		}
+	}
+
+	// The harness survived to report, but the process actually running the
+	// submitted source was killed. On this host that is the memory cap: the OOM
+	// killer picks whichever process is doing the allocating, which is never
+	// the harness.
+	if reported.KilledBySignal != 0 {
+		return Judging{
+			Verdict:     VerdictError,
+			TestsPassed: reported.Passed,
+			TestsTotal:  reported.Total,
+			Detail:      fmt.Sprintf("execution exceeded the %s memory cap", limits.Memory),
 		}
 	}
 
@@ -315,7 +321,7 @@ func (j *Judge) verdictOf(ctx context.Context, execution sandbox.Execution, nonc
 		TestsTotal:  reported.Total,
 		Detail:      reported.Detail,
 	}
-	switch reported.Outcome {
+	switch reported.Verdict {
 	case "passed":
 		judged.Verdict = VerdictPassed
 	case "failed":
@@ -334,10 +340,4 @@ func tail(text string, limit int) string {
 		return text
 	}
 	return "..." + text[len(text)-limit:]
-}
-
-func randomHex(n int) string {
-	buf := make([]byte, n)
-	_, _ = rand.Read(buf)
-	return hex.EncodeToString(buf)
 }

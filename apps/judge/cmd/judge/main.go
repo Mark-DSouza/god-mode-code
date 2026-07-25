@@ -28,8 +28,12 @@ import (
 const (
 	defaultAddr = ":9090"
 
-	// Two containers alongside the supervisor is what fits in the 1GB instance
-	// this service is sized for (ADR-0005).
+	// ADR-0005 reckons the Go supervisor leaves room for about four concurrent
+	// executions on the 1GB instance, against one for a JVM. Two is the default
+	// here, deliberately half that: the ADR's figure is an argument for the
+	// language choice rather than a measurement, and four sandboxes at the
+	// default 128m cap is most of the box. JUDGE_WORKERS raises it once there
+	// is a real measurement to raise it to.
 	defaultWorkers = 2
 
 	// Generous relative to a request, because a judge execution is bounded by
@@ -91,9 +95,9 @@ func run(log *slog.Logger) error {
 
 	if err != nil {
 		// Not fatal. In the containerised local stack the judge deliberately
-		// has no runtime — giving it one would mean mounting the container
-		// socket, which is the most direct escape path available to the code
-		// this service exists to contain (ADR-0005). It serves DEGRADED there.
+		// has no runtime: giving it one would mean mounting the container
+		// socket, and compose.e2e.yaml declines to do that even though ADR-0005
+		// permits it locally — see the reasoning there. It serves DEGRADED.
 		//
 		log.Warn("no container runtime; serving without judging", slog.Any("error", err))
 		// Shut the runner down rather than leave it running: its reaper would

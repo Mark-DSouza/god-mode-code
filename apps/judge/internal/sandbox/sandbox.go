@@ -23,8 +23,6 @@ package sandbox
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -36,6 +34,7 @@ import (
 	"time"
 
 	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/metrics"
+	"github.com/Mark-DSouza/god-mode-code/apps/judge/internal/random"
 )
 
 // DefaultImage is the execution image. Alpine keeps it small, and small matters
@@ -195,6 +194,9 @@ func New(opts Options) *Runner {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
+	if opts.Metrics == nil {
+		opts.Metrics = metrics.Discard()
+	}
 
 	r := &Runner{
 		docker: dockerCommand,
@@ -203,7 +205,7 @@ func New(opts Options) *Runner {
 		// The label carries a per-process instance id, not a constant. Two
 		// judges on one host — or, far more often, two tests in one run — must
 		// not reap each other's containers out from under a live request.
-		label:   "gmc.judge=" + randomHex(8),
+		label:   "gmc.judge=" + random.Hex(8),
 		log:     opts.Logger,
 		metrics: opts.Metrics,
 		live:    map[string]struct{}{},
@@ -239,7 +241,7 @@ func (r *Runner) Available(ctx context.Context) error {
 // when the sandbox itself could not be started — a program that crashes, is
 // killed or runs away is a successful Run with a telling Execution.
 func (r *Runner) Run(ctx context.Context, program []byte) (Execution, error) {
-	name := "gmc-judge-" + randomHex(8)
+	name := "gmc-judge-" + random.Hex(8)
 
 	output := newBoundedWriter(r.limits.MaxOutputBytes)
 	report := newBoundedWriter(maxReportBytes)
@@ -308,7 +310,7 @@ func (r *Runner) Run(ctx context.Context, program []byte) (Execution, error) {
 	execution.Output, execution.OutputTruncated = output.collected()
 	execution.Report, _ = report.collected()
 
-	if execution.OutputTruncated && r.metrics != nil {
+	if execution.OutputTruncated {
 		r.metrics.OutputTruncated()
 	}
 
@@ -402,9 +404,7 @@ func (r *Runner) reap(name, why string) {
 	}
 	r.log.Info("reaped a sandbox container",
 		slog.String("container", name), slog.String("reason", why))
-	if r.metrics != nil {
-		r.metrics.ContainersReaped(1)
-	}
+	r.metrics.ContainersReaped(1)
 }
 
 // sweepLoop catches what reap cannot: containers this Runner started and then
@@ -467,13 +467,4 @@ func exitCodeOf(err error) int {
 		return exitErr.ExitCode()
 	}
 	return -1
-}
-
-func randomHex(n int) string {
-	buf := make([]byte, n)
-	// crypto/rand.Read never returns an error on any supported platform; it
-	// panics internally if the OS source fails, which is the right outcome for
-	// a process whose isolation depends on unguessable container names.
-	_, _ = rand.Read(buf)
-	return hex.EncodeToString(buf)
 }

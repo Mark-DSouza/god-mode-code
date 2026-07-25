@@ -93,12 +93,12 @@ func requireContainerRuntime(t *testing.T) {
 	}
 }
 
-// judgeOptions are the knobs a test bends. Everything else stays at the
-// production default, because a test against relaxed limits proves nothing.
+// judgeOptions are the knobs a test bends. Only these two: everything else
+// stays at the production default, because a test against relaxed limits proves
+// nothing about the limits that ship.
 type judgeOptions struct {
 	workers int
 	wall    time.Duration
-	limits  *sandbox.Limits
 }
 
 type judgeUnderTest struct {
@@ -118,9 +118,6 @@ func startJudging(t *testing.T, opts judgeOptions) judgeUnderTest {
 		opts.wall = 10 * time.Second
 	}
 	limits := sandbox.DefaultLimits()
-	if opts.limits != nil {
-		limits = *opts.limits
-	}
 	limits.Wall = opts.wall
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -156,10 +153,10 @@ func startJudging(t *testing.T, opts judgeOptions) judgeUnderTest {
 	return judgeUnderTest{Server: server, metrics: registry, label: runner.Label()}
 }
 
-// judge posts submitted source and returns the Verdict.
-func (j judgeUnderTest) judge(t *testing.T, source string) judging.Judging {
+// judge posts submitted source against a Pattern and returns the Verdict.
+func (j judgeUnderTest) judge(t *testing.T, id, source string) judging.Judging {
 	t.Helper()
-	response := j.post(t, patternID, source)
+	response := j.post(t, id, source)
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
@@ -186,11 +183,151 @@ func (j judgeUnderTest) post(t *testing.T, id, source string) *http.Response {
 	return response
 }
 
+// The submitted source and the thing that decides its Verdict must not share an
+// interpreter. These two tests are the reason they do not.
+//
+// Both were written against a harness that ran the submitted source in the same
+// process as the report channel and the Pattern's tests, and both worked: the
+// first returned a Passed Verdict for a solution that computes nothing, the
+// second returned every Hidden Test to the caller. Only Passed Solve Runs are
+// ranked, and a Hidden Test is only hidden while nobody can read it, so neither
+// is a hardening nicety — they are the service's purpose.
+
+// Reaches for the report channel the way the harness itself would.
+const forgedVerdictSolution = `import json
+import os
+import sys
+
+_harness = sys.modules["__main__"]
+os.write(
+    _harness._REPORT_FD,
+    (_harness._nonce + json.dumps({"verdict": "passed", "passed": 6, "total": 6, "detail": ""}) + "\n").encode(),
+)
+os._exit(0)
+
+
+def pair_sum(numbers, target):
+    return []
+`
+
+func TestSubmittedSourceCannotForgeAVerdict(t *testing.T) {
+	judge := startJudging(t, judgeOptions{})
+
+	judged := judge.judge(t, patternID, forgedVerdictSolution)
+	t.Logf("forgery attempt: %s / %s", judged.Verdict, judged.Detail)
+
+	if judged.Verdict == judging.VerdictPassed {
+		t.Errorf("a solution that computes nothing was judged %q — the report channel is forgeable",
+			judging.VerdictPassed)
+	}
+	if judged.TestsPassed != 0 {
+		t.Errorf("testsPassed = %d, want 0 — the counts came from the submitted source", judged.TestsPassed)
+	}
+}
+
+// Hunts for Hidden Test expectations everywhere the submitted source can reach,
+// and reports what it found through the one channel that reaches the caller.
+//
+// The needles are Hidden Test material only, and each is long enough to be
+// unambiguous: a bare "1998" also occurs inside the standard library, and a
+// probe that cries leak at someone else's data is a probe nobody will believe.
+// The calls are deliberately not needles — inputs have to cross to be computed.
+//
+// They are hex inside the Python and are not spelled out anywhere in it, not
+// even in a comment. The process running a submitted source legitimately holds
+// that source's text, so a needle written in plaintext would be found in the
+// probe itself — which is exactly the false positive this hunt reported until
+// the comments naming them were moved up here. The hex decodes to the expected
+// answer "[1998, 1999]" and the Hidden Test names "the same value twice" and
+// "the pair is at the end of a long input".
+const hiddenTestHuntSolution = `import os
+import sys
+
+
+def _hunt():
+    needles = [
+        bytes.fromhex(encoded).decode("utf-8")
+        for encoded in (
+            "5b313939382c20313939395d",
+            "7468652073616d652076616c7565207477696365",
+            "74686520706169722069732061742074686520656e64206f662061206c6f6e6720696e707574",
+        )
+    ]
+    found = []
+
+    def _scan(where, text):
+        for needle in needles:
+            if needle in text:
+                found.append("%s holds %r" % (where, needle))
+
+    def _scan_scope(where, scope):
+        # Per binding, so a hit names the thing that held it rather than just
+        # the dictionary it was in.
+        for key, value in list(scope.items()):
+            try:
+                _scan("%s.%s" % (where, key), repr(value))
+            except BaseException:
+                continue
+
+    for name, module in list(sys.modules.items()):
+        try:
+            _scan_scope("module " + name, vars(module))
+        except BaseException:
+            continue
+
+    for depth in range(0, 40):
+        try:
+            frame = sys._getframe(depth)
+        except BaseException:
+            break
+        # Skip this probe's own frames: the needles are locals in them, and a
+        # probe that finds its own needles has proved nothing.
+        if frame.f_code in (_hunt.__code__, _scan.__code__, _scan_scope.__code__):
+            continue
+        _scan_scope("frame %d globals" % depth, frame.f_globals)
+        _scan_scope("frame %d locals" % depth, frame.f_locals)
+
+    # Same uid means ptrace needs no capability, so if the process holding the
+    # expected answers is dumpable, moving them out of this process bought
+    # nothing.
+    try:
+        with open("/proc/%d/mem" % os.getppid(), "rb"):
+            found.append("the parent process's memory is readable")
+    except OSError:
+        pass
+
+    return sorted(set(found))
+
+
+def pair_sum(numbers, target):
+    raise AssertionError("LEAK[" + ";".join(_hunt()) + "]")
+`
+
+func TestSubmittedSourceCannotReadHiddenTests(t *testing.T) {
+	judge := startJudging(t, judgeOptions{})
+
+	judged := judge.judge(t, patternID, hiddenTestHuntSolution)
+	t.Logf("extraction attempt: %s", judged.Detail)
+
+	// An empty bracket is the pass; anything inside it is a Hidden Test the
+	// submitted source could see, named by the code that found it.
+	if !strings.Contains(judged.Detail, "LEAK[]") {
+		t.Errorf("the submitted source reached Hidden Test expectations: %s", judged.Detail)
+	}
+	// And belt-and-braces on the response itself, since detail is the only
+	// thing that crosses back to the caller.
+	for _, hidden := range []string{"[1998, 1999]", "the same value twice", "the pair is at the end of a long input"} {
+		if strings.Contains(judged.Detail, hidden) {
+			t.Errorf("the response leaked the Hidden Test %q: %s", hidden, judged.Detail)
+		}
+	}
+}
+
 func TestCorrectSolutionPasses(t *testing.T) {
 	judge := startJudging(t, judgeOptions{})
 
 	started := time.Now()
-	judged := judge.judge(t, correctSolution)
+	judged := judge.judge(t, patternID, correctSolution)
 	t.Logf("Judging took %s", time.Since(started))
 
 	if judged.Verdict != judging.VerdictPassed {
@@ -227,15 +364,7 @@ func TestASecondPatternIsJudgedOnItsOwnTests(t *testing.T) {
         best = max(best, right - left + 1)
     return best
 `
-	response := judge.post(t, "sliding-window-longest-unique", source)
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", response.StatusCode)
-	}
-	var judged judging.Judging
-	if err := json.NewDecoder(response.Body).Decode(&judged); err != nil {
-		t.Fatalf("decoding the Verdict: %v", err)
-	}
+	judged := judge.judge(t, "sliding-window-longest-unique", source)
 
 	if judged.Verdict != judging.VerdictPassed {
 		t.Errorf("verdict = %q (detail %q), want %q", judged.Verdict, judged.Detail, judging.VerdictPassed)
@@ -263,7 +392,7 @@ const wrongSolution = `def pair_sum(numbers, target):
 func TestIncorrectSolutionFailsWithAccurateCounts(t *testing.T) {
 	judge := startJudging(t, judgeOptions{})
 
-	judged := judge.judge(t, wrongSolution)
+	judged := judge.judge(t, patternID, wrongSolution)
 
 	if judged.Verdict != judging.VerdictFailed {
 		t.Errorf("verdict = %q (detail %q), want %q", judged.Verdict, judged.Detail, judging.VerdictFailed)
@@ -298,7 +427,7 @@ func TestIncorrectSolutionFailsWithAccurateCounts(t *testing.T) {
 func TestSourceThatDoesNotCompileIsAnError(t *testing.T) {
 	judge := startJudging(t, judgeOptions{})
 
-	judged := judge.judge(t, "def pair_sum(numbers, target)\n    return [\n")
+	judged := judge.judge(t, patternID, "def pair_sum(numbers, target)\n    return [\n")
 
 	if judged.Verdict != judging.VerdictError {
 		t.Errorf("verdict = %q, want %q", judged.Verdict, judging.VerdictError)
@@ -358,7 +487,7 @@ func TestInfiniteLoopTimesOutInsteadOfHanging(t *testing.T) {
 	judge := startJudging(t, judgeOptions{wall: wall})
 
 	started := time.Now()
-	judged := judge.judge(t, wedgedSolution)
+	judged := judge.judge(t, patternID, wedgedSolution)
 	elapsed := time.Since(started)
 	t.Logf("wedged container answered in %s (wall-clock cap %s)", elapsed, wall)
 
@@ -404,7 +533,7 @@ func TestMemoryExhaustionIsContained(t *testing.T) {
 	judge := startJudging(t, judgeOptions{wall: wall})
 
 	started := time.Now()
-	judged := judge.judge(t, memoryHogSolution)
+	judged := judge.judge(t, patternID, memoryHogSolution)
 	elapsed := time.Since(started)
 	t.Logf("memory hog answered in %s: %s / %s", elapsed, judged.Verdict, judged.Detail)
 
@@ -435,7 +564,7 @@ func TestUnboundedOutputIsTruncated(t *testing.T) {
 	judge := startJudging(t, judgeOptions{wall: wall})
 
 	started := time.Now()
-	judged := judge.judge(t, noisySolution)
+	judged := judge.judge(t, patternID, noisySolution)
 	elapsed := time.Since(started)
 	t.Logf("print loop answered in %s: %s / %s", elapsed, judged.Verdict, judged.Detail)
 
@@ -477,7 +606,7 @@ def pair_sum(numbers, target):
 func TestNetworkCallFails(t *testing.T) {
 	judge := startJudging(t, judgeOptions{})
 
-	judged := judge.judge(t, networkSolution)
+	judged := judge.judge(t, patternID, networkSolution)
 	t.Logf("network attempt: %s / %s", judged.Verdict, judged.Detail)
 
 	if judged.Verdict != judging.VerdictFailed {
@@ -550,11 +679,11 @@ func TestConcurrentJudgingsStayWithinThePoolBound(t *testing.T) {
 		}
 	}()
 
-	type outcome struct {
+	type reply struct {
 		judged judging.Judging
 		err    error
 	}
-	outcomes := make(chan outcome, requests)
+	replies := make(chan reply, requests)
 	var wg sync.WaitGroup
 	started := time.Now()
 	for range requests {
@@ -563,25 +692,25 @@ func TestConcurrentJudgingsStayWithinThePoolBound(t *testing.T) {
 			defer wg.Done()
 			body, err := json.Marshal(judging.Request{PatternID: patternID, Source: slowSolution})
 			if err != nil {
-				outcomes <- outcome{err: err}
+				replies <- reply{err: err}
 				return
 			}
 			response, err := http.Post(judge.URL+"/judgings", "application/json", bytes.NewReader(body))
 			if err != nil {
-				outcomes <- outcome{err: err}
+				replies <- reply{err: err}
 				return
 			}
 			defer response.Body.Close()
 			if response.StatusCode != http.StatusOK {
-				outcomes <- outcome{err: fmt.Errorf("status = %d, want 200", response.StatusCode)}
+				replies <- reply{err: fmt.Errorf("status = %d, want 200", response.StatusCode)}
 				return
 			}
 			var judged judging.Judging
 			if err := json.NewDecoder(response.Body).Decode(&judged); err != nil {
-				outcomes <- outcome{err: err}
+				replies <- reply{err: err}
 				return
 			}
-			outcomes <- outcome{judged: judged}
+			replies <- reply{judged: judged}
 		}()
 	}
 	wg.Wait()
@@ -606,8 +735,8 @@ func TestConcurrentJudgingsStayWithinThePoolBound(t *testing.T) {
 		t.Errorf("peak of %d containers, want the pool to actually reach %d — the test proved nothing", peak, workers)
 	}
 
-	close(outcomes)
-	for got := range outcomes {
+	close(replies)
+	for got := range replies {
 		if got.err != nil {
 			t.Errorf("a queued Solve Run did not complete: %v", got.err)
 			continue
@@ -769,7 +898,7 @@ func TestSandboxLimitsAreActuallyInForce(t *testing.T) {
 	judge := startJudging(t, judgeOptions{})
 
 	source := fmt.Sprintf(probeSource, memoryBytes(t, limits.Memory), limits.Pids)
-	judged := judge.judge(t, source)
+	judged := judge.judge(t, patternID, source)
 	t.Logf("sandbox probe: %s", judged.Detail)
 
 	if judged.Verdict != judging.VerdictFailed {
@@ -805,7 +934,7 @@ func memoryBytes(t *testing.T, size string) int64 {
 func TestMetricsCountJudgings(t *testing.T) {
 	judge := startJudging(t, judgeOptions{})
 
-	judge.judge(t, correctSolution)
+	judge.judge(t, patternID, correctSolution)
 
 	response, err := http.Get(judge.URL + "/metrics")
 	if err != nil {

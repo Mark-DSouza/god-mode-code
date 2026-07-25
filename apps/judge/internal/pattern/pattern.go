@@ -23,12 +23,23 @@ import (
 //go:embed catalogue/*.json
 var catalogueFS embed.FS
 
-// Test is one assertion a submitted source must satisfy. Expression is a Python
-// expression evaluated in the namespace the submitted source defines; it counts
-// as satisfied when it evaluates truthy without raising.
+// Test is one assertion a submitted source must satisfy.
+//
+// The call and the expected answer are kept apart rather than written as one
+// comparison, and that separation is load-bearing. Only the call is given to
+// the process running the submitted source; the expected answer is compared
+// where the source cannot see it. Writing them as a single expression would put
+// every Hidden Test's answer in reach of the code being judged.
 type Test struct {
-	Name       string `json:"name"`
-	Expression string `json:"expression"`
+	Name string `json:"name"`
+	// Call is a Python expression invoking the entry point. It carries inputs
+	// only, and the submitted source is free to read it — it is being asked to
+	// compute exactly this.
+	Call string `json:"call"`
+	// Expected is a Python literal: the answer Call must produce. Never crosses
+	// into the process running the submitted source, and is read with
+	// ast.literal_eval, so it is data and cannot become code.
+	Expected string `json:"expected"`
 }
 
 // Pattern is a distilled algorithmic technique posed as a puzzle, together with
@@ -108,8 +119,9 @@ func (p Pattern) validate(source string) error {
 		return fmt.Errorf("%s: Pattern %q has no Hidden Tests", source, p.ID)
 	}
 	for _, test := range append(append([]Test{}, p.ExampleTests...), p.HiddenTests...) {
-		if test.Name == "" || test.Expression == "" {
-			return fmt.Errorf("%s: Pattern %q has a test with no name or no expression", source, p.ID)
+		if test.Name == "" || test.Call == "" || test.Expected == "" {
+			return fmt.Errorf("%s: Pattern %q has a test with no name, no call or no expected answer",
+				source, p.ID)
 		}
 	}
 	return nil

@@ -99,8 +99,8 @@ func TestHealthRejectsNonGet(t *testing.T) {
 }
 
 // A judge with no container runtime attached — the shape it takes in the
-// containerised local stack, where mounting a container socket would be the
-// most direct escape path there is (ADR-0005).
+// containerised local stack, which declines to mount a container socket even
+// though ADR-0005 permits it locally (see compose.e2e.yaml).
 func TestHealthReportsDegradedWithoutAContainerRuntime(t *testing.T) {
 	t.Parallel()
 	server := startJudge(t)

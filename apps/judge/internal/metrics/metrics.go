@@ -48,6 +48,12 @@ func NewRegistry(version string) *Registry {
 	}
 }
 
+// Discard is a registry nobody scrapes. It exists so the components that record
+// metrics can take one unconditionally instead of guarding every call site with
+// a nil check — seven of which is six too many to keep in your head while
+// reading what the code actually does.
+func Discard() *Registry { return NewRegistry("discarded") }
+
 // SetWorkers records the pool bound, so a scrape shows how close to saturation
 // the judge is running rather than an in-flight count with no denominator.
 func (r *Registry) SetWorkers(n int) {

@@ -8,29 +8,35 @@
   "exampleTests": [
     {
       "name": "the window has to slide past a repeat",
-      "expression": "longest_unique('abcabcbb') == 3"
+      "call": "longest_unique('abcabcbb')",
+      "expected": "3"
     },
     {
       "name": "nothing to window over",
-      "expression": "longest_unique('') == 0"
+      "call": "longest_unique('')",
+      "expected": "0"
     }
   ],
   "hiddenTests": [
     {
       "name": "every character repeats",
-      "expression": "longest_unique('bbbbb') == 1"
+      "call": "longest_unique('bbbbb')",
+      "expected": "1"
     },
     {
       "name": "the answer is not a prefix",
-      "expression": "longest_unique('pwwkew') == 3"
+      "call": "longest_unique('pwwkew')",
+      "expected": "3"
     },
     {
       "name": "no character repeats at all",
-      "expression": "longest_unique('abcdef') == 6"
+      "call": "longest_unique('abcdef')",
+      "expected": "6"
     },
     {
       "name": "the left edge must jump forward, not step",
-      "expression": "longest_unique('dvdf') == 3"
+      "call": "longest_unique('dvdf')",
+      "expected": "3"
     }
   ]
 }

@@ -21,10 +21,14 @@ const payloadPlaceholder = "__PAYLOAD__"
 // harnessTest is one test as the harness sees it. Revealed carries the Example
 // Test / Hidden Test distinction across the boundary: the harness has to know
 // which failures it may describe, because it is the only side that sees them.
+//
+// This whole struct stays in the harness's own process. Only Call is passed on
+// to the process that runs the submitted source.
 type harnessTest struct {
-	Name       string `json:"name"`
-	Expression string `json:"expression"`
-	Revealed   bool   `json:"revealed"`
+	Name     string `json:"name"`
+	Call     string `json:"call"`
+	Expected string `json:"expected"`
+	Revealed bool   `json:"revealed"`
 }
 
 type harnessPayload struct {
@@ -35,10 +39,15 @@ type harnessPayload struct {
 
 // report is what the harness writes back on its private descriptor.
 type report struct {
-	Outcome string `json:"outcome"`
+	Verdict string `json:"verdict"`
 	Passed  int    `json:"passed"`
 	Total   int    `json:"total"`
 	Detail  string `json:"detail"`
+	// KilledBySignal is non-zero when the process running the submitted source
+	// was killed rather than exiting — which on this host means the memory cap,
+	// since the OOM killer picks the process doing the allocating and that is
+	// never the harness.
+	KilledBySignal int `json:"killedBySignal"`
 }
 
 // buildHarness produces the complete Python program for one execution.
@@ -48,10 +57,14 @@ func buildHarness(p pattern.Pattern, source, nonce string) ([]byte, error) {
 	// submitted source is wrong in an obvious way the revealed failure is the one
 	// they can act on.
 	for _, test := range p.ExampleTests {
-		tests = append(tests, harnessTest{Name: test.Name, Expression: test.Expression, Revealed: true})
+		tests = append(tests, harnessTest{
+			Name: test.Name, Call: test.Call, Expected: test.Expected, Revealed: true,
+		})
 	}
 	for _, test := range p.HiddenTests {
-		tests = append(tests, harnessTest{Name: test.Name, Expression: test.Expression, Revealed: false})
+		tests = append(tests, harnessTest{
+			Name: test.Name, Call: test.Call, Expected: test.Expected, Revealed: false,
+		})
 	}
 
 	encoded, err := json.Marshal(harnessPayload{Nonce: nonce, Source: source, Tests: tests})

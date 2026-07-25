@@ -119,11 +119,12 @@ jobs:
           cache-dependency-path: apps/judge/go.mod
       - run: go vet ./...
         working-directory: apps/judge
-      # Pulled here rather than inside the tests, so a slow registry shows up as
-      # a slow pull instead of a mysteriously slow test. The judge's tests drive
-      # real containers running real Python on purpose — a stubbed runtime would
-      # prove only that the sandbox flags are spelled correctly, and the flags
-      # holding is the entire product.
+      # Warms the cache, so a slow registry shows up here as a slow pull rather
+      # than as a mysteriously slow first test. The suite pulls the image itself
+      # if it is missing, so this step is an optimisation, not a prerequisite.
+      # The judge's tests drive real containers running real Python on purpose —
+      # a stubbed runtime would prove only that the sandbox flags are spelled
+      # correctly, and the flags holding is the entire product.
       - run: docker pull python:3.13-alpine
       # No -short. The container-backed tests fail rather than skip when Docker
       # is missing, so this job cannot go green by quietly testing nothing.

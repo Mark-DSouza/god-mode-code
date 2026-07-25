@@ -1,5 +1,6 @@
 import { useHealth } from "../api/health.ts";
-import { Badge, Card, Kbd, Wordmark } from "../design-system/index.ts";
+import { Badge, Card, Kbd } from "../design-system/index.ts";
+import { Header } from "./Header.tsx";
 import { RainBackdrop } from "./RainBackdrop.tsx";
 
 /**
@@ -19,9 +20,7 @@ export function App() {
       <RainBackdrop />
 
       <div className="relative flex min-h-dvh flex-col" style={{ zIndex: "var(--z-content)" }}>
-        <header className="border-b border-line px-5 py-4 backdrop-blur-[2px]">
-          <Wordmark size={20} />
-        </header>
+        <Header />
 
         <main className="mx-auto flex w-full max-w-[var(--container-app)] flex-1 flex-col justify-center gap-6 px-5 py-9">
           <div className="flex flex-col gap-3">

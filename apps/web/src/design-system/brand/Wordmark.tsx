@@ -6,6 +6,11 @@ export interface WordmarkProps {
   size?: number;
   /** Show the ▚ block mark before the text. */
   mark?: boolean;
+  /**
+   * Show the wordmark text. Off leaves the mark alone, which is how the brand
+   * survives a header too narrow to spell it out.
+   */
+  text?: boolean;
   glow?: "none" | "sm" | "md" | "lg";
   /** Wordmark text colour. */
   color?: string;
@@ -29,6 +34,7 @@ const GLOWS = {
 export function Wordmark({
   size = 20,
   mark = true,
+  text = true,
   glow = "md",
   color = "var(--rain-green)",
   className,
@@ -52,7 +58,11 @@ export function Wordmark({
           ▚
         </span>
       )}
-      GOD_MODE_CODE
+      {/* The name is always in the accessibility tree, even when the layout is
+          too narrow to draw it. Dropping the text is a visual decision; the ▚ is
+          `aria-hidden`, so without this the brand would simply vanish for anyone
+          not looking at it. */}
+      {text ? "GOD_MODE_CODE" : <span className="sr-only">GOD_MODE_CODE</span>}
     </span>
   );
 }

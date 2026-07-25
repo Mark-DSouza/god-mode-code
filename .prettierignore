@@ -1,0 +1,20 @@
+# The shipped design system is a handoff artifact, not our source. Reformatting
+# it would make every future comparison against it noisy.
+mockups-and-design-system/
+
+# Vendored agent skills. Same reasoning: they are upstream files that happen to
+# live here, and reformatting them buries the next update's real diff.
+.agents/
+.claude/
+skills-lock.json
+
+# Generated from the backend's OpenAPI document.
+packages/api-client/openapi.json
+packages/api-client/src/schema.d.ts
+
+node_modules/
+apps/web/dist/
+apps/api/target/
+e2e/test-results/
+e2e/playwright-report/
+pnpm-lock.yaml

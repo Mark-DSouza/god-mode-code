@@ -1,0 +1,85 @@
+# The whole stack, containerised.
+#
+# Two jobs: it is what the end-to-end tests run against, and it is what an
+# evaluator gets from `docker compose -f compose.e2e.yaml up` on a clean clone —
+# no Node, no JDK, no Go toolchain required.
+#
+# Everything is reachable at http://localhost:8000 on one origin. Only the proxy
+# publishes a port; the applications and the database talk over the internal
+# network, the same shape as production (ADR-0002).
+
+name: gmc-e2e
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: godmodecode
+      POSTGRES_USER: godmodecode
+      POSTGRES_PASSWORD: godmodecode
+    # Deliberately not published. Nothing outside this network should reach the
+    # database, and a published port is how a local database ends up being the
+    # one a test accidentally asserts against.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U godmodecode -d godmodecode && psql -U godmodecode -d godmodecode -c 'SELECT 1' >/dev/null",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/godmodecode
+      DATABASE_USER: godmodecode
+      DATABASE_PASSWORD: godmodecode
+      GMC_VERSION: e2e
+      JUDGE_URL: http://judge:9090
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # The application's own endpoint, so "healthy" means it has migrated and
+      # can reach the database — not merely that a port is open.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  judge:
+    build:
+      context: ./apps/judge
+    environment:
+      JUDGE_ADDR: ":9090"
+      JUDGE_VERSION: e2e
+    # LOCAL ONLY. Production runs the judge as a bare process on an isolated
+    # instance with no credentials and no egress; it is not containerised there,
+    # and its container socket is never mounted anywhere (ADR-0005, issue #13).
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      CADDY_PORT: "80"
+      API_UPSTREAM: api:8080
+      SITE_ROOT: /srv
+    ports:
+      - "${WEB_PORT:-8000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # Through the proxy on purpose: this is the assertion that the single
+      # origin actually works, which is the thing most likely to be broken.
+      test: ["CMD-SHELL", "wget -qO- http://localhost/api/health || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s

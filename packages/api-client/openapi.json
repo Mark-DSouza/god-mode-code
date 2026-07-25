@@ -1,0 +1,76 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "GOD_MODE_CODE API",
+    "description" : "Backend for GOD_MODE_CODE.",
+    "version" : "0.0.1"
+  },
+  "servers" : [ {
+    "url" : "/",
+    "description" : "Same origin as the application"
+  } ],
+  "tags" : [ {
+    "name" : "Health",
+    "description" : "Liveness and dependency status"
+  } ],
+  "paths" : {
+    "/api/health" : {
+      "get" : {
+        "tags" : [ "Health" ],
+        "summary" : "Report the backend's status and that of its dependencies",
+        "description" : "Returns 200 when every dependency is reachable and 503 when any is not, so an uptime check can rely on the status code alone rather than parsing the body.\n",
+        "operationId" : "health",
+        "responses" : {
+          "200" : {
+            "description" : "Every dependency is reachable",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "At least one dependency is unreachable",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "HealthStatus" : {
+        "type" : "object",
+        "description" : "The backend's own status and that of its dependencies",
+        "properties" : {
+          "status" : {
+            "type" : "string",
+            "description" : "Overall status",
+            "enum" : [ "UP", "DEGRADED" ],
+            "example" : "UP"
+          },
+          "database" : {
+            "type" : "string",
+            "description" : "PostgreSQL connectivity",
+            "enum" : [ "UP", "DEGRADED" ],
+            "example" : "UP"
+          },
+          "version" : {
+            "type" : "string",
+            "description" : "Running build version",
+            "example" : "0.0.1-SNAPSHOT"
+          }
+        },
+        "required" : [ "database", "status", "version" ]
+      }
+    }
+  }
+}

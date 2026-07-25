@@ -1,0 +1,23 @@
+{
+  "name": "@gmc/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed client definitions generated from the backend's OpenAPI document. Do not hand-edit src/schema.d.ts.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.d.ts",
+    "./openapi.json": "./openapi.json"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ./openapi.json --output ./src/schema.d.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.9.1",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.14.0"
+  }
+}

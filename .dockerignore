@@ -1,0 +1,13 @@
+# Keeps the build context small and stops host build output leaking into images.
+node_modules
+**/node_modules
+**/target
+**/dist
+apps/web/dist
+e2e
+.git
+.github
+**/test-results
+**/playwright-report
+mockups-and-design-system/*.zip
+mockups-and-design-system/ui_mockups

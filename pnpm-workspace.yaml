@@ -1,0 +1,12 @@
+packages:
+  - "apps/web"
+  - "packages/*"
+  - "e2e"
+
+# esbuild ships a platform binary that its install script unpacks; Vite and
+# Vitest are both dead without it.
+allowBuilds:
+  esbuild: true
+  # Unpacks its browser service worker. The frontend seam intercepts in Node, so
+  # nothing depends on it today, but blocking it buys nothing either.
+  msw: true

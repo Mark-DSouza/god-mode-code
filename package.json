@@ -1,0 +1,30 @@
+{
+  "name": "god-mode-code",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.4.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "./scripts/dev.sh",
+    "dev:web": "pnpm --filter @gmc/web dev",
+    "build": "pnpm --filter @gmc/web build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "test:web": "pnpm --filter @gmc/web test",
+    "test:e2e": "pnpm --filter @gmc/e2e test",
+    "api:test": "cd apps/api && ./mvnw -B verify",
+    "judge:test": "cd apps/judge && go test ./...",
+    "contract:generate": "./scripts/generate-contract.sh",
+    "contract:check": "./scripts/check-contract-drift.sh",
+    "stack:up": "docker compose -f compose.e2e.yaml up -d --build --wait",
+    "stack:down": "docker compose -f compose.e2e.yaml down -v",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}

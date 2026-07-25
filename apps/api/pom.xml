@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.6</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>dev.markdsouza.godmodecode</groupId>
+  <artifactId>api</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <name>god-mode-code-api</name>
+  <description>GOD_MODE_CODE backend</description>
+
+  <properties>
+    <!-- Bytecode targets 21 while the toolchain runs on a 25 JDK. Nothing here
+         needs a language feature newer than 21, and 21 is the version the
+         Spring Boot 3.5 line is actually tested against. -->
+    <java.version>21</java.version>
+    <springdoc.version>2.8.9</springdoc.version>
+    <!-- Overrides the version Spring Boot 3.5 manages. Docker 29 refuses API
+         versions below 1.40, and the older client negotiates 1.32 — which fails
+         discovery outright with "client version is too old". -->
+    <testcontainers.version>1.21.3</testcontainers.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- Serves the OpenAPI document that the typed client is generated from. -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+      <version>${springdoc.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <!-- docker-java defaults to Docker API 1.32, which Docker 29
+                 rejects outright ("client version 1.32 is too old"), so
+                 Testcontainers fails to find a Docker environment at all.
+
+                 It has to be this system property: docker-java matches
+                 environment variables against its own config-key names, so the
+                 DOCKER_API_VERSION variable you would reach for first is read
+                 by the CLI and ignored here.
+
+                 1.41 ships with Docker 20.10 and is still supported by 29, so
+                 it spans every engine a developer or CI runner is plausibly on.
+                 Remove once docker-java negotiates a supported default. -->
+            <api.version>1.41</api.version>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

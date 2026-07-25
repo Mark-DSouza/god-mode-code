@@ -1,0 +1,39 @@
+# Local development.
+#
+# The database runs in a container; the applications do not. They run natively,
+# so debuggers attach normally, Vite's hot reload works, and Spring Boot's
+# restart is not fighting a bind mount. `scripts/dev.sh` starts this file and
+# then the applications — one command for the whole environment.
+#
+# For the containerised whole stack, see compose.e2e.yaml.
+
+name: gmc-dev
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: godmodecode
+      POSTGRES_USER: godmodecode
+      POSTGRES_PASSWORD: godmodecode
+    ports:
+      # Published, because the applications are outside this network.
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      # `pg_isready` alone returns true while the container is still running its
+      # first-boot initialisation, so a real query is what tells us the database
+      # can actually serve.
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U godmodecode -d godmodecode && psql -U godmodecode -d godmodecode -c 'SELECT 1' >/dev/null",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  db-data:

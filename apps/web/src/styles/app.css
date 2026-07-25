@@ -1,0 +1,155 @@
+/* The application's single stylesheet entry point.
+ *
+ * Order is load-bearing: the design system's tokens must be defined before
+ * `@theme inline` can point Tailwind's utilities at them.
+ */
+@import "@gmc/design-tokens";
+@import "tailwindcss";
+
+/* `inline` is the whole point of this block. It tells Tailwind to emit
+ * utilities that reference the design system's custom properties directly —
+ * `.text-accent { color: var(--rain-green) }` — instead of copying the value
+ * into a Tailwind-owned variable. There is one source of truth for colour, type
+ * and spacing, and it is the design system (ADR-0002).
+ *
+ * Every namespace we map is first reset to `initial`, which deletes Tailwind's
+ * built-in scale. Without that, `p-4` would silently mean Tailwind's 16px in
+ * some places and the design system's 16px in others, and `text-lg` would mean
+ * two different sizes depending on which won. A partial override is worse than
+ * either scale alone.
+ */
+@theme inline {
+  --color-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --spacing-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --text-shadow-*: initial;
+  --tracking-*: initial;
+  --leading-*: initial;
+
+  /* Rain scale — shine-head down to a dying tail. */
+  --color-rain-shine: var(--rain-shine);
+  --color-rain-glow: var(--rain-glow);
+  --color-rain-bright: var(--rain-bright);
+  --color-rain-green: var(--rain-green);
+  --color-rain-mid: var(--rain-mid);
+  --color-rain-dim: var(--rain-dim);
+  --color-rain-dark: var(--rain-dark);
+  --color-rain-faint: var(--rain-faint);
+  --color-rain-ghost: var(--rain-ghost);
+
+  /* Void neutrals. The veiled surfaces let the rain read through every panel. */
+  --color-void: var(--void);
+  --color-carbon: var(--carbon);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-1-solid: var(--surface-1-solid);
+  --color-surface-2-solid: var(--surface-2-solid);
+  --color-surface-3-solid: var(--surface-3-solid);
+  --color-overlay: var(--overlay);
+
+  --color-line-faint: var(--line-faint);
+  --color-line: var(--line);
+  --color-line-bright: var(--line-bright);
+
+  /* Ink. `--ink-3` carries the ADR-0010 contrast deviation. */
+  --color-ink-max: var(--ink-max);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-on: var(--ink-on);
+
+  --color-correct: var(--correct);
+  --color-error: var(--error);
+  --color-error-dim: var(--error-dim);
+  --color-warning: var(--warning);
+  --color-warning-dim: var(--warning-dim);
+  --color-info: var(--info);
+
+  /* Semantic aliases — prefer these in components. */
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-heading: var(--text-heading);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --color-disabled: var(--text-disabled);
+  --color-invert: var(--text-invert);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-code: var(--font-code);
+  --font-stat: var(--font-stat);
+
+  --text-2xs: var(--text-2xs);
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-md: var(--text-md);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+  --text-2xl: var(--text-2xl);
+  --text-3xl: var(--text-3xl);
+  --text-4xl: var(--text-4xl);
+  --text-5xl: var(--text-5xl);
+
+  /* The design system's step is not linear — `--space-5` is 24px, not 20px — so
+   * this maps the named steps rather than Tailwind's `--spacing` multiplier. */
+  --spacing-0: var(--space-0);
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-7: var(--space-7);
+  --spacing-8: var(--space-8);
+  --spacing-9: var(--space-9);
+  --spacing-10: var(--space-10);
+
+  --radius-none: var(--radius-none);
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-glow: var(--box-glow);
+  --shadow-glow-lg: var(--box-glow-lg);
+  --shadow-elev-1: var(--elev-1);
+  --shadow-elev-2: var(--elev-2);
+
+  --text-shadow-glow-sm: var(--glow-sm);
+  --text-shadow-glow-md: var(--glow-md);
+  --text-shadow-glow-lg: var(--glow-lg);
+  --text-shadow-shine: var(--glow-shine);
+  --text-shadow-error: var(--glow-error);
+
+  --tracking-tight: var(--tracking-tight);
+  --tracking-normal: var(--tracking-normal);
+  --tracking-wide: var(--tracking-wide);
+  --tracking-wider: var(--tracking-wider);
+  --tracking-widest: var(--tracking-widest);
+
+  --leading-tight: var(--leading-tight);
+  --leading-snug: var(--leading-snug);
+  --leading-normal: var(--leading-normal);
+  --leading-loose: var(--leading-loose);
+
+  --container-app: var(--container);
+  --container-wide: var(--container-wide);
+}
+
+/* Focus is never invisible. The design system brightens borders on focus but
+ * leaves keyboard-only users without a consistent ring; this is the floor. */
+@layer base {
+  :focus-visible {
+    outline: var(--border-mid) solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+@utility scanlines {
+  background-image: var(--scanlines);
+}

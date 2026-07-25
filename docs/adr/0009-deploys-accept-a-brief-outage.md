@@ -12,7 +12,7 @@ most expensive. It converts a predictable, harmless, self-inflicted outage into
 an unpredictable one. A larger instance would fix the arithmetic at roughly
 +$12/month, a 35% budget increase to remove a blip nobody is present to observe.
 
-Mitigations that cost nothing: the deploy script pulls the new image *before*
+Mitigations that cost nothing: the deploy script pulls the new image _before_
 stopping the old container, so the gap is a restart rather than a download; and
 `server.shutdown=graceful` lets in-flight requests drain instead of being severed.
 

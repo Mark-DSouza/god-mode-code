@@ -68,6 +68,18 @@
       <version>${springdoc.version}</version>
     </dependency>
 
+    <!-- Restarts the application context when recompiled classes appear, which
+         is the backend half of "hot reload" for local development. `optional`
+         keeps it off the classpath of anything depending on this module, and
+         Spring Boot disables it automatically in a packaged jar, so it cannot
+         reach production. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-devtools</artifactId>
+      <scope>runtime</scope>
+      <optional>true</optional>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>

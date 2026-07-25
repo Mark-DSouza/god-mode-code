@@ -64,11 +64,19 @@ exists to need them.
 
 ## Accessibility deviations
 
-Two of ADR-0010's four deviations live at the token layer and are implemented in
-`packages/design-tokens/src/deviations.css`. A third is here: `DigitalRain`
-defaults off under `prefers-reduced-motion`, while still honouring an explicit
-user choice to turn it back on.
+ADR-0010 records four, numbered below in the order that document lists them:
 
-The fourth — the visually hidden focused `<input>` behind `TypingField`, and the
-non-colour indicator on wrong glyphs — belongs to the Run screen and is not part
-of the walking skeleton.
+| #   | Deviation                                    | Where it lives                                                         |
+| --- | -------------------------------------------- | ---------------------------------------------------------------------- |
+| 1   | `--ink-3` raised to meet 4.5:1 on the void   | `packages/design-tokens/src/deviations.css`                            |
+| 2   | visually hidden, genuinely focused `<input>` | not yet — Run screen                                                   |
+| 3   | reduced motion honoured                      | `deviations.css` for ambient chrome; `DigitalRain` for its own default |
+| 4   | non-colour indicator on wrong glyphs         | not yet — Run screen                                                   |
+
+Deviation 3 is the one that lives partly here: `DigitalRain` defaults off under
+`prefers-reduced-motion` while still honouring an explicit choice to turn it back
+on, because the system preference sets the default and does not overrule someone
+who went to Settings and asked for rain.
+
+2 and 4 are both component-level, both belong to the typing surface, and land
+with the Run screen.

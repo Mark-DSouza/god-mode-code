@@ -1,14 +1,19 @@
 /* Deliberate deviations from the shipped design system — all of them
  * accessibility fixes, all recorded in docs/adr/0010.
  *
- * ADR-0010 records four deviations. The two that live at the token/foundation
- * layer are implemented here because every screen sits on them. The other two
- * are component-level and land with the screens that introduce them:
+ * ADR-0010 records four deviations, numbered here in the order that document
+ * lists them. This file implements the two with a token/foundation-layer part,
+ * keeping the ADR's numbering so a reader can map either direction:
  *
- *   - the visually hidden, genuinely focused <input> behind TypingField
- *   - the non-colour indicator on wrong glyphs
+ *   1. --ink-3 raised for contrast              — here
+ *   2. hidden, genuinely focused <input>        — Run screen
+ *   3. DigitalRain honours reduced motion       — here, plus the component
+ *   4. non-colour indicator on wrong glyphs     — Run screen
  *
- * both belong to the Run screen (issue #7), not to the walking skeleton.
+ * 2 and 4 are component-level and belong to the Run screen, not the walking
+ * skeleton. Deviation 3 is split: the ambient chrome is handled here, and
+ * DigitalRain's own default lives with the component, because a user who turns
+ * the rain back on in Settings must still get rain.
  */
 
 :root {
@@ -25,7 +30,7 @@
   --ink-3: #2a8642;
 }
 
-/* DEVIATION 2 — honour the operating system's reduced-motion request.
+/* DEVIATION 3 — honour the operating system's reduced-motion request.
  *
  * The design system's signature effects animate continuously behind every
  * screen: the rain falls, the CRT flickers, glyph glow pulses. That is

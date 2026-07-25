@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "../cn.ts";
+import { CONTROL_TRANSITION, DISABLEABLE, PRESSABLE } from "./control.ts";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** primary = filled phosphor; secondary = outlined; ghost = bare; danger = red pill. */
@@ -72,10 +73,10 @@ export function Button({
       className={cn(
         "inline-flex cursor-pointer items-center justify-center gap-[10px]",
         "rounded-sm border font-display tracking-wider whitespace-nowrap uppercase select-none",
-        "transition-[background,color,box-shadow,border-color,transform] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-        // A physical keypress: settles down and in, never bounces.
-        "active:not-disabled:translate-y-px active:not-disabled:scale-[0.985]",
-        "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none",
+        CONTROL_TRANSITION,
+        PRESSABLE,
+        DISABLEABLE,
+        "disabled:shadow-none",
         SIZES[size],
         VARIANTS[variant],
         block && "w-full",

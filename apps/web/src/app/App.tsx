@@ -48,7 +48,11 @@ export function App() {
               />
             </div>
 
-            <dl className="grid grid-cols-2 gap-5 sm:grid-cols-3">
+            {/* A plain grid, not a <dl>. Stat renders its own value and label
+                as sibling spans, so wrapping it in a description list would
+                produce a <dl> with no <dt>/<dd> children at all — invalid, and
+                announced as an empty list by a screen reader. */}
+            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
               <Stat
                 align="left"
                 size="sm"
@@ -63,7 +67,7 @@ export function App() {
                 value={health.isPending ? "—" : (health.data?.version ?? "?")}
                 label="Version"
               />
-            </dl>
+            </div>
           </Card>
 
           <p className="font-body text-sm text-disabled">

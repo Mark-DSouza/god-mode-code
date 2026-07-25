@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 const api = createApiClient();
 
-export const healthQueryKey = ["health"] as const;
+const healthQueryKey = ["health"] as const;
 
 /**
  * The backend's status, read through the same-origin proxy.

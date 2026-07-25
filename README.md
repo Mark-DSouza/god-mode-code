@@ -64,9 +64,16 @@ no origin allowlist, and no class of bug that only appears in production. This
 was forced by a certificate constraint and turned out to be better anyway
 (ADR-0002).
 
-Nothing in this repository should introduce a second origin or a configurable
-API host. An end-to-end test asserts that every request the page makes is
-same-origin.
+Nothing in this repository should introduce a second origin for the API. An
+end-to-end test asserts that every request the page makes is same-origin, with
+one documented exemption: the design system's font tokens `@import` Google
+Fonts, so `googleapis.com` and `gstatic.com` are allowed. Any other origin fails
+the build.
+
+The one place a host is configurable is Vite's dev proxy (`API_ORIGIN`), which
+exists so the dev server can forward `/api` to a backend on another port. It has
+no production equivalent — Caddy's upstream is fixed — and it still leaves the
+browser talking to a single origin.
 
 ## The API contract
 

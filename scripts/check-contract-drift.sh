@@ -14,10 +14,15 @@ cd "$repo_root"
 
 "$repo_root/scripts/generate-contract.sh"
 
+# Scoped to the two generated artifacts, not the whole package. `src/index.ts`
+# is hand-written and lives alongside them; including it would fail this gate
+# for an ordinary edit to the client, which is not contract drift.
+#
 # `git status --porcelain`, not `git diff`: diff compares tracked files only, so
 # a newly generated file that nobody has committed yet shows up as clean and the
-# gate passes on a contract that was never checked in at all.
-drift="$(git status --porcelain -- packages/api-client)"
+# gate would pass on a contract that was never checked in at all.
+generated=(packages/api-client/openapi.json packages/api-client/src/schema.d.ts)
+drift="$(git status --porcelain -- "${generated[@]}")"
 
 if [[ -n "$drift" ]]; then
   echo
@@ -26,7 +31,7 @@ if [[ -n "$drift" ]]; then
   echo >&2
   echo "$drift" >&2
   echo >&2
-  git --no-pager diff --stat -- packages/api-client >&2
+  git --no-pager diff --stat -- "${generated[@]}" >&2
   echo >&2
   echo "Run scripts/generate-contract.sh and commit the result." >&2
   exit 1

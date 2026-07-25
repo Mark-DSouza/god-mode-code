@@ -11,7 +11,6 @@
     "dev:web": "pnpm --filter @gmc/web dev",
     "build": "pnpm --filter @gmc/web build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "test:web": "pnpm --filter @gmc/web test",
     "test:e2e": "pnpm --filter @gmc/e2e test",

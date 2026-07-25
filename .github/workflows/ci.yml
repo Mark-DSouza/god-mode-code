@@ -52,6 +52,11 @@ jobs:
               - 'apps/api/**'
               - 'packages/api-client/**'
               - 'scripts/*contract*.sh'
+            # The end-to-end job builds and boots the whole stack, JVM included.
+            # The negations are what make the acceptance criterion literally
+            # true: a change confined to stylesheets or tokens matches nothing
+            # here, so no image is rebuilt. Any change to actual application
+            # code still runs it.
             stack:
               - *shared
               - 'apps/**'
@@ -59,6 +64,9 @@ jobs:
               - 'e2e/**'
               - 'infra/**'
               - 'compose.*.yaml'
+              - '!apps/web/src/styles/**'
+              - '!packages/design-tokens/**'
+              - '!mockups-and-design-system/**'
 
   web:
     needs: changes
@@ -72,8 +80,14 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --if-present typecheck
-      - run: pnpm -r --if-present test
+      - run: pnpm exec prettier --check .
+      # Scoped with an explicit filter, never `-r`. The end-to-end suite is a
+      # workspace member too, and a recursive run would start Docker and build
+      # the JVM image inside this job — the exact thing the path filtering
+      # exists to avoid — while failing anyway, because no browser is installed
+      # here.
+      - run: pnpm --filter @gmc/web --filter "./packages/*" typecheck
+      - run: pnpm --filter @gmc/web --filter "./packages/*" test
       - run: pnpm --filter @gmc/web build
 
   api:

@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "../cn.ts";
+import { CONTROL_TRANSITION, DISABLEABLE, PRESSABLE } from "./control.ts";
 
 export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: "sm" | "md" | "lg";
@@ -45,9 +46,9 @@ export function IconButton({
       title={label}
       className={cn(
         "inline-flex cursor-pointer items-center justify-center rounded-sm border",
-        "transition-[background,color,border-color,box-shadow,transform] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-        "active:not-disabled:translate-y-px active:not-disabled:scale-[0.985]",
-        "disabled:cursor-not-allowed disabled:opacity-40",
+        CONTROL_TRANSITION,
+        PRESSABLE,
+        DISABLEABLE,
         SIZES[size],
         VARIANTS[variant],
         className,

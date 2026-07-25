@@ -34,10 +34,10 @@ function currentOrigin(): string {
  */
 const lazyFetch: typeof globalThis.fetch = (...args) => globalThis.fetch(...args);
 
-export function createApiClient(fetchImpl?: typeof globalThis.fetch) {
+export function createApiClient() {
   return createClient<paths>({
     baseUrl: currentOrigin(),
-    fetch: fetchImpl ?? lazyFetch,
+    fetch: lazyFetch,
   });
 }
 

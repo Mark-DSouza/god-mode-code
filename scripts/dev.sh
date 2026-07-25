@@ -52,6 +52,9 @@ fi
 echo "==> Starting the backend (debugger on 5005)"
 (
   cd apps/api
+  # devtools restarts the context when recompiled classes land, so rebuilding
+  # from an editor reloads the running application. The JDWP agent is what the
+  # debugger attaches to on 5005.
   ./mvnw -B spring-boot:run \
     -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
 ) &

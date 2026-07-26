@@ -1,11 +1,11 @@
 # Security findings gate the diff, not the repository
 
 A security check fails a pull request only for what that pull request
-introduces. Everything else **alerts**: a scheduled full sweep and the
-dependency bot put it in the Security tab, where it is visible to anyone who
-looks and blocks nothing. A CVE published on a quiet Tuesday against a package
-nobody touched does not turn `main` red; it opens a Dependabot alert. A finding
-that was already in the tree does not block an unrelated change.
+introduces. Everything else **alerts**: it lands in the Security tab, it is
+visible to anyone who looks, and it blocks nothing. A CVE published on a quiet
+Tuesday against a package nobody touched does not turn `main` red; it opens a
+Dependabot alert. A finding that was already in the tree does not block an
+unrelated change.
 
 The alternative fails predictably. A gate that fires on findings unrelated to
 the change in front of it is a gate people learn to route around —
@@ -17,6 +17,13 @@ fails is decided by whatever the CVE feeds and rule sets happen to say this
 morning, so a pull request that was green at nine can be red at eleven having
 changed nothing. The author's only available response is to fix something they
 did not break, or to learn the bypass.
+
+The alert tier is not a consolation prize, and it has to be fed deliberately.
+If every check only ever reads a change, then code nobody has touched since it
+was written is never looked at again, and dependency review — which only fires
+on a pull request event — cannot cover the gap. So a scheduled analysis of
+everything reports into the Security tab on its own cadence, and fails nothing
+when it does.
 
 ## SARIF to code scanning is what makes this uniform
 
@@ -49,7 +56,7 @@ to look at is Dependabot's alert stream, not this gate's.
 ## Consequences
 
 **Base images keep floating tags, and the deploy is the patching mechanism.**
-Every `FROM` here names a floating tag — `node:24-alpine`,
+Every base image here is named by a floating tag — `node:24-alpine`,
 `maven:3.9-eclipse-temurin-21`, `eclipse-temurin:21-jre-alpine`,
 `caddy:2-alpine`, `golang:1.26-alpine` and
 `gcr.io/distroless/static-debian12:nonroot` — and images are rebuilt from
@@ -71,25 +78,26 @@ has essentially no OS packages to have vulnerabilities in — and the applicatio
 host accepts no inbound traffic at all, an invariant
 `infra/terraform/tests/security.tftest.hcl` asserts on every pull request that
 touches the infrastructure, because traffic arrives through the
-outbound-initiated tunnel of ADR-0002. A
-vulnerable library on a host nothing can dial is a different proposition from
-one behind an open port. If a runtime image ever grows a package manager, or
-the host ever accepts a connection, this paragraph expires with it.
+outbound-initiated tunnel of ADR-0002. A vulnerable library on a host nothing
+can dial is a different proposition from one behind an open port. If a runtime
+image ever grows a package manager, or the host ever accepts a connection, this
+paragraph expires with it.
 
-**The Claude Code hook guards the controls; CI finds the vulnerabilities.** A
-hook in `.claude/settings.json` covers one agent in one checkout: it is absent
-for every human, for every agent that has never heard of Claude Code, and for
-anything pushed from anywhere else. The commit-time git hook covers every
-commit whoever makes it, and CI covers every branch and every push. So the
-agent hook is not the control that credential detection rests on — the git hook
-is — and duplicating CI's scanning inside the agent hook would buy coverage
-that is a strict subset of what already exists, at the cost of a second
-detection rule list to keep in step. It earns its place by doing what neither
-of the others can, which is to fire before the tool runs rather than after the
-bytes are written: the difference between a credential that never touched disk
-and one that sits in the tree until a commit is attempted, and the difference
-between asking a human before the security workflow or the infrastructure
-invariants are edited and finding out afterwards that they were. An agent told
-to make a check pass can, and will, edit the thing that is failing — and since a
-pull request's workflows run as that pull request defines them, CI cannot be
-relied on to object to being weakened by the change it is running from.
+**The commit guard is the control; the Claude Code hook guards the controls; CI
+finds the vulnerabilities.** A hook in `.claude/settings.json` covers one agent
+in one checkout: it is absent for every human, for every agent that has never
+heard of Claude Code, and for anything pushed from anywhere else. The commit
+guard — a git hook — covers every commit, no matter who or what makes it, and
+CI covers every pull request and everything that reaches `main`. So credential
+detection does not rest on the Claude Code hook, and duplicating CI's scanning
+inside it would buy coverage that is a strict subset of what already exists, at
+the cost of a second detection rule list to keep in step. The Claude Code hook
+earns its place by doing what neither of the others can, which is to fire
+before the tool runs rather than after the bytes are written: the difference
+between a credential that never touched disk and one that sits in the tree
+until a commit is attempted, and the difference between asking a human before
+the security workflow or the infrastructure invariants are edited and finding
+out afterwards that they were. An agent told to make a check pass can, and
+will, edit the thing that is failing — and since a pull request's workflows run
+as that pull request defines them, CI cannot be relied on to object to being
+weakened by the change it is running from.

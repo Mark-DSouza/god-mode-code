@@ -1,0 +1,76 @@
+version: 2
+
+# What keeps the pinned actions in `.github/workflows` moving. A pin is only
+# half a policy: an action pinned to a commit and then forgotten is running
+# last year's code with this year's confidence, and nothing about a SHA makes
+# anyone notice. The bot is what turns pinning into something sustained rather
+# than a snapshot of one afternoon. It rewrites the pin and the `# vX.Y.Z`
+# comment together, which is why those two cannot drift.
+#
+# Monthly, and grouped so each ecosystem opens one pull request per cycle
+# rather than one per dependency. This is a solo repository, and the failure
+# mode of an ungrouped bot is not noise — it is a maintainer who mutes it, at
+# which point the repository is worse off than before the bot existed, because
+# the alerts still arrive and nobody is reading them.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # One entry covers the whole pnpm workspace: `apps/web`, `packages/*`, `e2e`
+  # and `visual` all resolve through the single lockfile at the root.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      npm:
+        patterns: ["*"]
+
+  - package-ecosystem: maven
+    directory: /apps/api
+    schedule:
+      interval: monthly
+    groups:
+      maven:
+        patterns: ["*"]
+
+  # Near-vacuous today: the judge has no third-party Go dependencies and no
+  # `go.sum` (see the `cache-dependency-path` note in ci.yml). Configured
+  # anyway, because the day it acquires its first dependency is not a day
+  # anyone gets a reminder to come back here.
+  - package-ecosystem: gomod
+    directory: /apps/judge
+    schedule:
+      interval: monthly
+    groups:
+      gomod:
+        patterns: ["*"]
+
+  # Listed rather than globbed: each of these is a separate root with its own
+  # state and its own `required_providers`, and Terraform updates do not
+  # recurse into subdirectories.
+  - package-ecosystem: terraform
+    directories:
+      - /infra/terraform
+      - /infra/terraform/bootstrap
+      - /infra/terraform/observability
+    schedule:
+      interval: monthly
+    groups:
+      terraform:
+        patterns: ["*"]
+
+# Docker is deliberately absent, and this absence is the thing here most likely
+# to be helpfully "fixed" by someone who has not read this far. Every `FROM` in
+# this repository is a floating tag on purpose, and every image is rebuilt on
+# each deploy, so OS packages are already patched continuously. Adding Docker
+# here would pin those digests — freezing base images and manufacturing the
+# exact staleness problem a bot would then exist to solve. Rollback is
+# unaffected either way: built images are immutable in ghcr once pushed.
+# There is no ADR behind this one, which is why the comment argues the case
+# rather than pointing at one.

@@ -191,6 +191,34 @@ describe("a Typing Run", () => {
     ]);
   });
 
+  it("clears the screen for the countdown without letting go of the input", async () => {
+    backendServing();
+    const user = typist();
+
+    await startARun(user);
+
+    // The mockup draws the countdown on an empty screen, and it is right to: a
+    // speed of zero and a progress bar at nothing are measurements of a Run
+    // that has not started, and they crowd out the one thing being looked at.
+    expect(screen.queryByText("Speed")).not.toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+
+    // The input is nonetheless already mounted and already focused. This is the
+    // pair that is hard to hold together, and the reason the countdown is a
+    // swap *inside* a stable wrapper rather than a different branch of the tree.
+    const input = screen.getByTestId("typing-input");
+    expect(input).toHaveFocus();
+
+    await countdownEnds();
+
+    // The very same element, not a replacement that happens to look alike. A
+    // remount here would have dropped focus on the floor, and with it the
+    // on-screen keyboard of every phone (ADR-0010).
+    expect(screen.getByTestId("typing-input")).toBe(input);
+    expect(screen.getByText("Speed")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+  });
+
   it("starts the clock on the first keystroke, not when the countdown ends", async () => {
     backendServing();
     const user = typist();

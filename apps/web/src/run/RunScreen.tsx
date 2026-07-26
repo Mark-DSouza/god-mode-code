@@ -9,7 +9,6 @@ import {
   ProgressBar,
   Stat,
   TypingField,
-  cn,
 } from "../design-system/index.ts";
 import { DISCIPLINES } from "./disciplines.ts";
 import { useTypingRun } from "./use-typing-run.ts";
@@ -103,64 +102,71 @@ export function RunScreen({
     );
   }
 
+  // Named once: it decides what is on the screen in four places, and
+  // `run.phase === "countdown"` repeated four times reads as four decisions.
+  const counting = run.phase === "countdown";
+
   return (
     <section
       className="flex flex-col gap-6"
       aria-label={`${DISCIPLINES[passage.discipline].title} Run`}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex gap-8 sm:gap-10">
-          <Stat value={Math.round(run.wpm)} unit="wpm" label="Speed" size="sm" align="left" />
-          <Stat
-            value={run.accuracy.toFixed(1)}
-            unit="%"
-            label="Accuracy"
-            size="sm"
-            align="left"
-            accent={run.errors === 0 ? "green" : "warning"}
-          />
-          <Stat
-            value={Math.floor(run.elapsedMillis / 1000)}
-            unit="s"
-            label="Time"
-            size="sm"
-            align="left"
-            accent="white"
-          />
+      {/* The countdown clears the screen, as the mockup draws it: no readouts,
+          no progress track, no panel. All three are measurements of a Run that
+          has not started — a speed of zero and a bar at nothing are furniture,
+          and putting them up first shrinks the numeral that is the only thing
+          anybody is looking at. */}
+      {counting || (
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex gap-8 sm:gap-10">
+            <Stat value={Math.round(run.wpm)} unit="wpm" label="Speed" size="sm" align="left" />
+            <Stat
+              value={run.accuracy.toFixed(1)}
+              unit="%"
+              label="Accuracy"
+              size="sm"
+              align="left"
+              accent={run.errors === 0 ? "green" : "warning"}
+            />
+            <Stat
+              value={Math.floor(run.elapsedMillis / 1000)}
+              unit="s"
+              label="Time"
+              size="sm"
+              align="left"
+              accent="white"
+            />
+          </div>
+          <IconButton label="Abandon this Challenge" variant="outline" onClick={onLeave}>
+            <span aria-hidden="true">✕</span>
+          </IconButton>
         </div>
-        <IconButton label="Abandon this Challenge" variant="outline" onClick={onLeave}>
-          <span aria-hidden="true">✕</span>
-        </IconButton>
-      </div>
+      )}
 
-      {/* One wrapper for both phases, because the input inside it must be
-          mounted from the first render. Rendering it only once the countdown
-          ends would mean the focus above had nothing to focus, and a phone
-          raises its keyboard only for focus that follows a gesture — the tap on
-          "Start Run" is the last one there is, and it is three seconds gone by
-          the time a late-mounted input appears. That is precisely the failure
-          ADR-0010's deviation exists to prevent. */}
+      {/* One wrapper across both phases, and the input is always its second
+          child, because React reconciles by position: swapping what sits above
+          it is a re-render, but moving the input into a branch would unmount and
+          remount it, taking the focus with it. That focus is the whole point —
+          a phone raises its keyboard only for focus that follows a gesture, and
+          the tap on "Start Run" is the last one there is. Losing it three
+          seconds later is exactly the failure ADR-0010's deviation prevents. */}
       <div className="relative">
-        <Card
-          scanlines
-          className={cn(
-            "flex min-h-[220px] items-center",
-            run.phase === "countdown" && "justify-center",
-          )}
-        >
-          {run.phase === "countdown" ? (
+        {counting ? (
+          <div className="flex min-h-[58dvh] items-center justify-center">
             <Countdown
               count={run.count}
               tag={DISCIPLINES[passage.discipline].title}
               preview={preview(passage.text)}
             />
-          ) : (
-            /* Hidden from assistive technology — it is hundreds of
-               one-character elements. The Passage is offered to a screen
-               reader below, as running text the input points at. */
+          </div>
+        ) : (
+          <Card scanlines className="flex min-h-[220px] items-center">
+            {/* Hidden from assistive technology — it is hundreds of
+                one-character elements. The Passage is offered to a screen
+                reader below, as running text the input points at. */}
             <TypingField text={passage.text} typed={run.typed} className="text-lg sm:text-xl" />
-          )}
-        </Card>
+          </Card>
+        )}
 
         <input
           ref={input}
@@ -185,24 +191,31 @@ export function RunScreen({
         />
       </div>
 
+      {/* Outside the conditional: the input points at this, and an
+          `aria-describedby` that comes and goes is a description that is
+          sometimes not there. */}
       <p id="passage-text" className="sr-only">
         {passage.text}
       </p>
 
-      <ProgressBar
-        value={run.progress}
-        label="Progress through the Passage"
-        showLabel
-        // The bar changes colour the moment a mistake exists, so the state of
-        // the Run is legible without reading the accuracy figure.
-        tone={run.errors > 0 ? "warning" : "green"}
-      />
+      {counting || (
+        <>
+          <ProgressBar
+            value={run.progress}
+            label="Progress through the Passage"
+            showLabel
+            // The bar changes colour the moment a mistake exists, so the state
+            // of the Run is legible without reading the accuracy figure.
+            tone={run.errors > 0 ? "warning" : "green"}
+          />
 
-      <p className="text-center font-code text-xs text-ink-3" role="status">
-        {statusLine(run.phase, submit.isPending, focused)}
-      </p>
+          <p className="text-center font-code text-xs text-ink-3" role="status">
+            {statusLine(run.phase, submit.isPending, focused)}
+          </p>
 
-      <p className="text-center font-code text-xs text-disabled">— {passage.attribution}</p>
+          <p className="text-center font-code text-xs text-disabled">— {passage.attribution}</p>
+        </>
+      )}
     </section>
   );
 }
@@ -214,7 +227,6 @@ function statusLine(
 ): string {
   if (verifying) return "verifying with the server";
   if (phase === "complete") return "run complete";
-  if (phase === "countdown") return "get ready";
   // Not a keyboard trap: focus is never taken back automatically, so anyone who
   // tabbed away on purpose is told how to come back rather than dragged back.
   if (!focused) return "click the Passage to start typing";

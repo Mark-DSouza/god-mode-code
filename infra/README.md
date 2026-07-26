@@ -7,11 +7,12 @@ console checkboxes were ticked (ADR-0001).
 
 ## What is here
 
-| Path               | What it is                                                                    |
-| ------------------ | ----------------------------------------------------------------------------- |
-| `caddy/`           | The reverse proxy: serves the built SPA and proxies `/api/*` to the backend   |
-| `terraform/`       | The cloud account: network, database, instance, tunnel, secrets, cost control |
-| `terraform/tests/` | Plan-time assertions on the security and cost properties, run in CI           |
+| Path               | What it is                                                                     |
+| ------------------ | ------------------------------------------------------------------------------ |
+| `caddy/`           | The reverse proxy: serves the built SPA and proxies `/api/*` to the backend    |
+| `terraform/`       | The cloud account: network, database, instances, tunnel, secrets, cost control |
+| `terraform/tests/` | Plan-time assertions on the security and cost properties, run in CI            |
+| `judge-ami/`       | What is on the judge host's disk, because that host cannot install anything    |
 
 `caddy/Caddyfile` is used unchanged by the local end-to-end stack and by
 production. The only difference between the two is the address it binds and the
@@ -33,17 +34,37 @@ ever found in production.
     │                                                    │
     │   cloudflared ──▶ Caddy :80 ──┬─▶ /srv  (the SPA)  │
     │                               └─▶ api:8080         │
-    └────────────────────────────┬──────────────────────┘
-                                 │  5432, security-group referenced
-                                 ▼
-    ┌───────────────────────────────────────────────────┐
-    │  PostgreSQL       private subnets, NO route out    │
-    │  7-day backups + point-in-time recovery            │
-    └───────────────────────────────────────────────────┘
+    └──────────┬─────────────────────────────┬──────────┘
+               │  5432                        │  9090, the only way in
+               ▼                              ▼
+    ┌────────────────────────┐   ┌───────────────────────────────────┐
+    │  PostgreSQL            │   │  judge instance                   │
+    │  private subnets       │   │  private subnet, NO route out     │
+    │  NO route out          │   │  NO IAM role, NO egress rules     │
+    │  7-day backups + PITR  │   │  t4g.micro, standard credits      │
+    └────────────────────────┘   └───────────────────────────────────┘
 ```
 
-The private subnets have no route to the internet at all. That is deliberate,
-and it is where the judge's instance goes when it lands (ADR-0005, issue #13).
+The private subnets have no route to the internet at all, and both boxes down
+there are reachable only from the application's security group.
+
+The judge's is the stricter of the two, and deliberately so: it is the host that
+runs submitted source. It has no IAM role, so there is nothing behind the
+metadata service to steal; no egress rules at all, so it can initiate a
+connection to nothing — not the internet, not the database, not the application;
+and a metadata hop limit of one, so a sandbox container cannot reach the metadata
+service either. A container escape there yields a box worth nothing, and costs
+one `terraform apply` (ADR-0005).
+
+It is also the reason `judge-ami/` exists. A host that cannot reach a package
+repository cannot install a container runtime, pull an execution image, or fetch
+its own binary — so all of that goes on the disk before it boots. See
+[`docs/runbooks/judge-host.md`](../docs/runbooks/judge-host.md).
+
+The judge cannot ship its own telemetry either, for the same reason. It exposes
+`/metrics`, the backend scrapes it across the private link, and the numbers ride
+out on the backend's existing path to Grafana Cloud under `judge_*` (ADR-0005,
+ADR-0008).
 
 Two properties are worth stating plainly, because most of the rest follows from
 them:
@@ -71,7 +92,9 @@ terraform -chdir=infra/terraform/bootstrap apply -var bucket_name=gmc-terraform-
 cp infra/terraform/backend.hcl.example infra/terraform/backend.hcl
 $EDITOR infra/terraform/backend.hcl
 
-# 3. Account-specific values.
+# 3. Account-specific values, including the judge's machine image. Build that
+#    first: docs/runbooks/judge-host.md. The stack has no default for it,
+#    because a host with no route out cannot install anything at first boot.
 cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 $EDITOR infra/terraform/terraform.tfvars
 
@@ -109,6 +132,13 @@ Then three things Terraform deliberately does not do:
 Push to `main`. Continuous integration builds both images for arm64, tags them
 with the commit SHA, and sends the deploy command.
 
+The judge is not deployed this way, and cannot be. Its host has no route out, so
+it cannot pull an image, and nothing can reach it except the application on one
+port. Shipping a new judge means building a new machine image and applying —
+[`docs/runbooks/judge-host.md`](../docs/runbooks/judge-host.md). An immutable
+host is the only kind that stays consistent with its own definition when nobody
+can log in to check.
+
 The deploy pulls both images **before** stopping anything, then replaces the
 backend and waits for `/api/health` through the proxy. Caddy is left alone
 unless its own image changed, so a backend deploy degrades the API for the
@@ -121,9 +151,11 @@ tick over a broken site.
 
 `terraform test` runs the whole configuration through a plan with mocked
 providers and asserts the properties that are easy to break silently: no inbound
-rules, no route out of the private subnets, IMDSv2 with a hop limit containers
-cannot cross, encrypted secrets, seven-day retention, `standard` CPU credits,
-and a budget halt that fires without waiting for anyone's approval.
+rules on the application, exactly one port in and no egress at all on the judge,
+no route out of the private subnets, IMDSv2 with a hop limit containers cannot
+cross, encrypted secrets, seven-day retention, `standard` CPU credits, and a
+budget halt that fires without waiting for anyone's approval and reaches both
+instances.
 
 ```bash
 terraform -chdir=infra/terraform init -backend=false
@@ -133,8 +165,15 @@ terraform -chdir=infra/terraform test
 No credentials and no money, so it runs on every pull request that touches
 `infra/terraform/`.
 
-## One rule worth stating before anything else is built
+## One rule that is not negotiable
 
 **Local development may mount the container socket for convenience; production
 must never do so.** A mounted container socket is the most direct escape path
-available to the untrusted code the judge exists to contain.
+available to the untrusted code the judge exists to contain: anyone who can
+reach the daemon can start a privileged container with the host filesystem
+attached.
+
+That is why the judge runs as a plain systemd unit on its host rather than in a
+container, and why `apps/judge/Dockerfile` says in its first line that it is for
+local use only. The local stack is in fact stricter than ADR-0005 requires —
+`compose.e2e.yaml` declines the socket too, and explains why.

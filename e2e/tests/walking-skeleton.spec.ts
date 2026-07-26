@@ -56,6 +56,26 @@ test("the API is reachable through the proxy, not only from the app", async ({ r
   });
 });
 
+test("a judge that cannot judge degrades the Code Discipline and nothing else", async ({
+  request,
+}) => {
+  // The judge in this stack has no container socket, on purpose — see the long
+  // comment in compose.e2e.yaml — so it serves and refuses Solve Runs. That
+  // makes this the real degraded case rather than a simulated one.
+  const response = await request.get("/api/health");
+  const health = await response.json();
+
+  expect(health.judge).toBe("DEGRADED");
+
+  // The assertion that matters, and the reason it is a status code rather than
+  // a field: the external uptime monitor reads the code alone, so a 503 here
+  // would page somebody because one Discipline is unavailable. Quotes, Prose,
+  // Leaderboards and sign-in need no judge (ADR-0005).
+  expect(response.status()).toBe(200);
+  expect(health.status).toBe("UP");
+  expect(health.database).toBe("UP");
+});
+
 test("unknown paths serve the application, so client-side routing works", async ({ page }) => {
   // A hard load of a route the server has no file for must return index.html
   // rather than 404 — otherwise every deep link breaks on refresh.

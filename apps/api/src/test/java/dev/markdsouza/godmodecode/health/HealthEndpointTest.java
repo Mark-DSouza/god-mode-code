@@ -36,6 +36,26 @@ class HealthEndpointTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("a judge that cannot be reached degrades the Code Discipline and nothing else")
+    void judgeFailureDegradesOnlyTheCodeDiscipline() {
+        // No judge runs during this suite — `application-test.yaml` points the
+        // backend at a port that refuses — so this is the real degraded case
+        // rather than a simulated one.
+        ResponseEntity<HealthStatus> response = http.getForEntity("/api/health", HealthStatus.class);
+
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().judge()).isEqualTo(HealthStatus.Status.DEGRADED);
+
+        // The part that matters. Quotes, Prose, Leaderboards and sign-in need no
+        // judge, so a judge on a routeless subnet being unwell must not take the
+        // site down — and the external uptime monitor reads the status code
+        // alone, so a 503 here would page somebody for a Discipline (ADR-0005).
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().status()).isEqualTo(HealthStatus.Status.UP);
+        assertThat(response.getBody().database()).isEqualTo(HealthStatus.Status.UP);
+    }
+
+    @Test
     @DisplayName("is served under /api, so the proxy needs no per-endpoint rules")
     void isServedUnderApiPrefix() {
         // Caddy routes on the /api prefix alone (ADR-0002). An endpoint that

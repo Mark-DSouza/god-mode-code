@@ -54,6 +54,52 @@ variable "app_instance_type" {
   default     = "t4g.small"
 }
 
+variable "judge_ami_id" {
+  description = <<-EOT
+    Machine image for the judge's host, built by docs/runbooks/judge-host.md.
+
+    No default, and no fallback to the stock Amazon Linux image, because the
+    judge's host has no route out: it cannot install a container runtime, pull
+    an execution image or fetch its own binary at first boot. Everything it
+    runs has to be on the disk before it boots, so the image is an input this
+    stack genuinely cannot know — like the account identifiers above.
+  EOT
+  type        = string
+
+  validation {
+    condition     = can(regex("^ami-[0-9a-f]{8,17}$", var.judge_ami_id))
+    error_message = "judge_ami_id must be an AMI identifier, e.g. ami-0123456789abcdef0."
+  }
+}
+
+variable "judge_instance_type" {
+  description = <<-EOT
+    Judge instance. 1GB, which is what ADR-0005 sizes the Go supervisor and its
+    sandbox containers against. Graviton, to match the execution image built
+    for the same architecture.
+  EOT
+  type        = string
+  default     = "t4g.micro"
+}
+
+variable "judge_port" {
+  description = "The single port the judge listens on, and the only one the application may reach it over."
+  type        = number
+  default     = 9090
+}
+
+variable "judge_workers" {
+  description = "How many sandbox containers may run at once. Two is the judge's own default on a 1GB host; raising it needs a measurement, not an opinion."
+  type        = number
+  default     = 2
+}
+
+variable "judge_volume_size" {
+  description = "Judge root volume in GB. Holds the runtime, one execution image and the journal, with slack because nobody can log in to clear space."
+  type        = number
+  default     = 20
+}
+
 variable "db_instance_class" {
   description = "Managed PostgreSQL instance class."
   type        = string

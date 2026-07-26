@@ -18,6 +18,7 @@ import { setupServer } from "msw/node";
 export const healthUp: Health = {
   status: "UP",
   database: "UP",
+  judge: "UP",
   version: "0.0.1-test",
 };
 
@@ -45,9 +46,29 @@ export function respondDegraded() {
   server.use(
     http.get("/api/health", () =>
       HttpResponse.json<Health>(
-        { status: "DEGRADED", database: "DEGRADED", version: "0.0.1-test" },
+        { status: "DEGRADED", database: "DEGRADED", judge: "DEGRADED", version: "0.0.1-test" },
         { status: 503 },
       ),
+    ),
+  );
+}
+
+/**
+ * A backend whose judge is down and which is otherwise perfectly well.
+ *
+ * The status code is the assertion: 200, not 503. Only the Code Discipline
+ * needs the judge, so a judge on its isolated host failing must not take the
+ * site down or page anyone (ADR-0005).
+ */
+export function respondJudgeDown() {
+  server.use(
+    http.get("/api/health", () =>
+      HttpResponse.json<Health>({
+        status: "UP",
+        database: "UP",
+        judge: "DEGRADED",
+        version: "0.0.1-test",
+      }),
     ),
   );
 }

@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderApp } from "../test/render.tsx";
-import { respondDegraded, respondUnreachable } from "../test/msw-server.ts";
+import { respondDegraded, respondJudgeDown, respondUnreachable } from "../test/msw-server.ts";
 import { setPrefersReducedMotion } from "../test/setup.ts";
 import { App } from "./App.tsx";
 
@@ -40,6 +40,19 @@ describe("the walking skeleton", () => {
     // No answer at all is a different fault, and pointing an operator at the
     // database when the API is down wastes the first ten minutes of an outage.
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/unreachable/i));
+  });
+
+  it("stays online when only the judge is down", async () => {
+    respondJudgeDown();
+    renderApp(<App />);
+
+    // The Code Discipline is unavailable and nothing else is. A badge that read
+    // "Degraded" here would be telling players the site is broken because a
+    // container host on a routeless subnet is unwell (ADR-0005).
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/^online$/i));
+
+    const judge = screen.getByText("Judge").parentElement;
+    expect(judge).toHaveTextContent(/degraded/i);
   });
 
   it("calls the backend on the same origin, under /api", async () => {

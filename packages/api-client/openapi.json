@@ -158,13 +158,19 @@
             "enum" : [ "UP", "DEGRADED" ],
             "example" : "UP"
           },
+          "judge" : {
+            "type" : "string",
+            "description" : "Judge availability. DEGRADED means the Code Discipline is unavailable; the rest of the site is unaffected.",
+            "enum" : [ "UP", "DEGRADED" ],
+            "example" : "UP"
+          },
           "version" : {
             "type" : "string",
             "description" : "Running build version",
             "example" : "0.0.1-SNAPSHOT"
           }
         },
-        "required" : [ "database", "status", "version" ]
+        "required" : [ "database", "judge", "status", "version" ]
       }
     }
   }

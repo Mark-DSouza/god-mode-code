@@ -21,3 +21,11 @@ cloudflare_api_token = "..."
 # Where billing alerts go. Somewhere actually read — an alert nobody sees is
 # indistinguishable from no alert.
 budget_notification_email = "you@example.com"
+
+# The judge's machine image, from `docs/runbooks/judge-host.md`.
+#
+# There is no default and no fallback to the stock Amazon Linux image, because
+# the judge's host has no route out: it cannot install a container runtime,
+# pull an execution image or fetch its own binary at first boot. Everything it
+# will ever run has to be on the disk before it boots (ADR-0005).
+judge_ami_id = "ami-..."

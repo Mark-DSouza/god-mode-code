@@ -1,4 +1,4 @@
-import type { Challenge, Discipline, TypingRun } from "@gmc/api-client";
+import type { Challenge, Discipline, Health, TypingRun } from "@gmc/api-client";
 import { useState } from "react";
 import { useHealth } from "../api/health.ts";
 import { useRequestChallenge } from "../api/typing.ts";
@@ -99,7 +99,11 @@ function BackendStatus() {
 
   return (
     <div className="flex flex-col items-center gap-3">
-      {overallBadge(health)}
+      <StatusBadge
+        isPending={health.isPending}
+        isError={health.isError}
+        status={health.data?.status}
+      />
 
       {/* The judge is a dependency of exactly one Discipline, so it is reported
           apart from the badge above rather than folded into it. A degraded judge
@@ -124,11 +128,26 @@ function BackendStatus() {
   );
 }
 
-/** The one badge that speaks for the site as a whole. */
-function overallBadge(health: ReturnType<typeof useHealth>) {
+/**
+ * The one badge that speaks for the site as a whole.
+ *
+ * Three primitives rather than the query object, so this says what it needs and
+ * nothing about where the caller got it — and stays a component, which a
+ * function returning JSX is not: only a component has an identity in the tree,
+ * a name in the devtools, and somewhere to put a hook if it ever needs one.
+ */
+function StatusBadge({
+  isPending,
+  isError,
+  status,
+}: {
+  isPending: boolean;
+  isError: boolean;
+  status: Health["status"] | undefined;
+}) {
   // `role="status"` so the result is announced when it arrives rather than
   // changing silently in the corner of the screen.
-  if (health.isPending) {
+  if (isPending) {
     return (
       <Badge tone="neutral" dot role="status">
         Checking
@@ -138,7 +157,7 @@ function overallBadge(health: ReturnType<typeof useHealth>) {
   // A request that never arrived is a different failure from a backend
   // reporting itself degraded, and conflating them sends you debugging the
   // wrong service.
-  if (health.isError) {
+  if (isError) {
     return (
       <Badge tone="error" dot role="status">
         Unreachable
@@ -146,8 +165,8 @@ function overallBadge(health: ReturnType<typeof useHealth>) {
     );
   }
   return (
-    <Badge tone={health.data?.status === "UP" ? "green" : "warning"} dot role="status">
-      {health.data?.status === "UP" ? "Online" : "Degraded"}
+    <Badge tone={status === "UP" ? "green" : "warning"} dot role="status">
+      {status === "UP" ? "Online" : "Degraded"}
     </Badge>
   );
 }

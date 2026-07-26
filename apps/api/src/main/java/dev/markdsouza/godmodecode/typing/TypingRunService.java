@@ -16,11 +16,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TypingRunService {
 
-    /** Either a Run was recorded, or it was refused for exactly one reason. */
-    public sealed interface Outcome {
-        record Recorded(TypingRun run) implements Outcome {}
+    /**
+     * Either a Run was recorded, or it was refused for exactly one reason.
+     *
+     * Not named for the outcome of anything: "outcome" is the word CONTEXT.md
+     * reserves against Verdict, and a Typing Run has no Verdict — it cannot fail,
+     * only be recorded or never have happened (ADR-0006). What varies here is
+     * what became of the submission, so that is what it is called.
+     */
+    public sealed interface Submitted {
+        record Recorded(TypingRun run) implements Submitted {}
 
-        record Refused(RejectionReason reason) implements Outcome {}
+        record Refused(RejectionReason reason) implements Submitted {}
     }
 
     private final IssueRepository issues;
@@ -45,13 +52,13 @@ public class TypingRunService {
      * ever refactored into something that does not.
      */
     @Transactional
-    public Outcome submit(UUID userId, TypingRunSubmission submission) {
+    public Submitted submit(UUID userId, TypingRunSubmission submission) {
         Optional<Issue> issue = issues.findLockedFor(submission.issueId(), userId);
         if (issue.isEmpty()) {
             // Deliberately the same answer for "no such Issue" and "somebody
             // else's Issue": the query is scoped by User, so this method cannot
             // tell them apart and nothing is leaked about ids that exist.
-            return new Outcome.Refused(RejectionReason.NO_SUCH_ISSUE);
+            return new Submitted.Refused(RejectionReason.NO_SUCH_ISSUE);
         }
 
         // The Passage is read from the Issue, never from the submission. A
@@ -66,10 +73,10 @@ public class TypingRunService {
         // rather than reading it itself, which is what keeps every expiry and
         // duration rule testable without waiting for time to pass.
         return switch (Verification.of(Instant.now(), issue.get(), passage, submission)) {
-            case Verification.Rejected rejected -> new Outcome.Refused(rejected.reason());
+            case Verification.Rejected rejected -> new Submitted.Refused(rejected.reason());
             case Verification.Verified verified -> {
                 issues.markConsumed(issue.get().id());
-                yield new Outcome.Recorded(runs.insert(userId, passage, issue.get().id(), verified));
+                yield new Submitted.Recorded(runs.insert(userId, passage, issue.get().id(), verified));
             }
         };
     }

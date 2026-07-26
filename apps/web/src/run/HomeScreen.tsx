@@ -33,7 +33,7 @@ export function HomeScreen({
           How fast can you type?
         </h1>
         <p className="max-w-[56ch] font-body text-md leading-snug text-ink-2">
-          Pick a discipline. The rain falls while you type. Beat your best WPM.
+          Pick a Discipline. The rain falls while you type. Beat your best WPM.
         </p>
       </div>
 

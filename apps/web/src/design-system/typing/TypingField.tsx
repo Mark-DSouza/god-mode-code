@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { type CSSProperties, memo } from "react";
 import { cn } from "../cn.ts";
 import { Glyph, type GlyphState } from "./Glyph.tsx";
 
@@ -39,8 +39,25 @@ const SIZES = {
  * The whole surface is hidden from assistive technology: it is several hundred
  * one-character elements, which is noise to read aloud. The Passage is offered
  * to a screen reader as running text by whoever owns the input.
+ *
+ * <h2>Memoised as well as its glyphs</h2>
+ *
+ * `Glyph` being memoised stops a keystroke reconciling the whole Passage. This
+ * stops something else: the Run screen re-renders ten times a second to move the
+ * elapsed clock, and every one of those renders would otherwise rebuild several
+ * hundred glyph elements for React to compare and discard. Nothing on this
+ * surface changes with the clock, so the tick should not reach it at all.
+ *
+ * `style` is the one prop that can defeat this — an object literal is a new
+ * object each render. Callers that want the memo should pass classes.
  */
-export function TypingField({ text, typed = "", size = "lg", className, style }: TypingFieldProps) {
+export const TypingField = memo(function TypingField({
+  text,
+  typed = "",
+  size = "lg",
+  className,
+  style,
+}: TypingFieldProps) {
   // Split by code point rather than by UTF-16 unit, and split both sides the
   // same way. Passages are printable ASCII today, where the two are identical —
   // but a surface that indexes the target one way and the typed text the other
@@ -82,7 +99,7 @@ export function TypingField({ text, typed = "", size = "lg", className, style }:
       )}
     </div>
   );
-}
+});
 
 function stateOf(expected: string, actual: string | undefined): GlyphState {
   if (actual === undefined) return "untyped";

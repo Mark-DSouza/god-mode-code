@@ -52,16 +52,29 @@ describe("the typing surface", () => {
     expect(screen.getByTestId("typing-field")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("renders the glyph through a memoised component", () => {
-    // A keystroke changes the state of two glyphs and leaves the other few
-    // hundred alone, ten times a second. Without `memo` every one of them
-    // re-renders on every keystroke.
+  it("memoises both the glyph and the surface", () => {
+    // Two different savings. `Glyph` memoised means a keystroke reconciles the
+    // two glyphs whose state changed rather than the whole Passage. `TypingField`
+    // memoised means the Run screen's hundred-millisecond clock tick does not
+    // reach the surface at all — nothing here changes with the time.
     //
-    // This is asserted against the wrapper rather than against the output on
-    // purpose: an unmemoised per-glyph component produces byte-identical DOM,
-    // so there is nothing rendered that could tell the two apart. What can be
-    // checked is that the component is wrapped, and that its props stayed
-    // shallow-comparable — which is the half that gets broken by accident.
+    // Asserted against the wrappers rather than the output, because an
+    // unmemoised component renders byte-identical DOM: there is nothing on the
+    // page that could tell the two apart.
     expect((Glyph as { $$typeof?: symbol }).$$typeof).toBe(Symbol.for("react.memo"));
+    expect((TypingField as { $$typeof?: symbol }).$$typeof).toBe(Symbol.for("react.memo"));
+  });
+
+  it("keeps the glyph's props shallow-comparable, which is what makes the memo work", () => {
+    render(<TypingField text="abc" typed="a" />);
+
+    // The half that gets broken by accident. `memo` compares props shallowly, so
+    // the moment a glyph is handed an object — the whole typed string, a
+    // per-glyph callback, a style literal — every glyph re-renders again and the
+    // memo above becomes decoration. Each glyph's rendered attributes are the
+    // primitives it was given, so this is where that shows.
+    for (const glyph of glyphs()) {
+      expect(glyph.getAttribute("data-state")).toMatch(/^(untyped|correct|wrong)$/);
+    }
   });
 });

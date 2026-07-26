@@ -67,6 +67,12 @@ public class TypingRunController {
                         mediaType = MediaType.APPLICATION_JSON_VALUE,
                         schema = @Schema(implementation = Rejection.class)))
     })
+    // A wildcard because the two documented answers carry different bodies: a
+    // TypingRun on 201, a Rejection on 422. The alternative is to throw for the
+    // refusal and catch it in an @ExceptionHandler, which would buy a tighter
+    // signature by making an expected result into an exception. The response
+    // schemas are not lost — they are declared above and pinned by
+    // OpenApiContractTest against the committed document.
     public ResponseEntity<?> submit(
             @CookieValue(name = RecognitionCookie.NAME, required = false) String recognitionKey,
             @Valid @RequestBody TypingRunSubmission submission) {
@@ -77,9 +83,9 @@ public class TypingRunController {
         }
 
         return switch (runs.submit(user.get().id(), submission)) {
-            case TypingRunService.Outcome.Recorded recorded ->
+            case TypingRunService.Submitted.Recorded recorded ->
                 ResponseEntity.status(HttpStatus.CREATED).body(recorded.run());
-            case TypingRunService.Outcome.Refused refused ->
+            case TypingRunService.Submitted.Refused refused ->
                 ResponseEntity.unprocessableEntity().body(Rejection.of(refused.reason()));
         };
     }

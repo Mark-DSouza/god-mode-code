@@ -1,4 +1,4 @@
-import { type Locator, type Page, expect, test } from "@playwright/test";
+import { type Locator, expect, test } from "@playwright/test";
 
 /**
  * The tracer bullet, through everything at once: a real browser typing a real
@@ -49,10 +49,10 @@ test("a Passage is issued, typed, and verified by the server", async ({ page }) 
   const result = page.getByRole("region", { name: /run result/i });
   await expect(result).toBeVisible({ timeout: 15_000 });
 
-  await expect(statIn(result, page, "Accuracy")).toContainText("100");
-  await expect(statIn(result, page, "Errors")).toContainText("0");
+  await expect(statIn(result, "Accuracy")).toContainText("100");
+  await expect(statIn(result, "Errors")).toContainText("0");
 
-  const speed = Number((await statIn(result, page, "Speed").innerText()).replace(/\D+/g, ""));
+  const speed = Number((await statIn(result, "Speed").innerText()).replace(/\D+/g, ""));
   // Not a fixture: this is what the server measured of a browser genuinely
   // typing at 240 words per minute, so it is asserted as a band rather than a
   // number. Zero would mean the duration never crossed the wire.
@@ -84,6 +84,6 @@ test.describe("pasting", () => {
 });
 
 /** One CRT readout, found by the label underneath it. */
-function statIn(result: Locator, page: Page, label: string): Locator {
+function statIn(result: Locator, label: string): Locator {
   return result.locator(`div:has(> span:text-is("${label}"))`);
 }

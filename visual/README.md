@@ -71,9 +71,14 @@ threshold. Both ends therefore happen inside
 
 That version is pinned in three places, and they have to agree:
 
-- `@playwright/test` in `package.json` / the lockfile
+- `@playwright/test` in `package.json` — an exact version, not a caret range,
+  because a lockfile refresh that moved it would leave the client driving a
+  browser build the baselines were never taken with
 - `IMAGE` in `run-in-ci-image.sh`
 - `container.image` in `.github/workflows/ci.yml`
+
+A CI step checks all three agree, so upgrading Playwright fails loudly until the
+image tag is moved with it — and moving the image means regenerating baselines.
 
 ## Debugging a failure
 

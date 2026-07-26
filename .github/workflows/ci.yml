@@ -36,20 +36,26 @@ jobs:
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'package.json'
-            web:
-              - *shared
+            # Everything the rendered frontend is built out of. Named once
+            # because two jobs are interested in it for different reasons.
+            frontend: &frontend
               - 'apps/web/**'
               - 'packages/**'
               - 'mockups-and-design-system/design_system/**'
+            web:
+              - *shared
+              - *frontend
+              # Not because the web job tests the visual suite — it does not —
+              # but because it owns the repository-wide `prettier --check`, and
+              # a change confined to `visual/` must not slip past it.
+              - 'visual/**'
             # The exact inverse of the `stack` negations below. Where the
             # end-to-end job deliberately ignores stylesheets and tokens because
             # it cannot see them, this one exists to look at them — a token
             # moving is precisely the change it has to run for.
             visual:
               - *shared
-              - 'apps/web/**'
-              - 'packages/**'
-              - 'mockups-and-design-system/design_system/**'
+              - *frontend
               - 'visual/**'
             api:
               - *shared
@@ -140,6 +146,17 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The baselines were taken with the browser build inside this image, and
+      # the client driving it has to be the version that ships with it. A
+      # lockfile refresh that moved Playwright forward would otherwise compare
+      # against images rendered by a browser nobody is running any more, and the
+      # failures would look like design drift.
+      - name: The Playwright client and the image must agree
+        run: |
+          installed=$(node -p "require('@playwright/test/package.json').version")
+          echo "Installed @playwright/test: $installed"
+          grep -q "playwright:v${installed}-noble" .github/workflows/ci.yml
+          grep -q "playwright:v${installed}-noble" visual/run-in-ci-image.sh
       - run: pnpm --filter @gmc/visual typecheck
       - run: pnpm --filter @gmc/visual test
       # Proves the suite can still fail. Runs after the comparison above, so a

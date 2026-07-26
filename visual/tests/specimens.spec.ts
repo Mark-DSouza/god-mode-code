@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { SPECIMEN_NAMES, VIEWPORT_SPECIMENS } from "../../apps/web/src/specimens/names.ts";
-import { settled } from "../fixtures/settle.ts";
+import { openSpecimen } from "../fixtures/specimen.ts";
 
 /**
  * Every reimplemented design system component, against the states its specimen
@@ -19,11 +19,7 @@ import { settled } from "../fixtures/settle.ts";
  */
 for (const name of SPECIMEN_NAMES) {
   test(`the ${name} specimen matches its baseline`, async ({ page }) => {
-    await page.goto(`/specimens.html?specimen=${name}`);
-
-    const box = page.getByTestId(`specimen-${name}`);
-    await expect(box).toBeVisible();
-    await settled(page);
+    const box = await openSpecimen(page, name);
 
     if (VIEWPORT_SPECIMENS.includes(name)) {
       await expect(page).toHaveScreenshot(`${name}.png`);

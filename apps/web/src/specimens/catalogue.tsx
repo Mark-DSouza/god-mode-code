@@ -134,23 +134,28 @@ export const SPECIMENS: Record<SpecimenName, Specimen> = {
     ),
   },
 
+  // The card fills this with EASY/NIGHTMARE, which is the mockup's own
+  // invention — there is no such scale. The states under test are "a value is
+  // selected" and "disabled", and they are the same states whatever the options
+  // say, so this uses the Seniority bands the domain actually has (CONTEXT.md).
   select: {
     width: 700,
     node: (
       <div className="flex flex-wrap items-center gap-3">
         <Select
           label="Seniority"
-          value="hard"
+          value="PRINCIPAL"
           options={[
-            { value: "easy", label: "EASY" },
-            { value: "hard", label: "NIGHTMARE" },
+            { value: "JUNIOR", label: "JUNIOR" },
+            { value: "SENIOR", label: "SENIOR" },
+            { value: "PRINCIPAL", label: "PRINCIPAL" },
           ]}
         />
         <Select
-          label="Disabled"
+          label="Seniority, unavailable"
           disabled
-          value="easy"
-          options={[{ value: "easy", label: "EASY" }]}
+          value="JUNIOR"
+          options={[{ value: "JUNIOR", label: "JUNIOR" }]}
         />
       </div>
     ),
@@ -311,7 +316,10 @@ export const SPECIMENS: Record<SpecimenName, Specimen> = {
     node: (
       <div className="flex items-center gap-4">
         <Avatar initials="YU" size={40} />
-        <Avatar initials="NE" size={28} />
+        {/* Deliberately no `size`. The card's middle tile is the default, and a
+            specimen that passed one would be the only place the default is not
+            under test — which is where a changed default would hide. */}
+        <Avatar initials="NE" />
         <Avatar initials="TR" size={22} glow={false} />
         {/* The header renders this before the Handle arrives. */}
         <Avatar initials="" size={28} glow={false} />
@@ -351,6 +359,11 @@ export const SPECIMENS: Record<SpecimenName, Specimen> = {
     ),
   },
 
+  // The card's copy reads "Short blocks from real repos", which is the model
+  // ADR-0004 supersedes: the Code Discipline is Patterns, solved rather than
+  // transcribed. A baseline is reviewed by eye and then trusted, so committing
+  // the mockup's wording would quietly reinstate a decision that was reversed.
+  // The states — selected and not — are the card's; the words are the domain's.
   "challenge-card": {
     width: 560,
     node: (
@@ -358,11 +371,15 @@ export const SPECIMENS: Record<SpecimenName, Specimen> = {
         <ChallengeCard
           glyph="{ }"
           title="Code"
-          description="Short blocks from real repos"
-          meta="88 blocks"
+          description="Algorithmic Patterns, solved rather than transcribed."
+          meta="88 Patterns"
           selected
         />
-        <ChallengeCard glyph="❝❞" title="Quotes" description="Short attributed lines" />
+        <ChallengeCard
+          glyph="❝❞"
+          title="Quotes"
+          description="Short attributed lines to warm up your fingers."
+        />
       </div>
     ),
   },

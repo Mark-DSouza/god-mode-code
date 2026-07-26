@@ -69,7 +69,7 @@ there is no runtime switch in a deployed bundle and no test-only branch shipped
 to a visitor.
 
 The Run screen's clock gets the same treatment for the same reason, through
-Playwright's fake clock: elapsed seconds and the speed derived from them are the
+Playwright's fake clock: elapsed seconds and the WPM derived from them are the
 largest, most legible numerals on that screen, and a live clock would make them
 the one thing that could never be compared.
 

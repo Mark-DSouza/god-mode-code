@@ -1,5 +1,5 @@
 import type { Challenge, Health, TypingRun, User } from "@gmc/api-client";
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 
 /**
  * The backend, as far as a photograph is concerned.
@@ -17,7 +17,7 @@ import type { Page } from "@playwright/test";
 /**
  * The moment every screen is photographed at.
  *
- * The Run screen reads out elapsed seconds and a speed derived from them, so
+ * The Run screen reads out elapsed seconds and the WPM derived from them, so
  * the clock is installed frozen here and advanced by exact amounts. Without
  * that, the numerals are different in every snapshot and the largest, most
  * legible thing on the screen is the one thing that cannot be compared.
@@ -103,28 +103,28 @@ export interface BackendOptions {
  * photographed in whatever state a failed request leaves it in.
  */
 export async function stubBackend(page: Page, options: BackendOptions = {}): Promise<void> {
+  /**
+   * Answers with a payload from the generated client.
+   *
+   * The cast is the price of `fulfill` wanting a plain JSON object where these
+   * are named contract types. Confined to one place so the types stay visible
+   * at every call site rather than being restated five times.
+   */
+  const answer = (payload: object, status?: number) => (route: Route) =>
+    route.fulfill({ ...(status === undefined ? {} : { status }), json: payload });
+
   // Registered first because Playwright matches routes in reverse: the last
   // handler added is the first consulted, so a catch-all added last would
   // swallow every stub below it.
   await page.route("**/api/**", (route) =>
-    route.fulfill({ status: 500, json: { error: `unstubbed: ${route.request().url()}` } }),
+    answer({ error: `unstubbed: ${route.request().url()}` }, 500)(route),
   );
 
-  await page.route("**/api/health", (route) =>
-    route.fulfill({ json: HEALTHY as unknown as Record<string, unknown> }),
+  await page.route("**/api/health", answer(HEALTHY));
+  await page.route("**/api/users/me", answer(USER));
+  await page.route(
+    "**/api/challenges",
+    options.challengeFails ? answer({ error: "no backend" }, 503) : answer(CHALLENGE),
   );
-
-  await page.route("**/api/users/me", (route) =>
-    route.fulfill({ json: USER as unknown as Record<string, unknown> }),
-  );
-
-  await page.route("**/api/challenges", (route) =>
-    options.challengeFails
-      ? route.fulfill({ status: 503, json: { error: "no backend" } })
-      : route.fulfill({ json: CHALLENGE as unknown as Record<string, unknown> }),
-  );
-
-  await page.route("**/api/typing-runs", (route) =>
-    route.fulfill({ json: RECORDED_RUN as unknown as Record<string, unknown> }),
-  );
+  await page.route("**/api/typing-runs", answer(RECORDED_RUN));
 }

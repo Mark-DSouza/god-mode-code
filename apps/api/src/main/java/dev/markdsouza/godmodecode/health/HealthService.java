@@ -1,5 +1,6 @@
 package dev.markdsouza.godmodecode.health;
 
+import dev.markdsouza.godmodecode.judge.JudgeMonitor;
 import java.sql.Connection;
 import java.sql.SQLException;
 import javax.sql.DataSource;
@@ -25,15 +26,23 @@ public class HealthService {
     private static final int VALIDATION_TIMEOUT_SECONDS = 2;
 
     private final DataSource dataSource;
+    private final JudgeMonitor judge;
     private final String version;
 
-    HealthService(DataSource dataSource, @Value("${gmc.version:unknown}") String version) {
+    HealthService(DataSource dataSource, JudgeMonitor judge, @Value("${gmc.version:unknown}") String version) {
         this.dataSource = dataSource;
+        this.judge = judge;
         this.version = version;
     }
 
     public HealthStatus check() {
-        return databaseReachable() ? HealthStatus.up(version) : HealthStatus.databaseDown(version);
+        // The judge's state is read from the poller rather than probed here. It
+        // sits on a routeless subnet, and this endpoint is hit by the uptime
+        // monitor, the deploy script and the container runtime; opening a socket
+        // to the judge on each of those would make the whole site's health wait
+        // on the one dependency that is allowed to be unwell on its own
+        // (ADR-0005).
+        return HealthStatus.of(databaseReachable(), judge.availability().canJudge(), version);
     }
 
     private boolean databaseReachable() {

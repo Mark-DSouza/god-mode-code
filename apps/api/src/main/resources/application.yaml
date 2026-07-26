@@ -61,6 +61,33 @@ springdoc:
 gmc:
   version: ${GMC_VERSION:0.0.1-SNAPSHOT}
 
+  judge:
+    # The judge's address on the private link. In production this is a fixed
+    # private address that Terraform pins and the deploy script reads from
+    # Parameter Store, so replacing the judge — which any change to its
+    # bootstrap does — never requires redeploying the backend.
+    #
+    # The default is where `scripts/dev.sh` runs it locally.
+    base-url: ${JUDGE_URL:http://localhost:9090}
+
+    # One hop away inside the VPC, so a slow connect is a dead host.
+    connect-timeout: 2s
+
+    # The hard deadline on one judging, derived from the judge's own bounds
+    # rather than picked: 30s waiting for a worker, 10s of wall clock, and a
+    # moment to start the container. See JudgeConfiguration.
+    timeout: 45s
+
+    # Probing and scraping get their own, far shorter deadline. A monitor that
+    # blocks for the judging deadline has stopped being a monitor.
+    poll-timeout: 2s
+    poll-interval: 15s
+
+    # How long a successful probe stays believable. Past this the judge is
+    # reported degraded, because a poller that has stopped running must not read
+    # as good news.
+    stale-after: 60s
+
   recognition:
     # The cookie carrying the Recognition Key is Secure by default: the site is
     # only ever reached over HTTPS through Cloudflare (ADR-0002), and a cookie

@@ -62,6 +62,16 @@ export function App() {
                 value={health.isPending ? "—" : (health.data?.database ?? "?")}
                 tone={health.data?.database === "UP" ? "accent" : "error"}
               />
+              {/* The judge is a dependency of exactly one Discipline, so it gets
+                  its own readout rather than being folded into the badge above.
+                  A degraded judge means Patterns are unavailable and everything
+                  else is fine — which is a sentence the overall status cannot
+                  say, and the reason the badge stays green (ADR-0005). */}
+              <Readout
+                label="Judge"
+                value={health.isPending ? "—" : (health.data?.judge ?? "?")}
+                tone={health.data?.judge === "UP" ? "accent" : "error"}
+              />
               <Readout
                 label="Version"
                 value={health.isPending ? "—" : (health.data?.version ?? "?")}

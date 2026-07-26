@@ -88,10 +88,12 @@ resource "aws_budgets_budget_action" "stop_compute" {
       action_sub_type = "STOP_EC2_INSTANCES"
       region          = var.region
       # Listed explicitly rather than by tag, because this API takes instance
-      # ids. The judge's instance joins this list when it lands (issue #13) —
-      # ADR-0001 describes the halt as stopping both instances, and an instance
-      # missing from here is one the halt cannot reach.
-      instance_ids = [aws_instance.app.id]
+      # ids. Both instances, because ADR-0001 describes the halt as stopping
+      # compute and an instance missing from here is one the halt cannot reach.
+      # The judge's is the one that matters most: it is the box running
+      # untrusted code, so it is the likeliest source of the mining workload
+      # this halt exists to stop.
+      instance_ids = [aws_instance.app.id, aws_instance.judge.id]
     }
   }
 

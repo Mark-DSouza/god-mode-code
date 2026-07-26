@@ -7,6 +7,19 @@ spring:
 gmc:
   version: test
 
+  judge:
+    # No judge runs during the suite, and that is the point: these tests are
+    # where "the judge being down degrades the Code Discipline and nothing else"
+    # is actually exercised. Port 1 is reserved and refuses immediately, so the
+    # probe fails fast instead of waiting out a connect timeout on a port
+    # something else might happen to be listening on.
+    base-url: http://127.0.0.1:1
+    connect-timeout: 250ms
+    poll-timeout: 250ms
+    # One poll at startup and effectively none after it. The tests that care
+    # about polling drive the monitor directly rather than waiting for a tick.
+    poll-interval: 1h
+
 logging:
   level:
     org.testcontainers: INFO

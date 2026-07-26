@@ -54,7 +54,7 @@ describe("startErrorReporting", () => {
     });
 
     const options = init.mock.calls[0]?.[0];
-    // Players are recognised by a cookie rather than an account (ADR-0007).
+    // A User is recognised by a cookie rather than an account (ADR-0007).
     // Attaching addresses and headers to every error would turn an error
     // tracker into a store of personal data, for no diagnostic gain.
     expect(options).toMatchObject({ sendDefaultPii: false, tracesSampleRate: 0 });

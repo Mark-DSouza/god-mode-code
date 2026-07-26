@@ -48,7 +48,7 @@ export function startErrorReporting(config: ErrorReportingConfig): boolean {
     // disagree, Sentry holds readable maps it will never apply to the stack
     // traces they belong to — which looks exactly like not uploading them.
     release: config.release,
-    // No addresses, no headers, no cookies. Players are recognised by a cookie
+    // No addresses, no headers, no cookies. A User is recognised by a cookie
     // rather than an account (ADR-0007), and there is nothing an IP address
     // would tell us about a rendering failure that the stack trace does not.
     sendDefaultPii: false,

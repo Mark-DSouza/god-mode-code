@@ -56,6 +56,17 @@ resource "aws_ssm_parameter" "tunnel_token" {
 #
 # `ignore_changes` is what stops the next `apply` from reverting that write back
 # to the placeholder and breaking every subsequent image pull.
+resource "aws_ssm_parameter" "registry_token" {
+  name        = "${local.parameter_prefix}/registry/token"
+  description = "Read-only GHCR token; value is set out of band, never by Terraform"
+  type        = "SecureString"
+  value       = "placeholder-set-out-of-band"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Telemetry
 # ---------------------------------------------------------------------------
@@ -96,7 +107,7 @@ resource "aws_ssm_parameter" "grafana_loki_username" {
 }
 
 # The one part that is a credential, and the same out-of-band pattern as the
-# registry token below: Terraform creates the parameter, a human writes the
+# registry token above: Terraform creates the parameter, a human writes the
 # value once, and `ignore_changes` stops the next apply reverting it.
 #
 #   aws ssm put-parameter --overwrite --type SecureString \
@@ -107,17 +118,6 @@ resource "aws_ssm_parameter" "grafana_loki_username" {
 resource "aws_ssm_parameter" "grafana_token" {
   name        = "${local.parameter_prefix}/observability/token"
   description = "Grafana Cloud access policy token; value is set out of band, never by Terraform"
-  type        = "SecureString"
-  value       = "placeholder-set-out-of-band"
-
-  lifecycle {
-    ignore_changes = [value]
-  }
-}
-
-resource "aws_ssm_parameter" "registry_token" {
-  name        = "${local.parameter_prefix}/registry/token"
-  description = "Read-only GHCR token; value is set out of band, never by Terraform"
   type        = "SecureString"
   value       = "placeholder-set-out-of-band"
 

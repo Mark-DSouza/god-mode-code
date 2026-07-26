@@ -32,8 +32,8 @@ describe("ErrorBoundary", () => {
     );
 
     // A white screen is the worst failure mode a single-page application has:
-    // nothing is on screen, nothing is in a server log, and the player has no
-    // idea whether it was them or us.
+    // nothing is on screen, nothing is in a server log, and whoever hit it has
+    // no idea whether it was them or us.
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /reload/i })).toBeInTheDocument();
   });

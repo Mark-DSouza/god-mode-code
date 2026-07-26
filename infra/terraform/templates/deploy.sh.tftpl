@@ -134,10 +134,25 @@ ALLOY_CONFIG
     return 0
   fi
 
+  # Pulled before anything is removed, and checked explicitly rather than left
+  # to `set -e`. Calling a function from a condition disables errexit for
+  # everything it goes on to do, so a failed pull here would otherwise fall
+  # straight through and tear down a collector that was working perfectly in
+  # order to start an image that is not on disk.
+  log "Pulling ${collector_image}"
+  if ! docker pull "${collector_image}"; then
+    log "WARNING: could not pull the collector image; leaving the running one alone"
+    return 0
+  fi
+
   log "Starting the collector"
-  docker pull "${collector_image}"
   docker rm --force gmc-alloy >/dev/null 2>&1 || true
-  docker run --detach \
+
+  # Three mounts and no container socket. The usual way to collect container
+  # logs mounts one, and a collector holding it is root on this host for
+  # whoever reaches the collector; both containers log to the journal instead
+  # and this reads that. All three are read-only.
+  if ! docker run --detach \
     --name gmc-alloy \
     --restart unless-stopped \
     --network gmc \
@@ -152,15 +167,18 @@ ALLOY_CONFIG
     --env JUDGE_METRICS_ADDRESS="${judge_metrics_address}" \
     --volume /opt/gmc/alloy/config.alloy:/etc/alloy/config.alloy:ro \
     --volume gmc-alloy-data:/var/lib/alloy/data \
-    `# Read-only, and no container socket. The usual way to collect container` \
-    `# logs mounts one, which is root on this host for whoever reaches it;` \
-    `# both containers log to the journal instead and this reads that.` \
     --volume /var/log/journal:/var/log/journal:ro \
     --volume /etc/machine-id:/etc/machine-id:ro \
     --volume /:/host/root:ro,rslave \
     "${collector_image}" \
-    run /etc/alloy/config.alloy --storage.path=/var/lib/alloy/data
+    run /etc/alloy/config.alloy --storage.path=/var/lib/alloy/data; then
+    log "WARNING: the collector did not start"
+    return 0
+  fi
 
+  # Written only once something is actually running. Recording it regardless
+  # would make the next deploy believe the collector is current and skip it,
+  # turning one failed start into a permanently unobserved host.
   printf '%s' "$FINGERPRINT" >/opt/gmc/alloy-fingerprint
 }
 

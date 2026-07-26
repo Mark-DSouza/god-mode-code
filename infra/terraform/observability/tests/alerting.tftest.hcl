@@ -57,8 +57,8 @@ run "the_rules_cover_what_cloudwatch_cannot_see" {
 
   assert {
     # A quiet judge is not a broken judge. Alerting on absent series would page
-    # somebody every night the site has no players, which is how an alert
-    # channel gets muted.
+    # somebody every night nobody plays, which is how an alert channel gets
+    # muted.
     condition     = grafana_rule_group.preceding_an_outage.rule[0].no_data_state == "OK"
     error_message = "The judge rule must not alert when there are no Judgings at all."
   }
@@ -83,8 +83,21 @@ run "the_dashboard_is_the_one_in_the_repository" {
   command = plan
 
   assert {
-    condition     = strcontains(grafana_dashboard.gmc.config_json, "\"uid\": \"god-mode-code\"")
+    # Decoded rather than pattern-matched: the document is re-encoded on the
+    # way through, so asserting on its whitespace would test the encoder.
+    condition     = jsondecode(grafana_dashboard.gmc.config_json).uid == "god-mode-code"
     error_message = "The dashboard must be applied from the checked-in JSON, not assembled here."
+  }
+
+  assert {
+    # Every panel points at `${datasource}`. With no selection pinned, that
+    # variable resolves to whichever datasource the stack calls default, and
+    # the dashboard silently reads from the wrong one — or from nothing.
+    condition = one([
+      for variable in jsondecode(grafana_dashboard.gmc.config_json).templating.list :
+      variable.current.value if variable.name == "datasource"
+    ]) == "test-datasource"
+    error_message = "The dashboard must be pinned to the datasource the collector actually writes to."
   }
 
   assert {

@@ -156,7 +156,7 @@ prometheus.scrape "host" {
 // bootstrap. One source, no socket, and nothing to remember to wire up when
 // something new starts running here.
 loki.source.journal "host" {
-  forward_to = [loki.process.containers.receiver]
+  forward_to = [loki.process.journal.receiver]
 
   // Only what arrived since the collector last ran, so a restart does not
   // re-ship days of history into a 50GB monthly allowance.
@@ -187,7 +187,7 @@ discovery.relabel "journal" {
   }
 }
 
-loki.process "containers" {
+loki.process "journal" {
   forward_to = [loki.write.grafana_cloud.receiver]
 
   // The backend writes ECS JSON in production. Reading the level out of it

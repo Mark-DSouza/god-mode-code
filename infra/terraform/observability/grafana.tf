@@ -9,16 +9,46 @@ resource "grafana_folder" "gmc" {
   title = "god-mode-code"
 }
 
-resource "grafana_dashboard" "gmc" {
-  folder = grafana_folder.gmc.uid
-
+locals {
   # Read from a file rather than assembled in HCL. It is a large JSON document
   # that Grafana itself can export and re-import, and expressing it as
   # interpolated Terraform would make it unreadable in both places.
-  config_json = file("${path.module}/../../observability/grafana/dashboards/god-mode-code.json")
+  dashboard = jsondecode(file("${path.module}/../../observability/grafana/dashboards/god-mode-code.json"))
 
-  # The dashboard names its datasource through a variable, and this fills it in
-  # so nobody has to pick one from a dropdown on every visit.
+  # Both rules reduce their query the same way before thresholding it: an
+  # alert needs one number, and a range query is a series. Written once
+  # because a difference between the two here would be silent — the rules
+  # would still fire, just on a different statistic than the one intended.
+  reduce_to_last = jsonencode({
+    refId      = "B"
+    type       = "reduce"
+    expression = "A"
+    reducer    = "last"
+  })
+
+  # Every panel points at `${datasource}`, which Grafana resolves from the
+  # dashboard's own variable. Left with no selection, that variable falls back
+  # to whichever datasource the stack happens to call default — so the one this
+  # collector actually writes to is pinned here instead of hoped for.
+  dashboard_with_datasource = merge(local.dashboard, {
+    templating = {
+      list = [for variable in local.dashboard.templating.list :
+        variable.name == "datasource" ? merge(variable, {
+          current = { text = "Metrics", value = var.prometheus_datasource_uid }
+        }) : variable
+      ]
+    }
+  })
+}
+
+resource "grafana_dashboard" "gmc" {
+  folder      = grafana_folder.gmc.uid
+  config_json = jsonencode(local.dashboard_with_datasource)
+
+  # This dashboard's identity is its uid, which the file declares. Without
+  # `overwrite`, applying over a dashboard somebody edited in the browser fails
+  # on a version conflict — and the file is the source of truth, so the edit is
+  # the thing that should lose.
   overwrite = true
 }
 
@@ -48,8 +78,8 @@ resource "grafana_rule_group" "preceding_an_outage" {
     condition = "C"
     # Ten minutes of sustained failure, not one bad Judging. Untrusted code
     # times out as a matter of course — that is the judge working — so the
-    # signal is the *rate*, and a short window would alert on one player
-    # writing an infinite loop.
+    # signal is the *rate*, and a short window would alert on one submitted
+    # source containing an infinite loop.
     for = "10m"
 
     annotations = {
@@ -91,12 +121,7 @@ resource "grafana_rule_group" "preceding_an_outage" {
         to   = 0
       }
 
-      model = jsonencode({
-        refId      = "B"
-        type       = "reduce"
-        expression = "A"
-        reducer    = "last"
-      })
+      model = local.reduce_to_last
     }
 
     data {
@@ -171,12 +196,7 @@ resource "grafana_rule_group" "preceding_an_outage" {
         to   = 0
       }
 
-      model = jsonencode({
-        refId      = "B"
-        type       = "reduce"
-        expression = "A"
-        reducer    = "last"
-      })
+      model = local.reduce_to_last
     }
 
     data {

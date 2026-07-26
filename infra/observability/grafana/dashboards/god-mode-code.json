@@ -79,8 +79,8 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Run submissions",
-      "description": "Runs arriving at the backend. Empty until the Typing Run endpoint lands (issue #7).",
+      "title": "Runs recorded",
+      "description": "Runs the backend accepted and recorded. Empty until the Typing Run endpoint lands (issue #7).",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
       "fieldConfig": {
@@ -98,7 +98,7 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Run rejections",
+      "title": "Runs rejected",
       "description": "Runs the backend refused — a failed integrity check, a spent Issue, a malformed body (ADR-0003). A rejection rate that climbs without traffic climbing is somebody probing.",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
@@ -146,7 +146,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Judging duration",
-      "description": "Mean wall-clock time inside the sandbox. The judge caps each execution, so a rise here without a rise in timeouts means submissions are getting slower rather than the host getting busier.",
+      "description": "Mean wall-clock time inside the sandbox. The judge caps each execution, so a rise here without a rise in timeouts means the source being judged is getting slower rather than the host getting busier.",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 19 },
       "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
@@ -185,7 +185,7 @@
       "id": 12,
       "type": "timeseries",
       "title": "Database connections",
-      "description": "The pool is capped at ten. Active climbing to that ceiling while pending is non-zero is connection starvation, which surfaces to a player as a request that hangs rather than one that fails.",
+      "description": "The pool is capped at ten. Active climbing to that ceiling while pending is non-zero is connection starvation, which surfaces as a request that hangs rather than one that fails.",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 28 },
       "targets": [

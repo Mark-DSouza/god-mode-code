@@ -14,8 +14,8 @@ interface ErrorBoundaryState {
  * The last thing between a render failure and a white screen.
  *
  * A blank page is the worst failure mode a single-page application has: nothing
- * is on screen, nothing reaches a server log, and the player cannot tell
- * whether it was them or us. This puts something on screen and, more
+ * is on screen, nothing reaches a server log, and whoever is looking at it
+ * cannot tell whether it was them or us. This puts something on screen and, more
  * importantly, tells us it happened.
  *
  * Written as a class because React offers no hook for this — `componentDidCatch`
@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           </p>
           {/* A full reload rather than a state reset: whatever invariant the
               render tore is still torn, and resetting the boundary would drop
-              the player straight back into it. */}
+              them straight back into it. */}
           <Button onClick={() => window.location.reload()}>Reload</Button>
         </Card>
       </div>

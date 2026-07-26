@@ -78,6 +78,29 @@ run "the_backend_ships_logs_a_machine_can_read" {
     condition     = strcontains(aws_ssm_document.deploy.content, "--log-driver journald")
     error_message = "Containers must log to the journal; it is the only source the collector reads."
   }
+
+  assert {
+    # The deploy makes the journal persistent, not the bootstrap. Amazon Linux
+    # keeps it in memory, so without this the collector mounts an empty
+    # directory the container runtime invented and reads nothing.
+    condition     = strcontains(aws_ssm_document.deploy.content, "install -d -m 2755 /var/log/journal")
+    error_message = "Nothing creates /var/log/journal, so the collector would read an empty directory."
+  }
+
+  assert {
+    # It has to stay out of `user_data`: that is the instance's own definition,
+    # and `user_data_replace_on_change` turns any edit to it into a rebuild of
+    # the host — an outage, to create one directory.
+    condition     = !strcontains(aws_instance.app.user_data, "/var/log/journal")
+    error_message = "Journal setup has moved back into the bootstrap, where editing it replaces the instance."
+  }
+
+  assert {
+    # Guards the guard. The assertion above is a negative, and an empty or
+    # unknown `user_data` would satisfy it while proving nothing.
+    condition     = strcontains(aws_instance.app.user_data, "Installing cloudflared")
+    error_message = "user_data is not readable at plan time, so the assertion above proves nothing."
+  }
 }
 
 run "the_collector_is_delivered_by_the_deploy" {

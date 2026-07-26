@@ -50,6 +50,47 @@ get_param "$PREFIX/registry/token" |
   docker login ${registry} --username oauth2 --password-stdin
 
 # ---------------------------------------------------------------------------
+# The journal, which everything else here logs into.
+# ---------------------------------------------------------------------------
+
+# Amazon Linux keeps the journal in memory. That loses it on every reboot and,
+# more to the point, means /var/log/journal does not exist — so the collector
+# would mount an empty directory the container runtime created for it and read
+# nothing, quietly (ADR-0008).
+#
+# This belongs in the bootstrap by the division that file describes: it does not
+# change between deploys. It is here anyway, because the bootstrap script is
+# `user_data` and `user_data_replace_on_change` means editing it *replaces the
+# instance* — a full rebuild, and a site down until the next deploy, to create
+# one directory. Running three idempotent commands on every deploy is the
+# cheaper of the two mistakes.
+#
+# Guarded step by step rather than left to `set -e`: this function is called
+# from a condition, which disables errexit for everything inside it.
+ensure_persistent_journal() {
+  # Already persistent. Restarting journald on every deploy would drop a few
+  # log lines each time for no reason.
+  if [ -d /var/log/journal ]; then
+    return 0
+  fi
+
+  log "Making the journal persistent"
+  install -d -m 2755 /var/log/journal || return 1
+  systemd-tmpfiles --create --prefix /var/log/journal || return 1
+  # journald only starts writing to disk once it is told to look again.
+  systemctl restart systemd-journald || return 1
+  # Moves what is already in memory across, so the switch loses nothing.
+  journalctl --flush || true
+}
+
+if ! ensure_persistent_journal; then
+  # Not fatal. A volatile journal still serves `docker logs` and still feeds the
+  # collector until the next reboot; refusing to deploy over it would be
+  # monitoring taking the site down, which is the trade this whole file avoids.
+  log "WARNING: the journal is still volatile; logs will not survive a reboot"
+fi
+
+# ---------------------------------------------------------------------------
 # Pull everything first. Nothing is stopped until every image is on disk.
 # ---------------------------------------------------------------------------
 

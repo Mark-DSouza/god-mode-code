@@ -25,17 +25,6 @@ echo "==> Installing the container runtime"
 dnf install -y docker
 systemctl enable --now docker
 
-echo "==> Making the journal persistent"
-# Amazon Linux keeps the journal in memory, which means it is lost on every
-# reboot and, more to the point, that /var/log/journal does not exist for the
-# collector to read. Everything on this host logs to the journal — both
-# containers, the tunnel, this script — so this directory is the single place
-# the collector has to look (ADR-0008).
-install -d -m 2755 /var/log/journal
-systemd-tmpfiles --create --prefix /var/log/journal
-systemctl restart systemd-journald
-journalctl --flush
-
 echo "==> Installing cloudflared"
 # Straight from Cloudflare's own repository rather than a third-party mirror.
 # This daemon is the only thing on the box that terminates public traffic.

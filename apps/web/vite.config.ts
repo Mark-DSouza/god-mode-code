@@ -1,12 +1,43 @@
 import { fileURLToPath } from "node:url";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
+// Only continuous integration holds the upload token, so this is off for every
+// local build and for anyone's fork. A minified stack trace is a poor error
+// report, but a build that fails because a contributor has no Sentry account is
+// worse.
+const uploadSourceMaps = Boolean(process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_PROJECT);
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    ...(uploadSourceMaps
+      ? [
+          sentryVitePlugin({
+            org: process.env.SENTRY_ORG,
+            project: process.env.SENTRY_PROJECT,
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            // The same commit the bundle reports itself as. If these two ever
+            // disagree, Sentry holds readable maps it will never apply to the
+            // stack traces they belong to — which looks exactly like not having
+            // uploaded them at all.
+            release: { name: process.env.VITE_COMMIT_SHA },
+            sourcemaps: {
+              // Uploaded, then removed from the build output. Serving them
+              // would publish the entire source of the application to every
+              // visitor, which is a decision worth making deliberately rather
+              // than by leaving a default alone.
+              filesToDeleteAfterUpload: ["./dist/**/*.map"],
+            },
+          }),
+        ]
+      : []),
+  ],
   server: {
     port: 5173,
     // The token layer imports the shipped design system, which lives outside
@@ -25,7 +56,10 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    sourcemap: true,
+    // `hidden` rather than `true`: the maps are still generated, so they can be
+    // uploaded and stack traces stay readable, but no `sourceMappingURL`
+    // comment points a browser at them.
+    sourcemap: "hidden",
     // Never inline fonts. Vite base64s any asset under 4KB into the stylesheet,
     // which catches the small `latin-ext` subsets — and an inlined @font-face
     // src defeats its own `unicode-range`, so every visitor downloads glyphs

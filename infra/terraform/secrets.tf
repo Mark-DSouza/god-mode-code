@@ -66,3 +66,62 @@ resource "aws_ssm_parameter" "registry_token" {
     ignore_changes = [value]
   }
 }
+
+# ---------------------------------------------------------------------------
+# Telemetry
+# ---------------------------------------------------------------------------
+
+# Grafana Cloud's endpoints and instance identifiers. Not secrets — they are
+# printed on the stack's own configuration page — but they are account-specific,
+# so they arrive as variables rather than being guessed at here.
+#
+# Empty is a supported state: the deploy leaves the collector alone when there
+# is nothing to ship to, so the stack applies and the site runs before anybody
+# has signed up for anything (ADR-0008).
+resource "aws_ssm_parameter" "grafana_prometheus_url" {
+  name        = "${local.parameter_prefix}/observability/prometheus-url"
+  description = "Grafana Cloud Prometheus remote-write endpoint"
+  type        = "String"
+  value       = var.grafana_prometheus_url != "" ? var.grafana_prometheus_url : "unset"
+}
+
+resource "aws_ssm_parameter" "grafana_prometheus_username" {
+  name        = "${local.parameter_prefix}/observability/prometheus-username"
+  description = "Grafana Cloud Prometheus instance id"
+  type        = "String"
+  value       = var.grafana_prometheus_username != "" ? var.grafana_prometheus_username : "unset"
+}
+
+resource "aws_ssm_parameter" "grafana_loki_url" {
+  name        = "${local.parameter_prefix}/observability/loki-url"
+  description = "Grafana Cloud Loki push endpoint"
+  type        = "String"
+  value       = var.grafana_loki_url != "" ? var.grafana_loki_url : "unset"
+}
+
+resource "aws_ssm_parameter" "grafana_loki_username" {
+  name        = "${local.parameter_prefix}/observability/loki-username"
+  description = "Grafana Cloud Loki instance id"
+  type        = "String"
+  value       = var.grafana_loki_username != "" ? var.grafana_loki_username : "unset"
+}
+
+# The one part that is a credential, and the same out-of-band pattern as the
+# registry token above: Terraform creates the parameter, a human writes the
+# value once, and `ignore_changes` stops the next apply reverting it.
+#
+#   aws ssm put-parameter --overwrite --type SecureString \
+#     --name /gmc/prod/observability/token --value "$GRAFANA_CLOUD_TOKEN"
+#
+# Until that happens the value is the placeholder, and the deploy recognises it
+# and declines to start a collector that could only fail to authenticate.
+resource "aws_ssm_parameter" "grafana_token" {
+  name        = "${local.parameter_prefix}/observability/token"
+  description = "Grafana Cloud access policy token; value is set out of band, never by Terraform"
+  type        = "SecureString"
+  value       = "placeholder-set-out-of-band"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}

@@ -31,6 +31,15 @@ mock_provider "aws" {
       arn = "arn:aws:iam::123456789012:role/mock"
     }
   }
+
+  # Same reason, for the topic the alarms publish to: the alarms and the email
+  # subscription both take an ARN, and an arbitrary mocked string is rejected as
+  # malformed on `apply` before any assertion runs.
+  mock_resource "aws_sns_topic" {
+    defaults = {
+      arn = "arn:aws:sns:ap-south-1:123456789012:mock"
+    }
+  }
 }
 
 mock_provider "cloudflare" {}

@@ -50,6 +50,47 @@ get_param "$PREFIX/registry/token" |
   docker login ${registry} --username oauth2 --password-stdin
 
 # ---------------------------------------------------------------------------
+# The journal, which everything else here logs into.
+# ---------------------------------------------------------------------------
+
+# Amazon Linux keeps the journal in memory. That loses it on every reboot and,
+# more to the point, means /var/log/journal does not exist — so the collector
+# would mount an empty directory the container runtime created for it and read
+# nothing, quietly (ADR-0008).
+#
+# This belongs in the bootstrap by the division that file describes: it does not
+# change between deploys. It is here anyway, because the bootstrap script is
+# `user_data` and `user_data_replace_on_change` means editing it *replaces the
+# instance* — a full rebuild, and a site down until the next deploy, to create
+# one directory. Running three idempotent commands on every deploy is the
+# cheaper of the two mistakes.
+#
+# Guarded step by step rather than left to `set -e`: this function is called
+# from a condition, which disables errexit for everything inside it.
+ensure_persistent_journal() {
+  # Already persistent. Restarting journald on every deploy would drop a few
+  # log lines each time for no reason.
+  if [ -d /var/log/journal ]; then
+    return 0
+  fi
+
+  log "Making the journal persistent"
+  install -d -m 2755 /var/log/journal || return 1
+  systemd-tmpfiles --create --prefix /var/log/journal || return 1
+  # journald only starts writing to disk once it is told to look again.
+  systemctl restart systemd-journald || return 1
+  # Moves what is already in memory across, so the switch loses nothing.
+  journalctl --flush || true
+}
+
+if ! ensure_persistent_journal; then
+  # Not fatal. A volatile journal still serves `docker logs` and still feeds the
+  # collector until the next reboot; refusing to deploy over it would be
+  # monitoring taking the site down, which is the trade this whole file avoids.
+  log "WARNING: the journal is still volatile; logs will not survive a reboot"
+fi
+
+# ---------------------------------------------------------------------------
 # Pull everything first. Nothing is stopped until every image is on disk.
 # ---------------------------------------------------------------------------
 
@@ -77,6 +118,7 @@ if [ "$DEPLOYED_WEB" != "$WEB_IMAGE" ] || [ -z "$WEB_RUNNING" ]; then
     --name gmc-web \
     --restart unless-stopped \
     --network gmc \
+    --log-driver journald \
     --publish 127.0.0.1:80:80 \
     --env CADDY_PORT=80 \
     --env API_UPSTREAM=api:8080 \
@@ -85,6 +127,105 @@ if [ "$DEPLOYED_WEB" != "$WEB_IMAGE" ] || [ -z "$WEB_RUNNING" ]; then
   printf '%s' "$WEB_IMAGE" >/opt/gmc/web-image
 else
   log "Reverse proxy unchanged; leaving it running"
+fi
+
+# ---------------------------------------------------------------------------
+# The collector.
+# ---------------------------------------------------------------------------
+
+# Refreshed before the backend is replaced, so the restart it is about to
+# perform is itself observed. Nothing in this section is allowed to fail the
+# deploy: monitoring that can take the site down is worse than monitoring that
+# is briefly missing.
+refresh_collector() {
+  install -d -m 0750 /opt/gmc/alloy
+
+  # The configuration is a file in the repository, rendered into this document
+  # by Terraform. It arrives with the deploy for the same reason the images do:
+  # it changes with the application, and a copy edited on the host is a copy
+  # that disagrees with the one everybody reads.
+  cat >/opt/gmc/alloy/config.alloy <<'ALLOY_CONFIG'
+${alloy_config}
+ALLOY_CONFIG
+
+  PROMETHEUS_URL="$(get_param "$PREFIX/observability/prometheus-url" 2>/dev/null || echo unset)"
+  PROMETHEUS_USERNAME="$(get_param "$PREFIX/observability/prometheus-username" 2>/dev/null || echo unset)"
+  LOKI_URL="$(get_param "$PREFIX/observability/loki-url" 2>/dev/null || echo unset)"
+  LOKI_USERNAME="$(get_param "$PREFIX/observability/loki-username" 2>/dev/null || echo unset)"
+  GRAFANA_TOKEN="$(get_param "$PREFIX/observability/token" 2>/dev/null || echo unset)"
+
+  # Terraform creates the token with a placeholder and a human writes the real
+  # value once. Starting a collector against the placeholder would produce a
+  # container that retries an authentication failure forever, which is a worse
+  # signal than no collector at all.
+  if [ "$GRAFANA_TOKEN" = "placeholder-set-out-of-band" ] || [ "$GRAFANA_TOKEN" = "unset" ] ||
+    [ "$PROMETHEUS_URL" = "unset" ] || [ "$LOKI_URL" = "unset" ]; then
+    log "Telemetry is not configured; skipping the collector"
+    return 0
+  fi
+
+  # Replaced only when the configuration or the image changed, so a routine
+  # backend deploy does not restart the thing watching it.
+  FINGERPRINT="$(sha256sum /opt/gmc/alloy/config.alloy | cut -d' ' -f1)-${collector_image}"
+  DEPLOYED="$(cat /opt/gmc/alloy-fingerprint 2>/dev/null || true)"
+  RUNNING="$(docker ps --quiet --filter name=^/gmc-alloy$)"
+
+  if [ "$DEPLOYED" = "$FINGERPRINT" ] && [ -n "$RUNNING" ]; then
+    log "Collector unchanged; leaving it running"
+    return 0
+  fi
+
+  # Pulled before anything is removed, and checked explicitly rather than left
+  # to `set -e`. Calling a function from a condition disables errexit for
+  # everything it goes on to do, so a failed pull here would otherwise fall
+  # straight through and tear down a collector that was working perfectly in
+  # order to start an image that is not on disk.
+  log "Pulling ${collector_image}"
+  if ! docker pull "${collector_image}"; then
+    log "WARNING: could not pull the collector image; leaving the running one alone"
+    return 0
+  fi
+
+  log "Starting the collector"
+  docker rm --force gmc-alloy >/dev/null 2>&1 || true
+
+  # Three mounts and no container socket. The usual way to collect container
+  # logs mounts one, and a collector holding it is root on this host for
+  # whoever reaches the collector; both containers log to the journal instead
+  # and this reads that. All three are read-only.
+  if ! docker run --detach \
+    --name gmc-alloy \
+    --restart unless-stopped \
+    --network gmc \
+    --memory 200m \
+    --log-driver journald \
+    --env GRAFANA_PROMETHEUS_URL="$PROMETHEUS_URL" \
+    --env GRAFANA_PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" \
+    --env GRAFANA_LOKI_URL="$LOKI_URL" \
+    --env GRAFANA_LOKI_USERNAME="$LOKI_USERNAME" \
+    --env GRAFANA_TOKEN="$GRAFANA_TOKEN" \
+    --env GMC_ENVIRONMENT="${environment}" \
+    --volume /opt/gmc/alloy/config.alloy:/etc/alloy/config.alloy:ro \
+    --volume gmc-alloy-data:/var/lib/alloy/data \
+    --volume /var/log/journal:/var/log/journal:ro \
+    --volume /etc/machine-id:/etc/machine-id:ro \
+    --volume /:/host/root:ro,rslave \
+    "${collector_image}" \
+    run /etc/alloy/config.alloy --storage.path=/var/lib/alloy/data; then
+    log "WARNING: the collector did not start"
+    return 0
+  fi
+
+  # Written only once something is actually running. Recording it regardless
+  # would make the next deploy believe the collector is current and skip it,
+  # turning one failed start into a permanently unobserved host.
+  printf '%s' "$FINGERPRINT" >/opt/gmc/alloy-fingerprint
+}
+
+if ! refresh_collector; then
+  # Loud, and then on with the deploy. This host being unobserved for one
+  # release is a problem; refusing to ship because of it is a bigger one.
+  log "WARNING: the collector could not be refreshed; continuing without it"
 fi
 
 # ---------------------------------------------------------------------------
@@ -106,11 +247,14 @@ start_api() {
     --network gmc \
     --network-alias api \
     --memory 900m \
+    --log-driver journald \
     --env DATABASE_URL="$DB_URL" \
     --env DATABASE_USER="$DB_USER" \
     --env DATABASE_PASSWORD="$DB_PASSWORD" \
     --env JUDGE_URL="$JUDGE_URL" \
     --env GMC_VERSION="$1" \
+    --env GMC_ENVIRONMENT="${environment}" \
+    --env GMC_LOG_FORMAT=ecs \
     "$1"
 }
 

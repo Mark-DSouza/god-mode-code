@@ -19,7 +19,8 @@ cloudflare_account_id = "..."
 cloudflare_api_token = "..."
 
 # Where billing alerts go. Somewhere actually read — an alert nobody sees is
-# indistinguishable from no alert.
+# indistinguishable from no alert. Infrastructure alarms go here too unless
+# `alarm_email` is set separately.
 budget_notification_email = "you@example.com"
 
 # The judge's machine image, from `docs/runbooks/judge-host.md`.
@@ -29,3 +30,14 @@ budget_notification_email = "you@example.com"
 # pull an execution image or fetch its own binary at first boot. Everything it
 # will ever run has to be on the disk before it boots (ADR-0005).
 judge_ami_id = "ami-..."
+
+# Grafana Cloud's endpoints, from the stack's own page. These are not secrets —
+# the token is, and it is written to Parameter Store out of band, exactly like
+# the registry token (see infra/README.md).
+#
+# Leaving them unset is a supported state: the stack applies, the site runs, and
+# the deploy declines to start a collector that would have nowhere to ship to.
+grafana_prometheus_url      = ""
+grafana_prometheus_username = ""
+grafana_loki_url            = ""
+grafana_loki_username       = ""

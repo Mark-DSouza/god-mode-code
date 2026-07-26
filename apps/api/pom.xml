@@ -48,11 +48,15 @@
     </dependency>
 
     <!-- Backs the /actuator/prometheus endpoint the application config already
-         exposes. It is what makes scraping the judge worth doing: the judge has
-         no egress and cannot ship telemetry anywhere itself, so the backend
-         pulls its metrics across the private link and re-exposes them here,
-         which is the only route they have to Grafana Cloud (ADR-0005,
-         ADR-0008). -->
+         exposes — and it is the dependency that makes the endpoint *exist*:
+         without a registry on the classpath actuator serves a 404 while the
+         configuration listing it still looks correct, which is why
+         MetricsEndpointTest asserts the exposition rather than the setting.
+
+         It is also what makes scraping the judge worth doing: the judge has no
+         egress and cannot ship telemetry anywhere itself, so the backend pulls
+         its metrics across the private link and re-exposes them here, which is
+         the only route they have to Grafana Cloud (ADR-0005, ADR-0008). -->
     <dependency>
       <groupId>io.micrometer</groupId>
       <artifactId>micrometer-registry-prometheus</artifactId>

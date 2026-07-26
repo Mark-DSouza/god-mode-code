@@ -77,6 +77,7 @@ jobs:
             infra:
               - *shared
               - 'infra/terraform/**'
+              - 'infra/observability/**'
               - '.github/workflows/deploy.yml'
 
   web:
@@ -191,6 +192,34 @@ jobs:
       # on every pull request rather than only when somebody remembers.
       - run: terraform test
         working-directory: infra/terraform
+
+      # The stack that watches from outside the account (ADR-0008). Separate
+      # state and separate credentials, so it is initialised and tested
+      # separately too.
+      - run: terraform init -backend=false
+        working-directory: infra/terraform/observability
+      - run: terraform validate
+        working-directory: infra/terraform/observability
+      - run: terraform test
+        working-directory: infra/terraform/observability
+
+      # The collector's configuration is delivered verbatim to the host by the
+      # deploy, so a typo in it is a host with no telemetry — discovered during
+      # the next incident rather than here. Alloy validates its own config, and
+      # the container is the only way to run that.
+      - name: Validate the collector configuration
+        run: |
+          docker run --rm \
+            --volume "$PWD/infra/observability/alloy:/cfg:ro" \
+            grafana/alloy:v1.18.0 validate /cfg/config.alloy
+
+      # A dashboard that is not valid JSON fails at `apply`, which is a long
+      # way from where it was written.
+      - name: Check the dashboard parses
+        run: |
+          for dashboard in infra/observability/grafana/dashboards/*.json; do
+            python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$dashboard"
+          done
 
   e2e:
     needs: changes

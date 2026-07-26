@@ -20,6 +20,11 @@ gmc:
     # about polling drive the monitor directly rather than waiting for a tick.
     poll-interval: 1h
 
+management:
+  metrics:
+    tags:
+      environment: test
+
 logging:
   level:
     org.testcontainers: INFO

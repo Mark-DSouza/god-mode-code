@@ -6,6 +6,11 @@ packages:
 # esbuild ships a platform binary that its install script unpacks; Vite and
 # Vitest are both dead without it.
 allowBuilds:
+  # Downloads the sentry-cli binary that uploads source maps at build time.
+  # Without it the frontend build still succeeds and silently uploads nothing,
+  # leaving every production stack trace minified — which is the failure you
+  # only notice while reading your first real incident.
+  "@sentry/cli": true
   esbuild: true
   # Unpacks its browser service worker. The frontend seam intercepts in Node, so
   # nothing depends on it today, but blocking it buys nothing either.

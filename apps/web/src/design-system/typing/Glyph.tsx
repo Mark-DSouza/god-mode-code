@@ -12,18 +12,14 @@ export interface GlyphProps {
 }
 
 /**
- * Characters a mistyped glyph would otherwise render as nothing at all.
+ * What a mistyped space is drawn as.
  *
- * A wrong space is the case the design already anticipates — you cannot see
- * that a space is red. The others cannot appear in a Passage today, because the
- * database allows printable ASCII only, and are here so that the day a
- * Discipline needs them the surface does not silently swallow them.
+ * You cannot see that a space is red, so the design already gestures at this
+ * fix by rendering one as `␣`. A Passage is printable ASCII, enforced by the
+ * database, so a space is the only whitespace this can meet — the day a
+ * Discipline brings tabs or newlines, it brings this map with it.
  */
-const VISIBLE_WHITESPACE: Record<string, string> = {
-  " ": "␣",
-  "\t": "⇥",
-  "\n": "⏎",
-};
+const VISIBLE_WHITESPACE: Record<string, string> = { " ": "␣" };
 
 /**
  * Every class this component can ever apply, on every glyph, driven off the

@@ -9,6 +9,7 @@ import {
   ProgressBar,
   Stat,
   TypingField,
+  cn,
 } from "../design-system/index.ts";
 import { DISCIPLINES } from "./disciplines.ts";
 import { useTypingRun } from "./use-typing-run.ts";
@@ -63,9 +64,11 @@ export function RunScreen({
     return () => clearTimeout(timer);
   }, [challenge.expiresAt, run.phase]);
 
-  // Focused on arrival as well as when the countdown ends. A phone only raises
-  // its keyboard for focus that follows a gesture, and the tap that started the
-  // Run is the most recent one there is.
+  // On arrival, while the countdown is still running, and again when it ends.
+  // The first of those is the one that matters on a phone: a soft keyboard is
+  // raised only for focus that follows a user gesture, and the tap on "Start
+  // Run" is the most recent gesture there is. Waiting for the countdown to
+  // finish would put three seconds between the two and lose the keyboard.
   useEffect(() => {
     if (run.phase === "countdown" || run.phase === "idle") input.current?.focus();
   }, [run.phase]);
@@ -103,7 +106,7 @@ export function RunScreen({
   return (
     <section
       className="flex flex-col gap-6"
-      aria-label={`${DISCIPLINES[passage.discipline].title} run`}
+      aria-label={`${DISCIPLINES[passage.discipline].title} Run`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex gap-8 sm:gap-10">
@@ -130,46 +133,57 @@ export function RunScreen({
         </IconButton>
       </div>
 
-      {run.phase === "countdown" ? (
-        <Card scanlines className="flex min-h-[220px] items-center justify-center">
-          <Countdown
-            count={run.count}
-            tag={DISCIPLINES[passage.discipline].title}
-            preview={preview(passage.text)}
-          />
-        </Card>
-      ) : (
-        <div className="relative">
-          <Card scanlines className="flex min-h-[220px] items-center">
-            {/* Hidden from assistive technology — it is hundreds of
-                one-character elements. The Passage is offered to a screen
-                reader below, as running text the input points at. */}
+      {/* One wrapper for both phases, because the input inside it must be
+          mounted from the first render. Rendering it only once the countdown
+          ends would mean the focus above had nothing to focus, and a phone
+          raises its keyboard only for focus that follows a gesture — the tap on
+          "Start Run" is the last one there is, and it is three seconds gone by
+          the time a late-mounted input appears. That is precisely the failure
+          ADR-0010's deviation exists to prevent. */}
+      <div className="relative">
+        <Card
+          scanlines
+          className={cn(
+            "flex min-h-[220px] items-center",
+            run.phase === "countdown" && "justify-center",
+          )}
+        >
+          {run.phase === "countdown" ? (
+            <Countdown
+              count={run.count}
+              tag={DISCIPLINES[passage.discipline].title}
+              preview={preview(passage.text)}
+            />
+          ) : (
+            /* Hidden from assistive technology — it is hundreds of
+               one-character elements. The Passage is offered to a screen
+               reader below, as running text the input points at. */
             <TypingField text={passage.text} typed={run.typed} className="text-lg sm:text-xl" />
-          </Card>
+          )}
+        </Card>
 
-          <input
-            ref={input}
-            data-testid="typing-input"
-            value={run.typed}
-            onChange={(event) => run.type(event.target.value)}
-            // Detectable only because this is a real form control. A focusable
-            // div has no paste event to prevent.
-            onPaste={(event) => event.preventDefault()}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            aria-label="Type the Passage"
-            aria-describedby="passage-text"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            // 16px is not a look — it is the threshold below which iOS Safari
-            // zooms the page when an input takes focus, which on this screen
-            // would throw the Passage off the side mid-Run. Invisible either way.
-            className="absolute inset-0 size-full cursor-text resize-none border-0 bg-transparent p-5 text-[16px] text-transparent caret-transparent opacity-0 outline-none"
-          />
-        </div>
-      )}
+        <input
+          ref={input}
+          data-testid="typing-input"
+          value={run.typed}
+          onChange={(event) => run.type(event.target.value)}
+          // Detectable only because this is a real form control. A focusable
+          // div has no paste event to prevent.
+          onPaste={(event) => event.preventDefault()}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          aria-label="Type the Passage"
+          aria-describedby="passage-text"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          // 16px is not a look — it is the threshold below which iOS Safari
+          // zooms the page when an input takes focus, which on this screen
+          // would throw the Passage off the side mid-Run. Invisible either way.
+          className="absolute inset-0 size-full cursor-text resize-none border-0 bg-transparent p-5 text-[16px] text-transparent caret-transparent opacity-0 outline-none"
+        />
+      </div>
 
       <p id="passage-text" className="sr-only">
         {passage.text}

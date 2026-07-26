@@ -52,8 +52,8 @@ class IssueRepository {
      * occupies the one-live-Issue slot, and clearing it here is what lets the
      * next request take that slot in the same transaction.
      */
-    int supersedeLiveFor(UUID userId) {
-        return jdbc.update(
+    void supersedeLiveFor(UUID userId) {
+        jdbc.update(
                 """
                 UPDATE issues SET superseded_at = now()
                 WHERE user_id = ? AND consumed_at IS NULL AND superseded_at IS NULL

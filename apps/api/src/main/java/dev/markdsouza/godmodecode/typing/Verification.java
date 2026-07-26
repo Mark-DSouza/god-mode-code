@@ -28,7 +28,13 @@ sealed interface Verification {
     /** A Run that did not, and the one reason that stopped it first. */
     record Rejected(RejectionReason reason) implements Verification {}
 
-    /** A word is five characters, everywhere in this codebase. */
+    /**
+     * A word is five characters, everywhere in this codebase.
+     *
+     * Declared here because this is where WPM is defined; {@link Expiry} reads
+     * it rather than restating it, so the window a Passage is given and the
+     * speed it is scored at can never drift apart.
+     */
     int CHARACTERS_PER_WORD = 5;
 
     /**

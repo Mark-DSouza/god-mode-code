@@ -28,9 +28,6 @@ final class Expiry {
      */
     private static final double SLOWEST_PLAUSIBLE_WPM = 20;
 
-    /** A word is five characters, everywhere in this codebase. */
-    private static final int CHARACTERS_PER_WORD = 5;
-
     /**
      * Added on top of the scaled time, for reading the Passage, the countdown,
      * a glance at the attribution, and the mistyped word that gets backspaced.
@@ -48,7 +45,11 @@ final class Expiry {
 
     /** How long a Challenge over a Passage of this length stays available. */
     static Duration forPassageOf(int characterCount) {
-        double words = (double) characterCount / CHARACTERS_PER_WORD;
+        // The same five characters a word is worth when a Run is measured. The
+        // window has to be scaled in the units the result will be reported in,
+        // or a Passage could be timed against one definition and scored against
+        // another.
+        double words = (double) characterCount / Verification.CHARACTERS_PER_WORD;
         Duration atTheSlowestPlausibleSpeed =
                 Duration.ofMillis(Math.round(words / SLOWEST_PLAUSIBLE_WPM * 60_000));
 

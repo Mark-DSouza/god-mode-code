@@ -167,6 +167,45 @@ class TypingRunEndpointTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("text of the right length that is not the Passage is a Run worth nothing")
+    void unrelatedTextOfTheRightLengthIsWorthNothing() {
+        Browser browser = Browser.arrivingAt(http);
+        Challenge challenge = browser.isHanded(Discipline.QUOTES);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(1));
+
+        // Every character deliberately wrong, and exactly as many of them as the
+        // Passage has.
+        String nothingLikeIt = challenge.passage().text().chars()
+                .mapToObj(character -> character == 'a' ? "b" : "a")
+                .collect(java.util.stream.Collectors.joining());
+
+        Instant completedAt = Instant.now();
+        TypingRun run = browser
+                .submits(
+                        new TypingRunSubmission(
+                                challenge.issueId(),
+                                nothingLikeIt,
+                                nothingLikeIt.length(),
+                                completedAt.minus(HALF_A_MINUTE),
+                                completedAt),
+                        TypingRun.class)
+                .getBody();
+
+        // Recorded rather than refused, and that is the deliberate boundary of
+        // the correspondence check. Length is the only structural thing a
+        // submission can be measured against; any threshold on how *much* of the
+        // Passage had to be right would be a number invented here, and it would
+        // start refusing the genuinely terrible Run of someone who lost their
+        // place. There is nothing to gain by submitting one of these: only
+        // correct characters count toward WPM, so a Run that transcribed nothing
+        // scores nothing and ranks below every honest attempt.
+        assertThat(run).isNotNull();
+        assertThat(run.correctCharacters()).isZero();
+        assertThat(run.wpm()).isEqualByComparingTo("0.0");
+        assertThat(run.accuracy()).isEqualByComparingTo("0.0");
+    }
+
+    @Test
     @DisplayName("a duration that does not fit the time since the Challenge went out is refused")
     void anImpossibleDurationIsRefused() {
         Browser browser = Browser.arrivingAt(http);

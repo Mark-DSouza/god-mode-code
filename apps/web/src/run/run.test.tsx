@@ -116,7 +116,10 @@ async function countdownEnds() {
       vi.advanceTimersByTime(1000);
     });
   }
-  await waitFor(() => expect(screen.getByTestId("typing-input")).toBeInTheDocument());
+  // The surface, not the input: the input is mounted from the first render so
+  // that a phone's keyboard rises with the tap that started the Run, which
+  // means its presence says nothing about whether the countdown is over.
+  await waitFor(() => expect(screen.getByTestId("typing-field")).toBeInTheDocument());
 }
 
 function glyphs() {

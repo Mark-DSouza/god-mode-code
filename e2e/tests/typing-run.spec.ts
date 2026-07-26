@@ -32,7 +32,9 @@ test("a Passage is issued, typed, and verified by the server", async ({ page }) 
   // The countdown runs first. The Passage is already on the page for a screen
   // reader, which is also where a test can read exactly what to type.
   await expect(page.getByTestId("countdown")).toBeVisible();
-  await expect(page.getByTestId("typing-input")).toBeVisible({ timeout: 15_000 });
+  // The surface, not the input: the input is mounted from the first render, so
+  // that the keyboard on a phone rises with the tap that started the Run.
+  await expect(page.getByTestId("typing-field")).toBeVisible({ timeout: 15_000 });
 
   const passage = await page.locator("#passage-text").textContent();
   expect(passage).toBeTruthy();
@@ -67,7 +69,7 @@ test.describe("pasting", () => {
     await page.goto("/");
     await page.getByRole("button", { name: /^prose/i }).click();
     await page.getByRole("button", { name: /start run/i }).click();
-    await expect(page.getByTestId("typing-input")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("typing-field")).toBeVisible({ timeout: 15_000 });
 
     const passage = (await page.locator("#passage-text").textContent()) ?? "";
     await page.evaluate((text) => navigator.clipboard.writeText(text), passage);

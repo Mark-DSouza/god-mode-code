@@ -40,6 +40,12 @@ services:
       DATABASE_PASSWORD: godmodecode
       GMC_VERSION: e2e
       JUDGE_URL: http://judge:9090
+      # The same log format production runs, so the JSON path is exercised on
+      # every end-to-end run rather than first meeting reality on the host that
+      # matters. It costs readability in a failed CI job and buys knowing the
+      # collector will be able to parse what it is sent.
+      GMC_LOG_FORMAT: ecs
+      GMC_ENVIRONMENT: e2e
     depends_on:
       db:
         condition: service_healthy

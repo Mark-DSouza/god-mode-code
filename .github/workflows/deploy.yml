@@ -51,6 +51,17 @@ jobs:
           - name: web
             context: .
             dockerfile: apps/web/Dockerfile
+            # Error reporting is configured here rather than on the host,
+            # because a bundle's configuration is fixed the moment it is built
+            # (ADR-0002). Every one of these is optional: unset, the bundle
+            # reports nothing and the build still succeeds, which is what keeps
+            # a fork buildable.
+            build_args: |
+              VITE_SENTRY_DSN=${{ vars.SENTRY_DSN }}
+              VITE_SENTRY_ENVIRONMENT=production
+              VITE_COMMIT_SHA=${{ github.sha }}
+              SENTRY_ORG=${{ vars.SENTRY_ORG }}
+              SENTRY_PROJECT=${{ vars.SENTRY_PROJECT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,6 +84,14 @@ jobs:
           # whether the proxy needs replacing, and a mutable tag like `latest`
           # would make that comparison always look unchanged.
           tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.name }}:${{ github.sha }}
+          build-args: ${{ matrix.build_args }}
+          # The token that uploads source maps. Passed as a secret rather than
+          # as a build argument, because a build argument is written into the
+          # image's history for anyone who can pull it. Unset, the frontend
+          # build skips the upload and ships no maps — stack traces stay
+          # minified, but nothing fails.
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 

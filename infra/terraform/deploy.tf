@@ -14,6 +14,11 @@ locals {
 
   api_image_pattern = "^${local.escaped_image_prefix}/api:[a-zA-Z0-9._-]+$"
   web_image_pattern = "^${local.escaped_image_prefix}/web:[a-zA-Z0-9._-]+$"
+
+  # Pinned, not `latest`. This is the one container on the host that is not
+  # built here, and an image that changes underneath a `docker pull` would move
+  # the collector's behaviour on a deploy that changed nothing about it.
+  collector_image = "grafana/alloy:v1.18.0"
 }
 
 resource "aws_ssm_document" "deploy" {
@@ -51,6 +56,14 @@ resource "aws_ssm_document" "deploy" {
           region           = var.region
           parameter_prefix = local.parameter_prefix
           registry         = "ghcr.io"
+          environment      = var.environment
+          collector_image  = local.collector_image
+          # The collector's configuration travels with the deploy rather than
+          # being baked into the host at first boot, because it changes with the
+          # application. Read from the repository so there is one copy of it,
+          # reviewable as the thing it is instead of as an embedded string.
+          alloy_config          = file("${path.module}/../observability/alloy/config.alloy")
+          judge_metrics_address = var.judge_metrics_address
         }))
       }
     }]

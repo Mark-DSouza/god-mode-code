@@ -1,0 +1,250 @@
+{
+  "uid": "god-mode-code",
+  "title": "GOD_MODE_CODE",
+  "description": "Traffic, Runs and the judge. Panels that read 'No data' name work that has not landed yet rather than a fault: Run counters arrive with issue #7, and every judge panel stays empty until the judge's instance exists (issue #13).",
+  "tags": ["god-mode-code"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Metrics",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Serving",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Request rate by status",
+      "description": "Every response the backend sends, by HTTP status. A step change in 5xx is the shape an incident makes here.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(http_server_requests_seconds_count{application=\"god-mode-code-api\"}[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Latency",
+      "description": "Client-side percentiles from Micrometer, plus the mean. One instance serves everything, so these need no cross-instance aggregation — and if that ever stops being true, these percentiles stop being addable and the panel needs a histogram instead.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 0 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (quantile) (http_server_requests_seconds{application=\"god-mode-code-api\", quantile!=\"\"})",
+          "legendFormat": "p{{quantile}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(http_server_requests_seconds_sum{application=\"god-mode-code-api\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{application=\"god-mode-code-api\"}[5m])), 0.0001)",
+          "legendFormat": "mean"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "Runs",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Run submissions",
+      "description": "Runs arriving at the backend. Empty until the Typing Run endpoint lands (issue #7).",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (uri) (rate(http_server_requests_seconds_count{application=\"god-mode-code-api\", uri=~\".*runs.*\", outcome=\"SUCCESS\"}[5m]))",
+          "legendFormat": "{{uri}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Run rejections",
+      "description": "Runs the backend refused — a failed integrity check, a spent Issue, a malformed body (ADR-0003). A rejection rate that climbs without traffic climbing is somebody probing.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(http_server_requests_seconds_count{application=\"god-mode-code-api\", uri=~\".*runs.*\", outcome=~\"CLIENT_ERROR|SERVER_ERROR\"}[5m]))",
+          "legendFormat": "{{status}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(judge_judgings_rejected_total[5m]))",
+          "legendFormat": "refused by the judge"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "The judge",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 }
+    },
+    {
+      "id": 8,
+      "type": "piechart",
+      "title": "Verdict distribution",
+      "description": "Verdicts over the dashboard's window. Passed and Failed are the product working; Error and Timeout are the judge failing, and the alert rule watches their share.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 19 },
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (verdict) (increase(judge_judgings_total[$__range]))",
+          "legendFormat": "{{verdict}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Judging duration",
+      "description": "Mean wall-clock time inside the sandbox. The judge caps each execution, so a rise here without a rise in timeouts means submissions are getting slower rather than the host getting busier.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 19 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(judge_judging_duration_seconds_sum[10m]) / clamp_min(rate(judge_judging_duration_seconds_count[10m]), 0.0001)",
+          "legendFormat": "mean"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Sandbox saturation",
+      "description": "Executions running against the worker pool bound, and anything queued behind it. Queue depth above zero for any length of time is the signal that the 1GB instance has run out of room (ADR-0005).",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 19 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "judge_executions_in_flight", "legendFormat": "running" },
+        { "refId": "B", "expr": "judge_workers", "legendFormat": "worker pool" },
+        { "refId": "C", "expr": "judge_queue_waiting", "legendFormat": "queued" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "The host",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Database connections",
+      "description": "The pool is capped at ten. Active climbing to that ceiling while pending is non-zero is connection starvation, which surfaces to a player as a request that hangs rather than one that fails.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 28 },
+      "targets": [
+        { "refId": "A", "expr": "hikaricp_connections_active", "legendFormat": "active" },
+        { "refId": "B", "expr": "hikaricp_connections_idle", "legendFormat": "idle" },
+        { "refId": "C", "expr": "hikaricp_connections_pending", "legendFormat": "pending" }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Heap",
+      "description": "Used against committed, for the heap only. The instance has 2GB and the container is capped at 900m, so a heap that stops sawtoothing and climbs is the leak that ends in a restart.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\"})",
+          "legendFormat": "used"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(jvm_memory_committed_bytes{area=\"heap\"})",
+          "legendFormat": "committed"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "gauge",
+      "title": "Root volume free",
+      "description": "Read by the collector rather than CloudWatch: EC2 publishes no filesystem metric, and the agent that would is billed as a custom metric (ADR-0008). The alert rule fires at 15%.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 28 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.15 },
+              { "color": "green", "value": 0.3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min(node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})",
+          "instant": true
+        }
+      ]
+    }
+  ]
+}

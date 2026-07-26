@@ -1,0 +1,9 @@
+# Copy to backend.hcl and fill in. The same bucket the main stack uses, under a
+# different key — separate state, because this stack is applied with different
+# credentials and neither should block the other.
+#
+#   terraform -chdir=infra/terraform/observability init -backend-config=backend.hcl
+
+bucket = "gmc-terraform-state-<unique>"
+key    = "observability/terraform.tfstate"
+region = "ap-south-1"

@@ -7,6 +7,11 @@ spring:
 gmc:
   version: test
 
+management:
+  metrics:
+    tags:
+      environment: test
+
 logging:
   level:
     org.testcontainers: INFO

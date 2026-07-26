@@ -1,0 +1,21 @@
+# Copy to terraform.tfvars and fill in. Nothing here is committed.
+#
+# Every value comes from an account outside AWS, which is the point (ADR-0008):
+# if this stack could be applied with the same credentials as the rest, it would
+# be sharing the failure domain it exists to sit outside of.
+
+# Where an outage is announced. The one address that has to be right.
+alert_email = "you@example.com"
+
+# Grafana Cloud. The stack URL is on the stack's own page; the token is a
+# service account token with dashboard and alert-rule write access — not the
+# access policy token the collector uses, which cannot write either.
+grafana_url  = "https://<stack>.grafana.net"
+grafana_auth = "glsa_..."
+
+# The datasource in that stack the collector remote-writes into. Grafana Cloud
+# creates it with the stack; its UID is in the datasource's own URL.
+prometheus_datasource_uid = "..."
+
+# UptimeRobot's main API key, from Integrations & API.
+uptimerobot_api_key = "u..."

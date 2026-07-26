@@ -103,6 +103,48 @@ variable "budget_notification_email" {
   type        = string
 }
 
+variable "grafana_prometheus_url" {
+  description = "Grafana Cloud Prometheus remote-write endpoint. Empty leaves the collector unstarted, which is a supported state (ADR-0008)."
+  type        = string
+  default     = ""
+}
+
+variable "grafana_prometheus_username" {
+  description = "Grafana Cloud Prometheus instance id — the numeric user shown beside the endpoint."
+  type        = string
+  default     = ""
+}
+
+variable "grafana_loki_url" {
+  description = "Grafana Cloud Loki push endpoint."
+  type        = string
+  default     = ""
+}
+
+variable "grafana_loki_username" {
+  description = "Grafana Cloud Loki instance id."
+  type        = string
+  default     = ""
+}
+
+variable "judge_metrics_address" {
+  description = <<-EOT
+    host:port of the judge's scrape endpoint, reached over the private link.
+    The judge has no egress and cannot ship its own telemetry, so the
+    application host carries it (ADR-0005). Empty until the judge's instance
+    lands with issue #13, and an empty value drops the target rather than
+    leaving a permanently unreachable one on the dashboard.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "alarm_email" {
+  description = "Where infrastructure alarms are sent. Defaults to the billing address, since one person operates this."
+  type        = string
+  default     = ""
+}
+
 variable "github_repository" {
   description = "owner/name of the source repository, used to scope the deploy role's trust policy."
   type        = string

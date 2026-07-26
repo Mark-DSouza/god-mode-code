@@ -47,6 +47,17 @@
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
 
+    <!-- Actuator exposes `/actuator/prometheus` only when a registry is on the
+         classpath. Without this the endpoint does not exist, the configuration
+         listing it still looks correct, and the collector scrapes a 404 —
+         which is why MetricsEndpointTest asserts the exposition rather than
+         the setting. -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
     <dependency>
       <groupId>org.flywaydb</groupId>
       <artifactId>flyway-core</artifactId>

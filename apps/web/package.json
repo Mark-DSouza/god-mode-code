@@ -14,6 +14,7 @@
   "dependencies": {
     "@gmc/api-client": "workspace:*",
     "@gmc/design-tokens": "workspace:*",
+    "@sentry/react": "^10.68.0",
     "@tanstack/react-query": "^5.90.2",
     "clsx": "^2.1.1",
     "react": "^19.2.0",
@@ -21,6 +22,7 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@sentry/vite-plugin": "^5.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",

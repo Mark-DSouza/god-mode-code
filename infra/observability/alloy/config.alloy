@@ -1,0 +1,214 @@
+// The collector.
+//
+// Everything the application host knows about itself leaves through this file:
+// its own metrics, the backend's, the judge's, and every log line any of them
+// writes. It runs as a container on the application host and ships to Grafana
+// Cloud, which is deliberately outside the cloud account the rest of the stack
+// lives in (ADR-0008) — monitoring that shares a failure domain with the thing
+// it monitors reports "healthy" for the outage you most need it to report.
+//
+// Two things it deliberately does not do:
+//
+//   * It does not mount the container socket. The usual way to collect
+//     container logs is `loki.source.docker`, which needs one, and a mounted
+//     container socket is root on the host for whoever reaches it. The
+//     containers log to the journal instead and this reads the journal, which
+//     is a read-only mount of a directory.
+//   * It does not reach into the judge for anything but metrics. The judge has
+//     no egress and cannot ship its own telemetry, so the host scrapes it over
+//     the private link and carries it out from here (ADR-0005). Its logs stay
+//     on its own box, on purpose, and their absence from Grafana is a decision
+//     rather than a fault.
+
+// ---------------------------------------------------------------------------
+// Where it all goes
+// ---------------------------------------------------------------------------
+
+// Credentials arrive as environment variables, read from Parameter Store by the
+// deploy and passed to the container. Nothing here is written to disk.
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_PROMETHEUS_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_PROMETHEUS_USERNAME")
+      password = sys.env("GRAFANA_TOKEN")
+    }
+
+    // The free tier is 10,000 active series. A queue this size rides out a few
+    // minutes of Grafana Cloud being unreachable without the collector
+    // dropping what it has already gathered.
+    queue_config {
+      capacity          = 10000
+      max_shards        = 3
+      max_samples_per_send = 1000
+    }
+  }
+
+  external_labels = {
+    environment = sys.env("GMC_ENVIRONMENT"),
+  }
+}
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_LOKI_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_LOKI_USERNAME")
+      password = sys.env("GRAFANA_TOKEN")
+    }
+  }
+
+  external_labels = {
+    environment = sys.env("GMC_ENVIRONMENT"),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Metrics: the backend
+// ---------------------------------------------------------------------------
+
+// Reached over the container network by name, the same way Caddy reaches it.
+// `/actuator` is not proxied to the internet — Caddy routes `/api/*` and
+// nothing else — so this endpoint is private without needing a rule about it.
+prometheus.scrape "api" {
+  targets = [{
+    __address__      = "api:8080",
+    __metrics_path__ = "/actuator/prometheus",
+    job              = "api",
+    instance         = "app-host",
+  }]
+
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  // Sixty seconds, not fifteen. A JVM emits a few hundred series and the free
+  // tier counts active series, not scrapes; four times the resolution here
+  // would buy detail nobody looks at on a site with one instance.
+  scrape_interval = "60s"
+  scrape_timeout  = "10s"
+}
+
+// ---------------------------------------------------------------------------
+// Metrics: the judge
+// ---------------------------------------------------------------------------
+
+// The judge lands with issue #13. Until it does, JUDGE_METRICS_ADDRESS is empty
+// and the rule below drops the target — otherwise the dashboard would show a
+// permanently unreachable service and teach whoever reads it to ignore red.
+discovery.relabel "judge" {
+  targets = [{
+    __address__      = sys.env("JUDGE_METRICS_ADDRESS"),
+    __metrics_path__ = "/metrics",
+    job              = "judge",
+    instance         = "judge-host",
+  }]
+
+  rule {
+    source_labels = ["__address__"]
+    regex         = ""
+    action        = "drop"
+  }
+}
+
+prometheus.scrape "judge" {
+  targets    = discovery.relabel.judge.output
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  scrape_interval = "60s"
+  scrape_timeout  = "10s"
+}
+
+// ---------------------------------------------------------------------------
+// Metrics: the host itself
+// ---------------------------------------------------------------------------
+
+// Disk in particular. EC2 publishes CPU and network to CloudWatch for free but
+// not filesystem usage — that needs an agent, and the CloudWatch agent would
+// spend the ten free custom metrics ADR-0008 exists to protect. The collector
+// is already here, so the disk alarm is a Grafana rule over this exporter
+// rather than a monthly bill.
+prometheus.exporter.unix "host" {
+  rootfs_path = "/host/root"
+
+  filesystem {
+    // Container and kernel filesystems are noise; the root volume filling is
+    // the thing that takes the site down.
+    fs_types_exclude     = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
+    mount_points_exclude = "^/(dev|proc|sys|run|var/lib/docker/.+)($|/)"
+  }
+}
+
+prometheus.scrape "host" {
+  targets = prometheus.exporter.unix.host.targets
+
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  scrape_interval = "60s"
+}
+
+// ---------------------------------------------------------------------------
+// Logs
+// ---------------------------------------------------------------------------
+
+// The journal carries everything on this box: both containers, because the
+// deploy starts them with the journald log driver, plus `cloudflared` and the
+// bootstrap. One source, no socket, and nothing to remember to wire up when
+// something new starts running here.
+loki.source.journal "host" {
+  forward_to = [loki.process.containers.receiver]
+
+  // Only what arrived since the collector last ran, so a restart does not
+  // re-ship days of history into a 50GB monthly allowance.
+  max_age = "12h"
+
+  relabel_rules = discovery.relabel.journal.rules
+}
+
+discovery.relabel "journal" {
+  targets = []
+
+  // Labels are the index, and every distinct combination is a stream. These
+  // three are bounded — a handful of containers, a handful of units — which is
+  // what keeps them cheap. Anything per-request belongs in the line, not here.
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__journal_syslog_identifier"]
+    target_label  = "service"
+  }
+}
+
+loki.process "containers" {
+  forward_to = [loki.write.grafana_cloud.receiver]
+
+  // The backend writes ECS JSON in production. Reading the level out of it
+  // makes "show me every error" a label selector instead of a substring search
+  // that also matches the word "error" inside a message.
+  // `log.level` traverses the nested object the ECS format writes
+  // (`{"log":{"level":"ERROR"}}`), rather than naming a flat dotted key.
+  stage.json {
+    expressions = {
+      level = "log.level",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  // Deliberately not extracted as a label. There is one correlation id per
+  // request, so making it one would create a stream per request and exhaust
+  // the free tier in an afternoon. It stays in the line, where a query can
+  // still filter on it.
+}

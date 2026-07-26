@@ -7,11 +7,14 @@ console checkboxes were ticked (ADR-0001).
 
 ## What is here
 
-| Path               | What it is                                                                    |
-| ------------------ | ----------------------------------------------------------------------------- |
-| `caddy/`           | The reverse proxy: serves the built SPA and proxies `/api/*` to the backend   |
-| `terraform/`       | The cloud account: network, database, instance, tunnel, secrets, cost control |
-| `terraform/tests/` | Plan-time assertions on the security and cost properties, run in CI           |
+| Path                       | What it is                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `caddy/`                   | The reverse proxy: serves the built SPA and proxies `/api/*` to the backend   |
+| `terraform/`               | The cloud account: network, database, instance, tunnel, secrets, cost control |
+| `terraform/tests/`         | Plan-time assertions on the security and cost properties, run in CI           |
+| `terraform/observability/` | The watchers that live outside the account: uptime check, dashboard, rules    |
+| `observability/alloy/`     | The collector's configuration, delivered to the host by the deploy            |
+| `observability/grafana/`   | The dashboard, as the JSON Grafana imports and exports                        |
 
 `caddy/Caddyfile` is used unchanged by the local end-to-end stack and by
 production. The only difference between the two is the address it binds and the
@@ -80,7 +83,7 @@ terraform -chdir=infra/terraform init -backend-config=backend.hcl
 terraform -chdir=infra/terraform apply
 ```
 
-Then three things Terraform deliberately does not do:
+Then four things Terraform deliberately does not do:
 
 1. **Write the registry pull token.** It is a GitHub personal access token with
    `read:packages`, and GitHub is not a provider configured here. The parameter
@@ -99,7 +102,23 @@ Then three things Terraform deliberately does not do:
    while that is unset, which is what stops every merge failing before the
    infrastructure exists.
 
-3. **Run the restore drill.** See
+3. **Write the telemetry token, and apply the stack outside the account.** Same
+   out-of-band treatment as the registry token, for the same reason — it comes
+   from Grafana Cloud, which is not a provider configured here:
+
+   ```bash
+   aws ssm put-parameter --overwrite --type SecureString \
+     --name /gmc/prod/observability/token --value "$GRAFANA_CLOUD_TOKEN"
+   ```
+
+   Until that value is real the deploy declines to start the collector, which is
+   a supported state rather than a failure: the site runs unobserved. The
+   uptime check, dashboard and alert rules are a second stack with its own
+   state and its own credentials — see
+   [`docs/runbooks/observability-verification.md`](../docs/runbooks/observability-verification.md),
+   which also covers the two confirmations nobody can automate.
+
+4. **Run the restore drill.** See
    [`docs/runbooks/database-restore.md`](../docs/runbooks/database-restore.md).
    An untested backup is not a backup, and the drill log in that document is the
    evidence that it is one.
@@ -131,10 +150,31 @@ terraform -chdir=infra/terraform test
 ```
 
 No credentials and no money, so it runs on every pull request that touches
-`infra/terraform/`.
+`infra/terraform/`. The stack outside the account is checked the same way, with
+mocked Grafana and UptimeRobot providers:
+
+```bash
+terraform -chdir=infra/terraform/observability init -backend=false
+terraform -chdir=infra/terraform/observability test
+```
+
+The collector's configuration is checked by the collector itself, because a typo
+in it is a host that quietly reports nothing:
+
+```bash
+docker run --rm --volume "$PWD/infra/observability/alloy:/cfg:ro" \
+  grafana/alloy:v1.18.0 validate /cfg/config.alloy
+```
 
 ## One rule worth stating before anything else is built
 
 **Local development may mount the container socket for convenience; production
 must never do so.** A mounted container socket is the most direct escape path
 available to the untrusted code the judge exists to contain.
+
+That rule is why the collector reads the journal rather than the socket. The
+ordinary way to gather container logs is `loki.source.docker`, which needs one —
+and a collector holding the socket is root on the application host for anyone who
+reaches the collector. Both containers log to the journal instead, and
+`terraform test` asserts that nothing in the deploy document mentions the socket
+at all.

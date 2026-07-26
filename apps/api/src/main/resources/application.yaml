@@ -46,11 +46,31 @@ management:
   endpoints:
     web:
       exposure:
+        # Under `/actuator`, which Caddy does not proxy — it routes `/api/*` and
+        # nothing else (ADR-0002). The collector reaches this over the container
+        # network on the same host; the internet cannot reach it at all.
         include: health,info,prometheus
   endpoint:
     health:
       probes:
         enabled: true
+  metrics:
+    tags:
+      # Stamped on every meter, because the api and the judge remote-write into
+      # one Grafana stack. Without these they land in a single undifferentiated
+      # heap of series and a dashboard cannot tell them apart.
+      application: ${spring.application.name}
+      environment: ${GMC_ENVIRONMENT:local}
+      version: ${gmc.version}
+    distribution:
+      # Percentiles computed in the application and exported as a handful of
+      # series, rather than histogram buckets exported as dozens per endpoint.
+      # Buckets are the aggregatable option and would be the right answer behind
+      # more than one instance; behind exactly one they would spend a large
+      # slice of a 10,000 series allowance to produce the same two numbers
+      # (ADR-0008).
+      percentiles:
+        http.server.requests: 0.95, 0.99
 
 springdoc:
   api-docs:
@@ -71,6 +91,18 @@ gmc:
     cookie-secure: ${GMC_RECOGNITION_COOKIE_SECURE:true}
 
 logging:
+  # Empty by default, which leaves the human-readable console format in place
+  # for local development. Production sets GMC_LOG_FORMAT=ecs, and from then on
+  # every line is a JSON document the collector can ship and Loki can index by
+  # field rather than by regular expression.
+  structured:
+    format:
+      console: ${GMC_LOG_FORMAT:}
+  # The correlation id, in the format a person reads. The structured formatter
+  # picks it out of the diagnostic context by itself; this is what puts it in
+  # front of anyone tailing a terminal.
+  pattern:
+    correlation: "[%X{correlationId:-}] "
   level:
     root: INFO
     dev.markdsouza.godmodecode: DEBUG

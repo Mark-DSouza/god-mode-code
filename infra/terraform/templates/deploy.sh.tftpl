@@ -77,6 +77,7 @@ if [ "$DEPLOYED_WEB" != "$WEB_IMAGE" ] || [ -z "$WEB_RUNNING" ]; then
     --name gmc-web \
     --restart unless-stopped \
     --network gmc \
+    --log-driver journald \
     --publish 127.0.0.1:80:80 \
     --env CADDY_PORT=80 \
     --env API_UPSTREAM=api:8080 \
@@ -85,6 +86,88 @@ if [ "$DEPLOYED_WEB" != "$WEB_IMAGE" ] || [ -z "$WEB_RUNNING" ]; then
   printf '%s' "$WEB_IMAGE" >/opt/gmc/web-image
 else
   log "Reverse proxy unchanged; leaving it running"
+fi
+
+# ---------------------------------------------------------------------------
+# The collector.
+# ---------------------------------------------------------------------------
+
+# Refreshed before the backend is replaced, so the restart it is about to
+# perform is itself observed. Nothing in this section is allowed to fail the
+# deploy: monitoring that can take the site down is worse than monitoring that
+# is briefly missing.
+refresh_collector() {
+  install -d -m 0750 /opt/gmc/alloy
+
+  # The configuration is a file in the repository, rendered into this document
+  # by Terraform. It arrives with the deploy for the same reason the images do:
+  # it changes with the application, and a copy edited on the host is a copy
+  # that disagrees with the one everybody reads.
+  cat >/opt/gmc/alloy/config.alloy <<'ALLOY_CONFIG'
+${alloy_config}
+ALLOY_CONFIG
+
+  PROMETHEUS_URL="$(get_param "$PREFIX/observability/prometheus-url" 2>/dev/null || echo unset)"
+  PROMETHEUS_USERNAME="$(get_param "$PREFIX/observability/prometheus-username" 2>/dev/null || echo unset)"
+  LOKI_URL="$(get_param "$PREFIX/observability/loki-url" 2>/dev/null || echo unset)"
+  LOKI_USERNAME="$(get_param "$PREFIX/observability/loki-username" 2>/dev/null || echo unset)"
+  GRAFANA_TOKEN="$(get_param "$PREFIX/observability/token" 2>/dev/null || echo unset)"
+
+  # Terraform creates the token with a placeholder and a human writes the real
+  # value once. Starting a collector against the placeholder would produce a
+  # container that retries an authentication failure forever, which is a worse
+  # signal than no collector at all.
+  if [ "$GRAFANA_TOKEN" = "placeholder-set-out-of-band" ] || [ "$GRAFANA_TOKEN" = "unset" ] ||
+    [ "$PROMETHEUS_URL" = "unset" ] || [ "$LOKI_URL" = "unset" ]; then
+    log "Telemetry is not configured; skipping the collector"
+    return 0
+  fi
+
+  # Replaced only when the configuration or the image changed, so a routine
+  # backend deploy does not restart the thing watching it.
+  FINGERPRINT="$(sha256sum /opt/gmc/alloy/config.alloy | cut -d' ' -f1)-${collector_image}"
+  DEPLOYED="$(cat /opt/gmc/alloy-fingerprint 2>/dev/null || true)"
+  RUNNING="$(docker ps --quiet --filter name=^/gmc-alloy$)"
+
+  if [ "$DEPLOYED" = "$FINGERPRINT" ] && [ -n "$RUNNING" ]; then
+    log "Collector unchanged; leaving it running"
+    return 0
+  fi
+
+  log "Starting the collector"
+  docker pull "${collector_image}"
+  docker rm --force gmc-alloy >/dev/null 2>&1 || true
+  docker run --detach \
+    --name gmc-alloy \
+    --restart unless-stopped \
+    --network gmc \
+    --memory 200m \
+    --log-driver journald \
+    --env GRAFANA_PROMETHEUS_URL="$PROMETHEUS_URL" \
+    --env GRAFANA_PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" \
+    --env GRAFANA_LOKI_URL="$LOKI_URL" \
+    --env GRAFANA_LOKI_USERNAME="$LOKI_USERNAME" \
+    --env GRAFANA_TOKEN="$GRAFANA_TOKEN" \
+    --env GMC_ENVIRONMENT="${environment}" \
+    --env JUDGE_METRICS_ADDRESS="${judge_metrics_address}" \
+    --volume /opt/gmc/alloy/config.alloy:/etc/alloy/config.alloy:ro \
+    --volume gmc-alloy-data:/var/lib/alloy/data \
+    `# Read-only, and no container socket. The usual way to collect container` \
+    `# logs mounts one, which is root on this host for whoever reaches it;` \
+    `# both containers log to the journal instead and this reads that.` \
+    --volume /var/log/journal:/var/log/journal:ro \
+    --volume /etc/machine-id:/etc/machine-id:ro \
+    --volume /:/host/root:ro,rslave \
+    "${collector_image}" \
+    run /etc/alloy/config.alloy --storage.path=/var/lib/alloy/data
+
+  printf '%s' "$FINGERPRINT" >/opt/gmc/alloy-fingerprint
+}
+
+if ! refresh_collector; then
+  # Loud, and then on with the deploy. This host being unobserved for one
+  # release is a problem; refusing to ship because of it is a bigger one.
+  log "WARNING: the collector could not be refreshed; continuing without it"
 fi
 
 # ---------------------------------------------------------------------------
@@ -102,10 +185,13 @@ start_api() {
     --network gmc \
     --network-alias api \
     --memory 900m \
+    --log-driver journald \
     --env DATABASE_URL="$DB_URL" \
     --env DATABASE_USER="$DB_USER" \
     --env DATABASE_PASSWORD="$DB_PASSWORD" \
     --env GMC_VERSION="$1" \
+    --env GMC_ENVIRONMENT="${environment}" \
+    --env GMC_LOG_FORMAT=ecs \
     "$1"
 }
 

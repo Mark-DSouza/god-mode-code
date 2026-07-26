@@ -25,3 +25,14 @@ Retention on the Grafana free tier is 14 days, which is sufficient for this
 project and would not be for one with compliance obligations. Alarms on built-in
 EC2 and RDS metrics (CPU, disk, database connections) still use CloudWatch, since
 those are free and already collected.
+
+**Correction, made while implementing this (issue #19): EC2 disk is not one of
+those metrics.** EC2 publishes CPU, network, credit balance and status checks
+for free, but nothing about the filesystem — the hypervisor cannot see inside
+the volume. Filesystem usage requires the CloudWatch agent, which reports it as
+a _custom_ metric, which is the charge this decision exists to avoid. So the
+disk alarm is a Grafana rule over the collector's node metrics, and everything
+else in that sentence is unchanged. The split now runs: CPU, CPU credits,
+instance status, database CPU, storage and connections in CloudWatch; instance
+disk and judge failure rate in Grafana; reachability in UptimeRobot, outside
+both.

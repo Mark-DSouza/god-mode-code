@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# Judge host configuration. Runs once, at first boot.
+#
+# Note what this does NOT do: install anything. It cannot — this host has no
+# route out and no credentials, so there is no package repository to reach, no
+# registry to pull from and no parameter store to read (ADR-0005). The container
+# runtime, the execution image and the judge binary are all already on the disk,
+# baked into the machine image by docs/runbooks/judge-host.md.
+#
+# So all that is left is configuration, and configuration is all that may live
+# here. Anything that needs the network belongs in the image build.
+#
+# Note for anyone editing: this file is rendered by `templatefile`. A doubled
+# dollar-brace escapes to a literal shell variable; a single one is interpolated
+# by Terraform and must name a variable actually passed in. That applies inside
+# comments too, which is easy to forget.
+set -euo pipefail
+
+exec > >(tee /var/log/gmc-judge-bootstrap.log | logger -t gmc-judge-bootstrap -s 2>/dev/console) 2>&1
+
+echo "==> Writing the judge's configuration"
+# Root-owned and unreadable by anything else on the box. It holds no secret —
+# this host is not trusted with one — but the sandbox limits below are the cage
+# the untrusted code runs in, and code that can read its own cage is one step
+# from code that can edit it.
+install -d -m 0755 /etc/gmc
+install -m 0600 /dev/null /etc/gmc/judge.env
+cat >/etc/gmc/judge.env <<CONFIG
+JUDGE_ADDR=:${port}
+JUDGE_WORKERS=${workers}
+CONFIG
+
+echo "==> Starting the judge"
+# The unit itself is baked into the image, along with the binary it runs and
+# the execution image it starts containers from. Enabling it here rather than
+# in the image means a host that fails this bootstrap comes up with nothing
+# listening, which is a visibly broken instance rather than one quietly serving
+# with whatever configuration the image happened to carry.
+systemctl enable --now docker
+systemctl enable --now gmc-judge
+
+echo "==> Bootstrap complete"

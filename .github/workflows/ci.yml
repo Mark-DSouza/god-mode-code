@@ -69,8 +69,11 @@ jobs:
               - '!packages/design-tokens/**'
               - '!mockups-and-design-system/**'
               # The cloud definitions are not part of the local stack. Only
-              # `infra/caddy` is, and it is shared with production.
+              # `infra/caddy` is, and it is shared with production. The judge's
+              # machine image is not either — it is built out of band, on an
+              # instance, and nothing here can exercise it.
               - '!infra/terraform/**'
+              - '!infra/judge-ami/**'
             infra:
               - *shared
               - 'infra/terraform/**'

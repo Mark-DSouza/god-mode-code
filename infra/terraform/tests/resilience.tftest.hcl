@@ -21,6 +21,25 @@ mock_provider "aws" {
       json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
     }
   }
+
+  # One `run` block below applies rather than plans, because instance
+  # identifiers do not exist until apply. Mocked, an ARN comes back as an
+  # arbitrary string, which the budget action rejects before any assertion
+  # runs. Nothing here is under test; it is the shape the API would return.
+  mock_resource "aws_iam_role" {
+    defaults = {
+      arn = "arn:aws:iam::123456789012:role/mock"
+    }
+  }
+
+  # Same reason, for the topic the alarms publish to: the alarms and the email
+  # subscription both take an ARN, and an arbitrary mocked string is rejected as
+  # malformed on `apply` before any assertion runs.
+  mock_resource "aws_sns_topic" {
+    defaults = {
+      arn = "arn:aws:sns:ap-south-1:123456789012:mock"
+    }
+  }
 }
 
 mock_provider "cloudflare" {}
@@ -30,6 +49,7 @@ variables {
   cloudflare_account_id     = "fedcba9876543210fedcba9876543210"
   cloudflare_api_token      = "test-token"
   budget_notification_email = "billing@example.com"
+  judge_ami_id              = "ami-0123456789abcdef0"
 }
 
 run "burstable_cpu_throttles_rather_than_billing" {
@@ -41,6 +61,15 @@ run "burstable_cpu_throttles_rather_than_billing" {
     # mode (ADR-0001).
     condition     = aws_instance.app.credit_specification[0].cpu_credits == "standard"
     error_message = "Burstable CPU credits must be `standard`, or sustained load bills surplus charges instead of throttling."
+  }
+
+  assert {
+    # The judge matters more than the application here. It is the host that
+    # runs untrusted code, so the sustained-CPU case worth planning for is a
+    # miner rather than a busy afternoon — and on `standard` a miner throttles
+    # to the baseline instead of generating surplus charges (ADR-0005).
+    condition     = aws_instance.judge.credit_specification[0].cpu_credits == "standard"
+    error_message = "The judge's CPU credits must be `standard`, or a miner on that host bills the surplus."
   }
 }
 
@@ -67,6 +96,27 @@ run "compute_is_halted_before_the_bill_runs_away" {
     # the halt is a post-mortem, not a warning.
     condition     = alltrue([for t in var.budget_alert_thresholds : t < 100])
     error_message = "Billing alerts must fire below the halt threshold."
+  }
+}
+
+# The one assertion here that needs identifiers, and identifiers do not exist
+# until apply — so this block applies, against the same mocked providers the
+# rest of the file plans against. Nothing is created and no credentials are
+# used; the mocks generate the identifiers the real API would have returned.
+run "the_halt_reaches_every_instance" {
+  command = apply
+
+  assert {
+    # Both instances. The judge especially: it is the box running untrusted
+    # code, so it is the likeliest source of the mining workload this halt
+    # exists to stop, and an instance missing from this list is one the halt
+    # cannot reach.
+    condition = setintersection(
+      toset(aws_budgets_budget_action.stop_compute.definition[0].ssm_action_definition[0].instance_ids),
+      toset([aws_instance.app.id, aws_instance.judge.id])
+      ) == toset([aws_instance.app.id, aws_instance.judge.id]
+    )
+    error_message = "The halt must stop both the application and the judge."
   }
 }
 

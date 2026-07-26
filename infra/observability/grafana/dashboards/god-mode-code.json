@@ -1,7 +1,7 @@
 {
   "uid": "god-mode-code",
   "title": "GOD_MODE_CODE",
-  "description": "Traffic, Runs and the judge. Panels that read 'No data' name work that has not landed yet rather than a fault: Run counters arrive with issue #7, and every judge panel stays empty until the judge's instance exists (issue #13).",
+  "description": "Traffic, Runs and the judge. Panels that read 'No data' name work that has not landed yet rather than a fault: Run counters arrive with issue #7. The judge panels are mirrored by the backend rather than scraped, because the judge has no route to any sink of its own (ADR-0005).",
   "tags": ["god-mode-code"],
   "timezone": "browser",
   "schemaVersion": 39,

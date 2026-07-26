@@ -35,11 +35,21 @@ output "database_identifier" {
 }
 
 output "app_security_group_id" {
-  description = "Application security group. The judge's instance allows ingress only from this (issue #13)."
+  description = "Application security group. The judge's instance allows ingress only from this."
   value       = aws_security_group.app.id
 }
 
 output "private_subnet_ids" {
-  description = "Routeless private subnets. Where the judge's instance goes (issue #13)."
+  description = "Routeless private subnets. The database and the judge's instance."
   value       = aws_subnet.private[*].id
+}
+
+output "judge_instance_id" {
+  description = "Judge instance. There is no way onto it; this is for stopping and replacing it."
+  value       = aws_instance.judge.id
+}
+
+output "judge_url" {
+  description = "Where the application reaches the judge. Fixed, so replacing the judge does not require redeploying the application."
+  value       = local.judge_url
 }

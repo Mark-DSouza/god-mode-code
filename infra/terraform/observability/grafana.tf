@@ -146,8 +146,10 @@ resource "grafana_rule_group" "preceding_an_outage" {
       })
     }
 
-    # No judge yet means no series (issue #13). That is not an alert — it is
-    # the documented state of the project until the judge's instance lands.
+    # A judge nobody is using produces no Judgings, and no Judgings means the
+    # ratio has no series to evaluate. That is a quiet night, not an incident.
+    # `judge_reachable`, which the backend publishes from its own view, is what
+    # says the host is gone.
     no_data_state  = "OK"
     exec_err_state = "Error"
   }

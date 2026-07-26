@@ -23,6 +23,14 @@ cloudflare_api_token = "..."
 # `alarm_email` is set separately.
 budget_notification_email = "you@example.com"
 
+# The judge's machine image, from `docs/runbooks/judge-host.md`.
+#
+# There is no default and no fallback to the stock Amazon Linux image, because
+# the judge's host has no route out: it cannot install a container runtime,
+# pull an execution image or fetch its own binary at first boot. Everything it
+# will ever run has to be on the disk before it boots (ADR-0005).
+judge_ami_id = "ami-..."
+
 # Grafana Cloud's endpoints, from the stack's own page. These are not secrets —
 # the token is, and it is written to Parameter Store out of band, exactly like
 # the registry token (see infra/README.md).
@@ -33,8 +41,3 @@ grafana_prometheus_url      = ""
 grafana_prometheus_username = ""
 grafana_loki_url            = ""
 grafana_loki_username       = ""
-
-# host:port of the judge's scrape endpoint over the private link. Empty until
-# the judge's instance lands (issue #13); empty drops the target rather than
-# leaving a permanently unreachable one on the dashboard.
-judge_metrics_address = ""

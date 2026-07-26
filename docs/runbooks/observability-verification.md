@@ -9,21 +9,22 @@ drill log at the bottom recording when each was last actually performed.
 
 ## What is watching what
 
-| Signal                          | Collected by                | Lands in         |
-| ------------------------------- | --------------------------- | ---------------- |
-| Backend logs                    | journald → Alloy            | Grafana Loki     |
-| Backend metrics                 | Alloy scrapes `/actuator`   | Grafana Mimir    |
-| Judge metrics                   | Alloy scrapes over the link | Grafana Mimir    |
-| Judge logs                      | nobody, on purpose          | the judge's disk |
-| Host CPU, disk                  | Alloy                       | Grafana Mimir    |
-| Frontend errors                 | the browser                 | Sentry           |
-| Instance CPU, credits, status   | AWS                         | CloudWatch alarm |
-| Database CPU, storage, sessions | AWS                         | CloudWatch alarm |
-| The site being reachable at all | UptimeRobot                 | your inbox       |
+| Signal                          | Collected by                           | Lands in         |
+| ------------------------------- | -------------------------------------- | ---------------- |
+| Backend logs                    | journald → Alloy                       | Grafana Loki     |
+| Backend metrics                 | Alloy scrapes `/actuator`              | Grafana Mimir    |
+| Judge metrics                   | the api mirrors, Alloy scrapes the api | Grafana Mimir    |
+| Judge logs                      | nobody, on purpose                     | the judge's disk |
+| Host CPU, disk                  | Alloy                                  | Grafana Mimir    |
+| Frontend errors                 | the browser                            | Sentry           |
+| Instance CPU, credits, status   | AWS                                    | CloudWatch alarm |
+| Database CPU, storage, sessions | AWS                                    | CloudWatch alarm |
+| The site being reachable at all | UptimeRobot                            | your inbox       |
 
 Two absences are deliberate. The judge ships nothing itself — no egress, so no
-route to any sink (ADR-0005) — and its metrics leave only because the
-application host scrapes them. And nothing inside AWS checks whether the site is
+route to any sink (ADR-0005) — and its metrics leave only because the backend
+scrapes them across the private link and re-publishes them into its own
+registry, from where the collector picks them up along with everything else. And nothing inside AWS checks whether the site is
 up, because a host that is down cannot report that it is down (ADR-0008).
 
 ## Before you start

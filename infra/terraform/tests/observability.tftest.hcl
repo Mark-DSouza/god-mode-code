@@ -29,6 +29,7 @@ variables {
   cloudflare_account_id     = "fedcba9876543210fedcba9876543210"
   cloudflare_api_token      = "test-token"
   budget_notification_email = "billing@example.com"
+  judge_ami_id              = "ami-0123456789abcdef0"
 }
 
 run "every_alarm_actually_tells_somebody" {

@@ -14,11 +14,13 @@
 //     container socket is root on the host for whoever reaches it. The
 //     containers log to the journal instead and this reads the journal, which
 //     is a read-only mount of a directory.
-//   * It does not reach into the judge for anything but metrics. The judge has
-//     no egress and cannot ship its own telemetry, so the host scrapes it over
-//     the private link and carries it out from here (ADR-0005). Its logs stay
-//     on its own box, on purpose, and their absence from Grafana is a decision
-//     rather than a fault.
+//   * It does not reach into the judge at all. The judge has no egress and
+//     cannot ship its own telemetry, so the backend scrapes it across the
+//     private link and re-publishes what it finds into its own registry
+//     (ADR-0005). That means the judge's numbers arrive here through the api
+//     scrape below, and a second scrape aimed straight at the judge would
+//     double every series it keeps. Its logs stay on its own box, on purpose,
+//     and their absence from Grafana is a decision rather than a fault.
 
 // ---------------------------------------------------------------------------
 // Where it all goes
@@ -72,6 +74,10 @@ loki.write "grafana_cloud" {
 // Reached over the container network by name, the same way Caddy reaches it.
 // `/actuator` is not proxied to the internet — Caddy routes `/api/*` and
 // nothing else — so this endpoint is private without needing a rule about it.
+//
+// This one scrape carries the judge as well as the backend: the judge cannot
+// ship telemetry, so the backend mirrors its counters into this registry and
+// they leave here under their own `judge_` names (ADR-0005).
 prometheus.scrape "api" {
   targets = [{
     __address__      = "api:8080",
@@ -85,36 +91,6 @@ prometheus.scrape "api" {
   // Sixty seconds, not fifteen. A JVM emits a few hundred series and the free
   // tier counts active series, not scrapes; four times the resolution here
   // would buy detail nobody looks at on a site with one instance.
-  scrape_interval = "60s"
-  scrape_timeout  = "10s"
-}
-
-// ---------------------------------------------------------------------------
-// Metrics: the judge
-// ---------------------------------------------------------------------------
-
-// The judge lands with issue #13. Until it does, JUDGE_METRICS_ADDRESS is empty
-// and the rule below drops the target — otherwise the dashboard would show a
-// permanently unreachable service and teach whoever reads it to ignore red.
-discovery.relabel "judge" {
-  targets = [{
-    __address__      = sys.env("JUDGE_METRICS_ADDRESS"),
-    __metrics_path__ = "/metrics",
-    job              = "judge",
-    instance         = "judge-host",
-  }]
-
-  rule {
-    source_labels = ["__address__"]
-    regex         = ""
-    action        = "drop"
-  }
-}
-
-prometheus.scrape "judge" {
-  targets    = discovery.relabel.judge.output
-  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
-
   scrape_interval = "60s"
   scrape_timeout  = "10s"
 }

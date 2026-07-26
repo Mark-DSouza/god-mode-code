@@ -205,7 +205,6 @@ ALLOY_CONFIG
     --env GRAFANA_LOKI_USERNAME="$LOKI_USERNAME" \
     --env GRAFANA_TOKEN="$GRAFANA_TOKEN" \
     --env GMC_ENVIRONMENT="${environment}" \
-    --env JUDGE_METRICS_ADDRESS="${judge_metrics_address}" \
     --volume /opt/gmc/alloy/config.alloy:/etc/alloy/config.alloy:ro \
     --volume gmc-alloy-data:/var/lib/alloy/data \
     --volume /var/log/journal:/var/log/journal:ro \
@@ -236,6 +235,10 @@ fi
 DB_URL="$(get_param "$PREFIX/database/url")"
 DB_USER="$(get_param "$PREFIX/database/username")"
 DB_PASSWORD="$(get_param "$PREFIX/database/password")"
+# A fixed private address on the routeless subnet. Terraform pins it, so this
+# value survives the judge being replaced and the backend never has to be
+# redeployed to find it again (ADR-0005).
+JUDGE_URL="$(get_param "$PREFIX/judge/url")"
 
 start_api() {
   docker run --detach \
@@ -248,6 +251,7 @@ start_api() {
     --env DATABASE_URL="$DB_URL" \
     --env DATABASE_USER="$DB_USER" \
     --env DATABASE_PASSWORD="$DB_PASSWORD" \
+    --env JUDGE_URL="$JUDGE_URL" \
     --env GMC_VERSION="$1" \
     --env GMC_ENVIRONMENT="${environment}" \
     --env GMC_LOG_FORMAT=ecs \

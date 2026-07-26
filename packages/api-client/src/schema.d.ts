@@ -104,6 +104,12 @@ export interface components {
              */
             database: "UP" | "DEGRADED";
             /**
+             * @description Judge availability. DEGRADED means the Code Discipline is unavailable; the rest of the site is unaffected.
+             * @example UP
+             * @enum {string}
+             */
+            judge: "UP" | "DEGRADED";
+            /**
              * @description Running build version
              * @example 0.0.1-SNAPSHOT
              */

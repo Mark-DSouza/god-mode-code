@@ -62,8 +62,7 @@ resource "aws_ssm_document" "deploy" {
           # being baked into the host at first boot, because it changes with the
           # application. Read from the repository so there is one copy of it,
           # reviewable as the thing it is instead of as an embedded string.
-          alloy_config          = file("${path.module}/../observability/alloy/config.alloy")
-          judge_metrics_address = var.judge_metrics_address
+          alloy_config = file("${path.module}/../observability/alloy/config.alloy")
         }))
       }
     }]

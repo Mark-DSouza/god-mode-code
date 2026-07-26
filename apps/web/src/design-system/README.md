@@ -48,16 +48,17 @@ Implemented — the primitives every screen sits on:
 | `effects` | `DigitalRain`                                                                                             |
 | `brand`   | `Wordmark`                                                                                                |
 | `core`    | `Badge` `Button` `Card` `Dialog` `IconButton` `Input` `Kbd` `ProgressBar` `Select` `Stat` `Switch` `Tabs` |
+| `typing`  | `ChallengeCard` `Countdown` `ResultPanel` `TypingField`                                                   |
 
 Deliberately **not** implemented yet — each is domain furniture for a screen
 that does not exist, and lands with the ticket that introduces it:
 
-| Group        | Components                                                         | Lands with                 |
-| ------------ | ------------------------------------------------------------------ | -------------------------- |
-| `typing`     | `TypingField` `CodeStub` `Countdown` `ChallengeCard` `ResultPanel` | Typing Run / Solve Run     |
-| `data`       | `Table` `Avatar` `RunChart`                                        | Leaderboards / profile     |
-| `navigation` | `Breadcrumb` `SettingRow`                                          | Settings                   |
-| `feedback`   | `EmptyState` `FaultState`                                          | the screens that need them |
+| Group        | Components                  | Lands with                 |
+| ------------ | --------------------------- | -------------------------- |
+| `typing`     | `CodeStub`                  | Solve Run                  |
+| `data`       | `Table` `Avatar` `RunChart` | Leaderboards / profile     |
+| `navigation` | `Breadcrumb` `SettingRow`   | Settings                   |
+| `feedback`   | `EmptyState` `FaultState`   | the screens that need them |
 
 Building them now would mean guessing at the states they need before any screen
 exists to need them.
@@ -69,14 +70,16 @@ ADR-0010 records four, numbered below in the order that document lists them:
 | #   | Deviation                                    | Where it lives                                                         |
 | --- | -------------------------------------------- | ---------------------------------------------------------------------- |
 | 1   | `--ink-3` raised to meet 4.5:1 on the void   | `packages/design-tokens/src/deviations.css`                            |
-| 2   | visually hidden, genuinely focused `<input>` | not yet — Run screen                                                   |
+| 2   | visually hidden, genuinely focused `<input>` | `src/run/RunScreen.tsx`; `TypingField` is the presentational layer     |
 | 3   | reduced motion honoured                      | `deviations.css` for ambient chrome; `DigitalRain` for its own default |
-| 4   | non-colour indicator on wrong glyphs         | not yet — Run screen                                                   |
+| 4   | non-colour indicator on wrong glyphs         | `typing/Glyph.tsx` — wavy underline, and `␣` for a mistyped space      |
 
 Deviation 3 is the one that lives partly here: `DigitalRain` defaults off under
 `prefers-reduced-motion` while still honouring an explicit choice to turn it back
 on, because the system preference sets the default and does not overrule someone
 who went to Settings and asked for rain.
 
-2 and 4 are both component-level, both belong to the typing surface, and land
-with the Run screen.
+2 and 4 are both component-level and both belong to the typing surface. 2 is
+deliberately split: the focused `<input>` belongs to the application's Run
+screen, not to the design system, because a presentational component that owns
+focus cannot be composed twice on a page.

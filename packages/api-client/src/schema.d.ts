@@ -26,6 +26,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/typing-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a finished Run for Verification
+         * @description Takes raw data — the text as typed, the keystroke count, the two timestamps — and recomputes WPM and Accuracy from it. The request body has nowhere to put a client-computed metric, because none would be believed (ADR-0003).
+         *
+         *     A refusal is 422 with a machine-readable reason, not a 400: the request was well formed and was understood, and it is the Run that did not survive.
+         */
+        post: operations["submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Be handed a Passage to transcribe
+         * @description Records an Issue against the User — who got what, when, and until when — and returns the Passage. Which Passage arrives is the server's choice.
+         *
+         *     Asking again abandons the Challenge the User was holding, so a player can skip a Passage they do not fancy, and nobody can hold several at once and submit whichever went best (ADR-0003).
+         */
+        post: operations["request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/me": {
         parameters: {
             query?: never;
@@ -88,6 +132,138 @@ export interface components {
              * @example false
              */
             claimed: boolean;
+        };
+        /** @description The raw data a finished Run is verified from */
+        TypingRunSubmission: {
+            /**
+             * Format: uuid
+             * @description The Issue this Run answers
+             */
+            issueId: string;
+            /** @description The text as typed, in full */
+            typedText: string;
+            /**
+             * Format: int32
+             * @description Total character keystrokes, mistakes included
+             * @example 312
+             */
+            keystrokes: number;
+            /**
+             * Format: date-time
+             * @description The client's clock at the first keystroke
+             */
+            startedAt: string;
+            /**
+             * Format: date-time
+             * @description The client's clock at the last keystroke
+             */
+            completedAt: string;
+        };
+        /** @description A completed and verified Run against a Passage */
+        TypingRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            passageId: string;
+            /**
+             * @description One of the three ways to play
+             * @enum {string}
+             */
+            discipline: "QUOTES" | "PROSE" | "CODE";
+            /**
+             * @description Correct characters over five, per minute, computed by the server
+             * @example 78.4
+             */
+            wpm: number;
+            /**
+             * @description Correct keystrokes over total keystrokes, as a percentage
+             * @example 99.1
+             */
+            accuracy: number;
+            /**
+             * Format: int32
+             * @description How long the Run took
+             * @example 31240
+             */
+            elapsedMillis: number;
+            /**
+             * Format: int32
+             * @description Total character keystrokes, mistakes included
+             * @example 312
+             */
+            keystrokes: number;
+            /**
+             * Format: int32
+             * @description Characters of the Passage the final text got right
+             * @example 309
+             */
+            correctCharacters: number;
+            /**
+             * Format: int32
+             * @description Keystrokes that were not correct characters
+             * @example 3
+             */
+            errors: number;
+            /** Format: date-time */
+            completedAt: string;
+        };
+        /** @description A submitted Run that was not recorded, and why */
+        Rejection: {
+            /**
+             * @description Why a submitted Run was not recorded
+             * @enum {string}
+             */
+            reason: "NO_SUCH_ISSUE" | "ISSUE_EXPIRED" | "ISSUE_ALREADY_USED" | "ISSUE_SUPERSEDED" | "PASSAGE_MISMATCH" | "IMPOSSIBLE_DURATION" | "IMPLAUSIBLE_KEYSTROKES" | "IMPLAUSIBLE_SPEED";
+            /**
+             * @description Human-readable restatement of the reason
+             * @example The typed text does not correspond to the Passage that was issued.
+             */
+            explanation: string;
+        };
+        /** @description A request for a Challenge in one Discipline */
+        ChallengeRequest: {
+            /**
+             * @description One of the three ways to play
+             * @enum {string}
+             */
+            discipline: "QUOTES" | "PROSE" | "CODE";
+        };
+        /** @description A Passage to transcribe, and the Issue that recorded it going out */
+        Challenge: {
+            /** Format: uuid */
+            issueId: string;
+            passage: components["schemas"]["Passage"];
+            /**
+             * Format: date-time
+             * @description After this moment the Challenge can no longer be answered
+             */
+            expiresAt: string;
+        };
+        /** @description A fixed piece of text to be transcribed */
+        Passage: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description One of the three ways to play
+             * @enum {string}
+             */
+            discipline: "QUOTES" | "PROSE" | "CODE";
+            /**
+             * @description The text to transcribe, printable ASCII throughout
+             * @example Call me Ishmael.
+             */
+            text: string;
+            /**
+             * @description Who said or wrote it
+             * @example Herman Melville, Moby-Dick, 1851
+             */
+            attribution: string;
+            /**
+             * Format: int32
+             * @description How many characters the text is
+             * @example 302
+             */
+            characterCount: number;
         };
         /** @description The backend's own status and that of its dependencies */
         HealthStatus: {
@@ -152,6 +328,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["User"];
                 };
+            };
+        };
+    };
+    submit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gmc_recognition?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TypingRunSubmission"];
+            };
+        };
+        responses: {
+            /** @description The Run as the server computed it */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypingRun"];
+                };
+            };
+            /** @description This browser is nobody yet */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The Run was not recorded, and why */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rejection"];
+                };
+            };
+        };
+    };
+    request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gmc_recognition?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description The Challenge, and when it stops being answerable */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Challenge"];
+                };
+            };
+            /** @description This browser is nobody yet — create a User first */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description That Discipline has no Passages. Code never will (ADR-0004) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

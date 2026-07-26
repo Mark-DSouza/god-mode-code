@@ -8,12 +8,12 @@ import { expect, test } from "@playwright/test";
 test("the application loads and reports the backend online", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: /system online/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /how fast can you type/i })).toBeVisible();
 
-  // The badge, not the heading: this is the value that only appears once the
-  // browser has actually reached the backend through the proxy.
+  // The status pill, not the heading: this is the value that only appears once
+  // the browser has actually reached the backend through the proxy. The version
+  // it reports is asserted below, against the endpoint directly.
   await expect(page.getByRole("status")).toHaveText(/online/i, { timeout: 15_000 });
-  await expect(page.getByText("e2e")).toBeVisible();
 });
 
 test("every request the page makes is same-origin", async ({ page }) => {
@@ -82,7 +82,7 @@ test("unknown paths serve the application, so client-side routing works", async 
   const response = await page.goto("/leaderboard/quotes");
 
   expect(response?.status()).toBe(200);
-  await expect(page.getByRole("heading", { name: /system online/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /how fast can you type/i })).toBeVisible();
 });
 
 test("the digital rain renders behind the application", async ({ page }) => {
@@ -99,7 +99,7 @@ test("the rain is off by default when the browser asks for reduced motion", asyn
   const page = await context.newPage();
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /system online/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /how fast can you type/i })).toBeVisible();
 
   // ADR-0010. Verified against a real browser's media query rather than a
   // mocked matchMedia, which is the version that can actually be wrong.

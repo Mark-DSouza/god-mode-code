@@ -121,6 +121,14 @@ Recomputing a Run's metrics server-side from raw submitted data, rather than
 trusting the numbers the client reports. Every Run is verified.
 _Avoid_: Validation, checking, anti-cheat
 
+**Rejection**:
+The answer to a submission that did not survive Verification, carrying the one
+reason it did not. Not a Verdict — a Verdict is a Solve Run's result and belongs
+to the player, whereas a Rejection means no Run was recorded at all. The reason
+is part of the API contract because the client acts on it differently: an
+expired Issue asks for a new Challenge, a replay already has its result.
+_Avoid_: Error, failure, invalid, verdict
+
 **Judging**:
 Executing a Solve Run's submitted source against a Pattern's hidden tests in an
 isolated container to produce a Verdict. The Solve Run equivalent of

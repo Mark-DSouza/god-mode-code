@@ -1,4 +1,5 @@
 import { DigitalRain, type DigitalRainProps } from "../design-system/index.ts";
+import { rainSeedFrom } from "./rain-seed.ts";
 
 /** The subset of the rain's controls a screen has any business setting. */
 export type RainBackdropProps = Pick<DigitalRainProps, "speed" | "intensity" | "enabled">;
@@ -16,6 +17,15 @@ export type RainBackdropProps = Pick<DigitalRainProps, "speed" | "intensity" | "
  * and it competes with the body copy it sits behind.
  */
 const CALM = { intensity: 0.5, speed: 0.75 } as const;
+
+/**
+ * Set only by the visual regression harness, and compiled away otherwise.
+ *
+ * Read once at module scope rather than per render: it cannot change while the
+ * page is open, and re-reading it would put a `seed` prop that is identical on
+ * every render into the dependency list of the effect that draws.
+ */
+const SEED = rainSeedFrom(import.meta.env.VITE_RAIN_SEED);
 
 /**
  * The rain, fixed behind every screen.
@@ -39,6 +49,7 @@ export function RainBackdrop({ speed, intensity, enabled }: RainBackdropProps) {
         speed={speed ?? CALM.speed}
         intensity={intensity ?? CALM.intensity}
         enabled={enabled}
+        seed={SEED}
       />
     </div>
   );

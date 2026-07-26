@@ -12,6 +12,12 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 // worse.
 const uploadSourceMaps = Boolean(process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_PROJECT);
 
+// The design system specimen gallery is a test fixture that happens to be a
+// page. It is built only when the visual regression harness asks for it, so no
+// deployed bundle carries a second entry point, and nothing a visitor can reach
+// renders it (ADR-0012).
+const buildSpecimens = process.env.VISUAL === "1";
+
 export default defineConfig({
   plugins: [
     react(),
@@ -56,6 +62,16 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    ...(buildSpecimens
+      ? {
+          rollupOptions: {
+            input: {
+              index: fileURLToPath(new URL("index.html", import.meta.url)),
+              specimens: fileURLToPath(new URL("specimens.html", import.meta.url)),
+            },
+          },
+        }
+      : {}),
     // `hidden` rather than `true`: the maps are still generated, so they can be
     // uploaded and stack traces stay readable, but no `sourceMappingURL`
     // comment points a browser at them.

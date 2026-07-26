@@ -11,6 +11,9 @@ mockups-and-design-system/design_system/uploads/god_mode_code_ui_mockups/
 node_modules/
 *.tsbuildinfo
 apps/web/dist/
+# The visual suite's build. Carries the specimen gallery, which no deployed
+# bundle may, so it is kept out of `dist` rather than overwriting it.
+apps/web/dist-visual/
 
 # Java
 target/
@@ -24,6 +27,11 @@ e2e/test-results/
 e2e/playwright-report/
 e2e/blob-report/
 e2e/.cache/
+# The visual suite's output, but never `visual/__screenshots__/` — the baselines
+# are the point and they are committed.
+visual/test-results/
+visual/playwright-report/
+visual/blob-report/
 
 # Terraform
 #

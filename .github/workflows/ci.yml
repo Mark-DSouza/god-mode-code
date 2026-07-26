@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       web: ${{ steps.filter.outputs.web }}
+      visual: ${{ steps.filter.outputs.visual }}
       api: ${{ steps.filter.outputs.api }}
       judge: ${{ steps.filter.outputs.judge }}
       contract: ${{ steps.filter.outputs.contract }}
@@ -40,6 +41,16 @@ jobs:
               - 'apps/web/**'
               - 'packages/**'
               - 'mockups-and-design-system/design_system/**'
+            # The exact inverse of the `stack` negations below. Where the
+            # end-to-end job deliberately ignores stylesheets and tokens because
+            # it cannot see them, this one exists to look at them — a token
+            # moving is precisely the change it has to run for.
+            visual:
+              - *shared
+              - 'apps/web/**'
+              - 'packages/**'
+              - 'mockups-and-design-system/design_system/**'
+              - 'visual/**'
             api:
               - *shared
               - 'apps/api/**'
@@ -101,6 +112,52 @@ jobs:
       - run: pnpm --filter @gmc/web --filter "./packages/*" typecheck
       - run: pnpm --filter @gmc/web --filter "./packages/*" test
       - run: pnpm --filter @gmc/web build
+
+  # Design fidelity, checked by comparing pixels against committed baselines.
+  #
+  # Runs inside the Playwright image rather than on the bare runner, and that is
+  # not an optimisation: screenshots are platform-specific, and a baseline taken
+  # anywhere other than where it is compared fails for reasons that have nothing
+  # to do with the design. `visual/run-in-ci-image.sh` runs this same image
+  # locally, so a baseline regenerated on a laptop is one this job agrees with
+  # (ADR-0012).
+  visual:
+    needs: changes
+    if: needs.changes.outputs.visual == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      # Chromium shares memory between its processes through /dev/shm, which
+      # Docker caps at 64MB. A full-viewport screenshot of a page with a canvas
+      # behind it is exactly the workload that exhausts it, and the symptom is a
+      # renderer that dies mid-test.
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @gmc/visual typecheck
+      - run: pnpm --filter @gmc/visual test
+      # Proves the suite can still fail. Runs after the comparison above, so a
+      # genuine regression is reported as itself rather than as a confusing
+      # "the canary passed when it should not have".
+      - run: pnpm --filter @gmc/visual canary
+      # The expected, actual and difference images, plus the HTML report that
+      # puts them side by side. Without these a failure is a number of differing
+      # pixels and nothing anyone can act on, which is how visual suites end up
+      # blanket-approved.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: visual-regression-diff
+          path: |
+            visual/test-results/
+            visual/playwright-report/
+          retention-days: 7
 
   api:
     needs: changes
@@ -247,7 +304,7 @@ jobs:
   # One status to require on the branch, so a skipped job does not read as a
   # missing check. `always()` is what lets this run when upstream jobs skip.
   ci:
-    needs: [web, api, judge, contract, infra, e2e]
+    needs: [web, visual, api, judge, contract, infra, e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:

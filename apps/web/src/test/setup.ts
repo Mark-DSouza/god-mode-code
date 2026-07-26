@@ -35,7 +35,31 @@ beforeAll(() => {
   HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
 
   installWebLocks();
+  installModalDialog();
 });
+
+/**
+ * `showModal` and `close` for jsdom, which ships `<dialog>` without them.
+ *
+ * jsdom throws "Not implemented" rather than returning, so a component that
+ * opens a modal fails on mount and takes the whole render with it. The top
+ * layer, the focus trap and the inert background are all real browser
+ * behaviour that cannot be reproduced here and none of it is what these tests
+ * are about — `open` is the part the DOM exposes and the part assertions read.
+ * The visual suite photographs the real thing in a real browser.
+ */
+function installModalDialog(): void {
+  const dialog = globalThis.HTMLDialogElement?.prototype;
+  if (!dialog) return;
+
+  dialog.showModal = function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  dialog.close = function close(this: HTMLDialogElement) {
+    this.open = false;
+    this.dispatchEvent(new Event("close"));
+  };
+}
 
 /**
  * A Web Locks implementation for jsdom, which ships none.

@@ -20,11 +20,11 @@ recognition and Run integrity.
   being handed someone else's Handle and their Runs.
 - **Recording a Run that should not exist** — getting a Typing Run past
   Verification with metrics it did not earn, or consuming an Issue that was
-  replayed, expired, or granted to someone else.
+  replayed, expired, or handed to someone else.
 
 Judging is not in scope yet. It executes arbitrary submitted source, but nothing
 on the internet reaches it: there is no Pattern submission endpoint, and the
 judge sits in a private subnet reachable only from the api's security group. It
-joins the list above on the day that path opens.
+joins the list above on the day the Solve Run path opens.
 
 [report]: https://github.com/Mark-DSouza/god-mode-code/security/advisories/new

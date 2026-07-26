@@ -52,8 +52,14 @@ public record HealthStatus(
      *
      * The one place the rule lives: overall follows the database, because that
      * is the dependency without which there is no site.
+     *
+     * Takes booleans rather than two adjacent {@code Status} parameters on
+     * purpose — transposing those would compile silently and report the judge's
+     * state as the database's, which is the one mistake here that would page
+     * somebody at three in the morning for the wrong reason.
      */
-    public static HealthStatus of(Status database, Status judge, String version) {
-        return new HealthStatus(database == Status.UP ? Status.UP : Status.DEGRADED, database, judge, version);
+    public static HealthStatus of(boolean databaseReachable, boolean judgeCanJudge, String version) {
+        Status database = databaseReachable ? Status.UP : Status.DEGRADED;
+        return new HealthStatus(database, database, judgeCanJudge ? Status.UP : Status.DEGRADED, version);
     }
 }

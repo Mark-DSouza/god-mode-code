@@ -2,6 +2,7 @@ package dev.markdsouza.godmodecode.judge;
 
 import java.net.http.HttpClient;
 import java.time.Clock;
+import java.time.Duration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -43,34 +44,38 @@ public class JudgeConfiguration {
                 .build();
     }
 
+    /**
+     * The client Solve Runs go through.
+     *
+     * 45 seconds is derived rather than chosen: the judge waits up to 30 for a
+     * worker before refusing, then bounds the execution at 10 by its own wall
+     * clock, and the container takes a moment to start. A shorter deadline here
+     * would abandon Solve Runs the judge was still going to answer — and it
+     * would abandon them under load, which is when the difference between "slow"
+     * and "broken" matters most.
+     *
+     * It is deliberately not a comfortable wait for a player. Bringing it down
+     * means lowering the judge's queue wait first, not clipping the deadline
+     * underneath it.
+     */
     @Bean
     RestClient judgingRestClient(HttpClient judgeHttpClient, JudgeProperties properties) {
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(judgeHttpClient);
-        // The hard deadline on one judging. This is the whole exchange, enforced
-        // by the client, not a socket read timeout that a trickling response
-        // could extend indefinitely.
-        //
-        // 45 seconds is derived rather than chosen: the judge waits up to 30 for
-        // a worker before refusing, then bounds the execution at 10 by its own
-        // wall clock, and the container takes a moment to start. A shorter
-        // deadline here would abandon Solve Runs the judge was still going to
-        // answer — and it would abandon them under load, which is when the
-        // difference between "slow" and "broken" matters most.
-        //
-        // It is deliberately not a comfortable wait for a player. Bringing it
-        // down means lowering the judge's queue wait first, not clipping the
-        // deadline underneath it.
-        factory.setReadTimeout(properties.timeout());
-        return RestClient.builder()
-                .baseUrl(properties.baseUrl().toString())
-                .requestFactory(factory)
-                .build();
+        return judgeClient(judgeHttpClient, properties, properties.timeout());
     }
 
+    /** The client the monitor probes with, on a deadline it can poll at. */
     @Bean
     RestClient monitoringRestClient(HttpClient judgeHttpClient, JudgeProperties properties) {
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(judgeHttpClient);
-        factory.setReadTimeout(properties.pollTimeout());
+        return judgeClient(judgeHttpClient, properties, properties.pollTimeout());
+    }
+
+    private static RestClient judgeClient(HttpClient http, JudgeProperties properties, Duration deadline) {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
+        // Maps to `HttpRequest.timeout`, which bounds the whole exchange up to
+        // the response arriving — not a socket read timeout that a trickling
+        // response could extend indefinitely. Both endpoints behind this client
+        // answer in one small JSON document, so that is the whole response.
+        factory.setReadTimeout(deadline);
         return RestClient.builder()
                 .baseUrl(properties.baseUrl().toString())
                 .requestFactory(factory)

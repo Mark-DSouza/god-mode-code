@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.Tags;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
@@ -50,6 +51,19 @@ public class JudgeMetricsMirror {
 
     /** Only the judge's own names. Anything else in that payload is not ours to publish. */
     private static final String ACCEPTED_PREFIX = "judge_";
+
+    /**
+     * Names the backend keeps for itself, whatever the judge calls its own
+     * metrics.
+     *
+     * These two are the backend's view of the judge rather than the judge's view
+     * of itself — they are what distinguishes "the judge is down" from "nothing
+     * is scraping". A compromised judge that emitted them would be claiming to
+     * be reachable in the one series that exists to say otherwise, and
+     * Micrometer would silently drop the second registration, leaving the real
+     * gauge intact but the mirror updating a holder nobody reads.
+     */
+    private static final Set<String> RESERVED = Set.of("judge_reachable", "judge_can_judge");
 
     /**
      * The judge exposes nine series. This is generous room for it to grow and a
@@ -169,7 +183,7 @@ public class JudgeMetricsMirror {
             tags = parseTags(identifier.substring(labelsStart + 1, identifier.length() - 1));
         }
 
-        if (!name.startsWith(ACCEPTED_PREFIX)) {
+        if (!name.startsWith(ACCEPTED_PREFIX) || RESERVED.contains(name)) {
             return null;
         }
         return new Sample(new Series(name, tags), value);

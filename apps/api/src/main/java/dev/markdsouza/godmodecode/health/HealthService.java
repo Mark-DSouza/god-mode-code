@@ -36,16 +36,13 @@ public class HealthService {
     }
 
     public HealthStatus check() {
-        return HealthStatus.of(
-                databaseReachable() ? HealthStatus.Status.UP : HealthStatus.Status.DEGRADED,
-                // Read from the poller rather than probed here. The judge sits
-                // on a routeless subnet and this endpoint is hit by the uptime
-                // monitor, the deploy script and the container runtime; opening
-                // a socket to the judge on each of those would make the whole
-                // site's health wait on the one dependency that is allowed to
-                // be unwell on its own (ADR-0005).
-                judge.availability().canJudge() ? HealthStatus.Status.UP : HealthStatus.Status.DEGRADED,
-                version);
+        // The judge's state is read from the poller rather than probed here. It
+        // sits on a routeless subnet, and this endpoint is hit by the uptime
+        // monitor, the deploy script and the container runtime; opening a socket
+        // to the judge on each of those would make the whole site's health wait
+        // on the one dependency that is allowed to be unwell on its own
+        // (ADR-0005).
+        return HealthStatus.of(databaseReachable(), judge.availability().canJudge(), version);
     }
 
     private boolean databaseReachable() {

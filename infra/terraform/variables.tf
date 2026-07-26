@@ -89,7 +89,15 @@ variable "judge_port" {
 }
 
 variable "judge_workers" {
-  description = "How many sandbox containers may run at once. Two is the judge's own default on a 1GB host; raising it needs a measurement, not an opinion."
+  description = <<-EOT
+    How many sandbox containers may run at once.
+
+    Two, which is deliberately half the four ADR-0005 estimates when it argues
+    for Go over a JVM. That figure is an argument for the language choice rather
+    than a measurement, and four sandboxes at the default 128m cap is most of a
+    1GB box. The judge's own default is two for the same reason; raising this
+    wants a measurement, not an opinion.
+  EOT
   type        = number
   default     = 2
 }

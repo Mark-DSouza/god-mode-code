@@ -131,6 +131,18 @@ class JudgeMetricsMirrorTest {
     }
 
     @Test
+    @DisplayName("refuses the names the backend keeps for its own view of the judge")
+    void refusesReservedNames() {
+        // A compromised judge claiming to be reachable, in the one series that
+        // exists to say otherwise.
+        mirror.publish("judge_reachable 1\njudge_can_judge 1\njudge_workers 2\n");
+
+        assertThat(registry.find("judge_reachable").gauge()).isNull();
+        assertThat(registry.find("judge_can_judge").gauge()).isNull();
+        assertThat(gauge("judge_workers")).isEqualTo(2.0);
+    }
+
+    @Test
     @DisplayName("skips lines it cannot read instead of dropping the scrape")
     void skipsUnreadableLines() {
         mirror.publish("""

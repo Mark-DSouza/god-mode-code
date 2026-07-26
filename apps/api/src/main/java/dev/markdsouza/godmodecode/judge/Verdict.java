@@ -28,8 +28,13 @@ public enum Verdict {
     TIMEOUT,
 
     /**
-     * The source never got as far as being wrong: it did not compile, it died on
-     * a sandbox limit, or the judge could not be reached at all.
+     * The source never got as far as being wrong: it did not compile, or it died
+     * on a sandbox limit.
+     *
+     * Note what this is not. A judge that could not be reached produced no
+     * Verdict at all, and that is a {@link JudgeUnavailableException} rather
+     * than an Error — nothing about the submitted source can be concluded from
+     * an outage, and recording one as an Error would blame players for it.
      */
     ERROR;
 

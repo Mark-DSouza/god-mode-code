@@ -97,7 +97,10 @@ class JudgeMonitorTest {
         JudgeConfiguration configuration = new JudgeConfiguration();
         var http = configuration.judgeHttpClient(properties);
         return new JudgeClient(
-                configuration.judgingRestClient(http, properties), configuration.monitoringRestClient(http, properties));
+                configuration.judgingRestClient(http, properties),
+                configuration.monitoringRestClient(http, properties),
+                http,
+                properties);
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {

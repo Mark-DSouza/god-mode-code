@@ -73,7 +73,10 @@ class JudgeClientTest {
         JudgeConfiguration configuration = new JudgeConfiguration();
         var http = configuration.judgeHttpClient(properties);
         return new JudgeClient(
-                configuration.judgingRestClient(http, properties), configuration.monitoringRestClient(http, properties));
+                configuration.judgingRestClient(http, properties),
+                configuration.monitoringRestClient(http, properties),
+                http,
+                properties);
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {
@@ -95,7 +98,7 @@ class JudgeClientTest {
                 """));
 
         Judging judged = clientWith(Duration.ofSeconds(5))
-                .judge(new Submission("hash-map-seen-lookup", "def solve(nums): ..."));
+                .judge(new SubmittedSource("hash-map-seen-lookup", "def solve(nums): ..."));
 
         assertThat(judged.verdict()).isEqualTo(Verdict.PASSED);
         assertThat(judged.testsPassed()).isEqualTo(6);
@@ -105,7 +108,7 @@ class JudgeClientTest {
 
     @Test
     @DisplayName("sends the Pattern and the submitted source in the shape the judge parses")
-    void sendsTheSubmission() throws Exception {
+    void sendsTheSubmittedSource() throws Exception {
         AtomicReference<String> received = new AtomicReference<>();
         handler.set(exchange -> {
             try (InputStream body = exchange.getRequestBody()) {
@@ -114,7 +117,7 @@ class JudgeClientTest {
             respond(exchange, 200, "{\"patternId\":\"p\",\"verdict\":\"failed\",\"testsPassed\":1,\"testsTotal\":3}");
         });
 
-        clientWith(Duration.ofSeconds(5)).judge(new Submission("p", "print(1)"));
+        clientWith(Duration.ofSeconds(5)).judge(new SubmittedSource("p", "print(1)"));
 
         // The judge rejects unknown fields outright, so the field names here are
         // a contract rather than a convenience.
@@ -139,7 +142,7 @@ class JudgeClientTest {
 
         long startedAt = System.nanoTime();
         assertThatThrownBy(() ->
-                        clientWith(Duration.ofMillis(300)).judge(new Submission("p", "while True: pass")))
+                        clientWith(Duration.ofMillis(300)).judge(new SubmittedSource("p", "while True: pass")))
                 .isInstanceOf(JudgeUnavailableException.class)
                 .extracting(e -> ((JudgeUnavailableException) e).reason())
                 .isEqualTo(JudgeUnavailableException.Reason.TIMEOUT);
@@ -157,7 +160,7 @@ class JudgeClientTest {
             respond(exchange, 503, "{\"error\":\"the judge is at capacity\"}");
         });
 
-        assertThatThrownBy(() -> clientWith(Duration.ofSeconds(5)).judge(new Submission("p", "x")))
+        assertThatThrownBy(() -> clientWith(Duration.ofSeconds(5)).judge(new SubmittedSource("p", "x")))
                 .isInstanceOf(JudgeUnavailableException.class)
                 .extracting(e -> ((JudgeUnavailableException) e).reason())
                 .isEqualTo(JudgeUnavailableException.Reason.AT_CAPACITY);
@@ -168,7 +171,7 @@ class JudgeClientTest {
     void reportsUnknownPattern() {
         handler.set(exchange -> respond(exchange, 404, "{\"error\":\"no such Pattern\"}"));
 
-        assertThatThrownBy(() -> clientWith(Duration.ofSeconds(5)).judge(new Submission("nope", "x")))
+        assertThatThrownBy(() -> clientWith(Duration.ofSeconds(5)).judge(new SubmittedSource("nope", "x")))
                 .isInstanceOf(UnknownPatternException.class)
                 .hasMessageContaining("nope");
     }
@@ -181,7 +184,7 @@ class JudgeClientTest {
         // the other says it is gone.
         JudgeClient client = clientFor(URI.create("http://127.0.0.1:1"), Duration.ofSeconds(2));
 
-        assertThatThrownBy(() -> client.judge(new Submission("p", "x")))
+        assertThatThrownBy(() -> client.judge(new SubmittedSource("p", "x")))
                 .isInstanceOf(JudgeUnavailableException.class)
                 .extracting(e -> ((JudgeUnavailableException) e).reason())
                 .isEqualTo(JudgeUnavailableException.Reason.UNREACHABLE);
@@ -223,6 +226,35 @@ class JudgeClientTest {
         });
 
         assertThat(clientWith(Duration.ofSeconds(5)).scrapeMetrics()).contains("judge_workers 2");
+    }
+
+    @Test
+    @DisplayName("gives up on a scrape that trickles rather than holding the poller open")
+    void boundsTheScrapeInTime() {
+        handler.set(exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "text/plain");
+            exchange.sendResponseHeaders(200, 0);
+            // Headers, then a byte at a time, forever. This is under the size
+            // cap and answers within the request timeout, so neither of those
+            // stops it — and a poller held open here never polls again, which
+            // would report the judge degraded permanently. A compromised judge
+            // must not be able to switch the Code Discipline off by being slow.
+            try {
+                for (int i = 0; i < 200; i++) {
+                    exchange.getResponseBody().write('x');
+                    exchange.getResponseBody().flush();
+                    Thread.sleep(50);
+                }
+            } catch (IOException | InterruptedException expected) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        long startedAt = System.nanoTime();
+        String scraped = clientWith(Duration.ofMillis(300)).scrapeMetrics();
+
+        assertThat(scraped).isNull();
+        assertThat(Duration.ofNanos(System.nanoTime() - startedAt)).isLessThan(Duration.ofSeconds(5));
     }
 
     @Test

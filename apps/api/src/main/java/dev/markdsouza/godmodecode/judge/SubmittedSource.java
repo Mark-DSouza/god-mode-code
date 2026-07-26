@@ -10,4 +10,4 @@ package dev.markdsouza.godmodecode.judge;
  * @param patternId which Pattern the source is answering.
  * @param source    the player's submitted source, scaffold excluded.
  */
-public record Submission(String patternId, String source) {}
+public record SubmittedSource(String patternId, String source) {}

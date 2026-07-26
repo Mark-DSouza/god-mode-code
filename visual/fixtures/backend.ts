@@ -1,4 +1,4 @@
-import type { Challenge, Health, TypingRun, User } from "@gmc/api-client";
+import type { Challenge, Health, Rejection, TypingRun, User } from "@gmc/api-client";
 import type { Page, Route } from "@playwright/test";
 
 /**
@@ -90,9 +90,24 @@ const RECORDED_RUN: TypingRun = {
   completedAt: new Date(FIXED_TIME.getTime() + 21_000).toISOString(),
 };
 
+/** The Rejection the refused-Run screen renders the explanation of. */
+const REFUSAL: Rejection = {
+  reason: "ISSUE_EXPIRED",
+  explanation: "This Passage was handed out too long ago to still be answerable.",
+};
+
+const UNREACHABLE_JUDGE: Health = { ...HEALTHY, status: "DEGRADED", judge: "DEGRADED" };
+
 export interface BackendOptions {
   /** Make asking for a Challenge fail, which is the screens' error state. */
   challengeFails?: boolean;
+  /**
+   * Refuse the submitted Run with a Rejection, which is one of the three routes
+   * to the Interruption screen — a whole layout that no other state reaches.
+   */
+  runRefused?: boolean;
+  /** Report a degraded Judge, which the home screen calls out separately. */
+  judgeDegraded?: boolean;
 }
 
 /**
@@ -120,11 +135,30 @@ export async function stubBackend(page: Page, options: BackendOptions = {}): Pro
     answer({ error: `unstubbed: ${route.request().url()}` }, 500)(route),
   );
 
-  await page.route("**/api/health", answer(HEALTHY));
+  await page.route("**/api/health", answer(options.judgeDegraded ? UNREACHABLE_JUDGE : HEALTHY));
   await page.route("**/api/users/me", answer(USER));
   await page.route(
     "**/api/challenges",
     options.challengeFails ? answer({ error: "no backend" }, 503) : answer(CHALLENGE),
   );
-  await page.route("**/api/typing-runs", answer(RECORDED_RUN));
+  await page.route(
+    "**/api/typing-runs",
+    // 422 is the documented refusal and the only status the client turns into a
+    // RunRefused rather than a transport failure.
+    options.runRefused ? answer(REFUSAL, 422) : answer(RECORDED_RUN),
+  );
+}
+
+/**
+ * Makes the *next* Challenge request fail, after the first has already
+ * succeeded.
+ *
+ * Re-registering wins because Playwright consults routes in reverse. This is
+ * the only way to reach the result screen and then have "Run again" fail, which
+ * is where that screen shows its error Card.
+ */
+export async function breakFurtherChallenges(page: Page): Promise<void> {
+  await page.route("**/api/challenges", (route) =>
+    route.fulfill({ status: 503, json: { error: "no backend" } }),
+  );
 }

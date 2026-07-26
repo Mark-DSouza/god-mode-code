@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Gallery, specimenFrom, specimenHref } from "./Gallery.tsx";
-import { SPECIMEN_NAMES, VIEWPORT_SPECIMENS } from "./names.ts";
+import { Gallery } from "./Gallery.tsx";
+import { SPECIMEN_NAMES, VIEWPORT_SPECIMENS, specimenFrom, specimenHref } from "./names.ts";
 
 /**
  * The gallery is where the visual suite points its camera, so the failure this

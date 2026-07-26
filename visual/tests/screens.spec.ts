@@ -5,6 +5,7 @@ import {
   PARTIALLY_TYPED,
   PASSAGE_TEXT,
   TYPING_ELAPSED_MILLIS,
+  breakFurtherChallenges,
   stubBackend,
   type BackendOptions,
 } from "../fixtures/backend.ts";
@@ -44,7 +45,9 @@ async function openHome(page: Page, options: BackendOptions = {}): Promise<void>
   // Both of these arrive over the network and both change the layout when they
   // land. Photographing before them catches an empty header and a pending pill.
   await expect(page.getByTestId("user-handle")).toHaveText(HANDLE);
-  await expect(page.getByRole("status")).toHaveText(/online/i);
+  await expect(page.getByRole("status").first()).toHaveText(
+    options.judgeDegraded ? /degraded/i : /online/i,
+  );
 }
 
 /** Starts a Run and lets the countdown finish, leaving the typing surface live. */
@@ -113,4 +116,45 @@ test("the result screen", async ({ page }) => {
   await settled(page);
 
   await expect(page).toHaveScreenshot("result.png");
+});
+
+test("the result screen when the backend will not deal another Passage", async ({ page }) => {
+  await openHome(page);
+  await startRun(page);
+
+  await page.getByTestId("typing-input").fill(PASSAGE_TEXT);
+  await expect(page.getByRole("region", { name: /run result/i })).toBeVisible();
+
+  // Broken only now: the Run had to be recorded before there was a result
+  // screen to fail on.
+  await breakFurtherChallenges(page);
+  await page.getByRole("button", { name: /run again/i }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await settled(page);
+
+  await expect(page).toHaveScreenshot("result-request-failed.png");
+});
+
+// A whole layout of its own — not a badge or a card added to a screen that is
+// already covered — and it is what the player sees when a Run they have just
+// finished typing turns out not to count.
+test("a Run the server refused to record", async ({ page }) => {
+  await openHome(page, { runRefused: true });
+  await startRun(page);
+
+  await page.getByTestId("typing-input").fill(PASSAGE_TEXT);
+  await expect(page.getByRole("alert")).toContainText(/run not recorded/i);
+  await settled(page);
+
+  await expect(page).toHaveScreenshot("run-refused.png");
+});
+
+// The judge is a dependency of one Discipline, so the home screen reports it
+// apart from the badge rather than folding it in. Both readouts move together
+// and neither is covered by the healthy shot.
+test("the home screen with the judge degraded", async ({ page }) => {
+  await openHome(page, { judgeDegraded: true });
+  await settled(page);
+
+  await expect(page).toHaveScreenshot("home-judge-degraded.png");
 });

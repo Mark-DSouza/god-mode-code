@@ -152,11 +152,14 @@ jobs:
       # against images rendered by a browser nobody is running any more, and the
       # failures would look like design drift.
       - name: The Playwright client and the image must agree
+        # From `visual/`, because that is where the dependency is declared and
+        # where Node can resolve it — the root holds no node_modules to speak of.
+        working-directory: visual
         run: |
           installed=$(node -p "require('@playwright/test/package.json').version")
           echo "Installed @playwright/test: $installed"
-          grep -q "playwright:v${installed}-noble" .github/workflows/ci.yml
-          grep -q "playwright:v${installed}-noble" visual/run-in-ci-image.sh
+          grep -q "playwright:v${installed}-noble" ../.github/workflows/ci.yml
+          grep -q "playwright:v${installed}-noble" run-in-ci-image.sh
       - run: pnpm --filter @gmc/visual typecheck
       - run: pnpm --filter @gmc/visual test
       # Proves the suite can still fail. Runs after the comparison above, so a

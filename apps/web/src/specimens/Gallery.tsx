@@ -1,25 +1,5 @@
 import { SPECIMENS } from "./catalogue.tsx";
-import { SPECIMEN_NAMES, type SpecimenName } from "./names.ts";
-
-/** Where a specimen page finds the name it is meant to render. */
-const NAME_PARAMETER = "specimen";
-
-/**
- * Reads the requested specimen out of a URL, refusing anything not in the list.
- *
- * Exported for the test: "an unknown name renders the index rather than
- * throwing" is the behaviour that keeps a stale link from looking like a
- * rendering fault.
- */
-export function specimenFrom(search: string): SpecimenName | undefined {
-  const requested = new URLSearchParams(search).get(NAME_PARAMETER);
-  return SPECIMEN_NAMES.find((name) => name === requested);
-}
-
-/** The URL a given specimen is photographed at. */
-export function specimenHref(name: SpecimenName): string {
-  return `?${NAME_PARAMETER}=${name}`;
-}
+import { SPECIMEN_NAMES, type SpecimenName, specimenHref } from "./names.ts";
 
 /**
  * One specimen per page.

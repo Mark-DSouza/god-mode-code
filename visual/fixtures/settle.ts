@@ -15,9 +15,17 @@ import type { Page } from "@playwright/test";
  * **Rain.** Seeded, `DigitalRain` draws a fixed number of frames and then marks
  * its canvas settled. Photographing before that mark catches a partial
  * composition, which is a different picture every time by a different route.
+ *
+ * **Scroll position.** Clicking a control below the fold scrolls it into view
+ * first, so a phone-width screen ends up photographed from wherever the last
+ * click left it — which put the entire header outside the frame of the mobile
+ * error baseline, and would move again the moment anything above it changed
+ * height. Every shot is taken from the top, which is where the design's frames
+ * are drawn from.
  */
 export async function settled(page: Page): Promise<void> {
   await page.evaluate(async () => {
+    window.scrollTo(0, 0);
     await document.fonts.ready;
   });
 

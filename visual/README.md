@@ -30,7 +30,16 @@ is `apps/web/src/specimens/names.ts`, and it is shared with this suite so a
 component with no specimen does not compile.
 
 `tests/screens.spec.ts` renders every product screen at desktop (1280×800) and
-mobile (390×844), against a stubbed backend and a stopped clock.
+mobile (390×844), against a stubbed backend and a stopped clock — including the
+states only a failing backend reaches: a Challenge that cannot be dealt, a Run
+the server refused, and a degraded Judge.
+
+Those are viewport shots taken from the top of the page, not full-page ones,
+which is deliberate. The rain is `position: fixed`, and a full-page capture
+renders it once at the top and leaves the rest of a tall page black — a picture
+no visitor ever sees, and a misleading thing to hold up against a mockup. The
+cost is that content below the fold at 390px is not compared; the mockups' own
+mobile frames are viewport-shaped for the same reason.
 
 `tests/canary.spec.ts` is not a coverage test — it is the one the canary script
 perturbs to check that comparisons are actually being made.

@@ -84,7 +84,11 @@ is to widen the threshold until the suite has stopped saying anything.
 So both happen in `mcr.microsoft.com/playwright:v1.61.1-noble`. CI runs the job
 inside it; `visual/run-in-ci-image.sh` runs the same image locally, which is what
 `pnpm visual:update` calls. The version is pinned in three places that must
-agree: the lockfile, that script, and the `container:` in `.github/workflows/ci.yml`.
+agree: `@playwright/test` in `visual/package.json` — an exact version rather than
+a range, so a lockfile refresh cannot move it — `IMAGE` in that script, and
+`container.image` in `.github/workflows/ci.yml`. A CI step compares all three and
+fails if they have drifted apart, because a client driving a browser the
+baselines were never taken with produces failures that look like design drift.
 
 ## A test proves the suite can fail
 

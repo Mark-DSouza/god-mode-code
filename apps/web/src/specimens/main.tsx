@@ -1,7 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "../styles/app.css";
-import { Gallery, specimenFrom } from "./Gallery.tsx";
+import { Gallery } from "./Gallery.tsx";
+import { specimenFrom } from "./names.ts";
 
 /**
  * The specimen gallery's entry point.

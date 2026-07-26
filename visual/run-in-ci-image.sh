@@ -14,8 +14,12 @@
 #   ./visual/run-in-ci-image.sh update  # regenerate the baselines
 #   ./visual/run-in-ci-image.sh canary  # prove the suite still catches a change
 #
-# Any further arguments go to Playwright, so `update -- --grep "the result
-# screen"` regenerates one baseline rather than all of them.
+# Any further arguments go straight to Playwright, so
+#
+#   ./visual/run-in-ci-image.sh update --grep "the result screen"
+#
+# regenerates one baseline rather than all of them. No `--` separator: the
+# arguments are forwarded as they are, and a literal `--` would reach Playwright.
 set -euo pipefail
 
 # Must match the @playwright/test version in the lockfile and the `container:`

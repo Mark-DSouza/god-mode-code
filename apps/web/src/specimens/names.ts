@@ -55,3 +55,24 @@ export type SpecimenName = (typeof SPECIMEN_NAMES)[number];
  * viewport is what a modal actually occupies: scrim, blur and all.
  */
 export const VIEWPORT_SPECIMENS: readonly SpecimenName[] = ["dialog"];
+
+/** Where a specimen page finds the name it is meant to render. */
+const NAME_PARAMETER = "specimen";
+
+/**
+ * The URL a specimen is rendered — and photographed — at.
+ *
+ * Here rather than beside the gallery so the Playwright suite can use it too.
+ * That is the whole reason this module imports nothing: both the browser and a
+ * bare Node process need it, and anything React-shaped would rule the second
+ * one out.
+ */
+export function specimenHref(name: SpecimenName): string {
+  return `?${NAME_PARAMETER}=${name}`;
+}
+
+/** Reads the requested specimen out of a page's query string, refusing anything unknown. */
+export function specimenFrom(search: string): SpecimenName | undefined {
+  const requested = new URLSearchParams(search).get(NAME_PARAMETER);
+  return SPECIMEN_NAMES.find((name) => name === requested);
+}

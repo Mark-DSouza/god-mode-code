@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useRef } from "react";
 import { cn } from "../cn.ts";
+import { seededRandom } from "./seeded-random.ts";
 import { usePrefersReducedMotion } from "./use-prefers-reduced-motion.ts";
 
 export interface DigitalRainProps {
@@ -24,11 +25,39 @@ export interface DigitalRainProps {
    * rain back on after seeing it off should get rain (ADR-0010).
    */
   enabled?: boolean;
+  /**
+   * Draw one reproducible still instead of animating.
+   *
+   * Undefined — every case but a screenshot — leaves the effect exactly as it
+   * was: `Math.random`, wall-clock frame deltas, running until unmounted.
+   *
+   * A number replaces the global generator with a seeded one and renders
+   * {@link FROZEN_FRAMES} frames synchronously, off the clock, so the picture
+   * depends on the seed and nothing else. The canvas then carries
+   * `data-rain-settled`, which is the signal a visual test waits for before it
+   * photographs the page. The rain is the one thing on screen that would
+   * otherwise be different in every snapshot, and turning it off for the camera
+   * would leave the most animated part of the design as the only part not under
+   * test (ADR-0012).
+   */
+  seed?: number;
   className?: string;
   style?: CSSProperties;
 }
 
 const GLYPHS = 'ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵﾘｱﾎﾃﾏｹﾒｴｶｷﾑﾕﾗｾﾈｽﾀﾇﾉ0123456789<>=*+-¦｜╌ﾘ:."'.split("");
+
+/**
+ * How many frames a seeded render draws before it stops.
+ *
+ * Columns start above the top of the canvas, spread over a screen's worth of
+ * rows, and fall at roughly a fifth to a half a row per frame. Under a hundred
+ * frames the picture is still mostly empty sky; past a few hundred it stops
+ * changing in any way a reviewer would notice. 180 is comfortably inside the
+ * window where the frame looks like the design's rain, and it costs a few
+ * milliseconds because none of it waits for a repaint.
+ */
+const FROZEN_FRAMES = 180;
 
 /**
  * The signature GOD_MODE_CODE background: falling glyph columns, a near-white
@@ -49,6 +78,7 @@ export function DigitalRain({
   headColor = "var(--rain-shine)",
   fade = 0.06,
   enabled,
+  seed,
   className,
   style,
 }: DigitalRainProps) {
@@ -80,6 +110,10 @@ export function DigitalRain({
     const shineColor = resolve(headColor);
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Every draw the effect makes comes from here. Seeded, the stream is fixed
+    // and so is the picture; unseeded this is `Math.random` and nothing about
+    // the shipped behaviour changes.
+    const random = seed === undefined ? Math.random : seededRandom(seed);
     let columns = 0;
     let drops: number[] = [];
     let speeds: number[] = [];
@@ -92,15 +126,20 @@ export function DigitalRain({
       canvas!.height = height * dpr;
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
       columns = Math.ceil(width / fontSize);
-      drops = Array.from({ length: columns }, () => (Math.random() * -height) / fontSize);
-      speeds = Array.from({ length: columns }, () => 0.5 + Math.random() * 0.9);
+      drops = Array.from({ length: columns }, () => (random() * -height) / fontSize);
+      speeds = Array.from({ length: columns }, () => 0.5 + random() * 0.9);
       ctx!.fillStyle = "#000";
       ctx!.fillRect(0, 0, width, height);
     }
 
-    function frame(time: number) {
-      const delta = Math.min((time - lastFrameTime) / 16.67, 3) || 1;
-      lastFrameTime = time;
+    /**
+     * One frame, advanced by `delta` sixtieths of a second.
+     *
+     * Split out from the animation callback so a still can be composed by
+     * calling it a fixed number of times with a fixed delta, which is what
+     * takes the wall clock out of the seeded render.
+     */
+    function draw(delta: number) {
       const { speed: liveSpeed, intensity: liveIntensity } = liveRef.current;
       const { width, height } = canvas!.getBoundingClientRect();
 
@@ -114,9 +153,9 @@ export function DigitalRain({
       for (let i = 0; i <= Math.min(activeColumns, columns - 1); i++) {
         const x = i * fontSize;
         const y = drops[i]! * fontSize;
-        const glyph = GLYPHS[(Math.random() * GLYPHS.length) | 0]!;
+        const glyph = GLYPHS[(random() * GLYPHS.length) | 0]!;
 
-        if (Math.random() > 0.975) {
+        if (random() > 0.975) {
           ctx!.fillStyle = shineColor;
           ctx!.shadowColor = shineColor;
           ctx!.shadowBlur = 12;
@@ -131,24 +170,55 @@ export function DigitalRain({
         ctx!.shadowBlur = 0;
 
         drops[i] = drops[i]! + speeds[i]! * liveSpeed * delta * 0.55;
-        if (y > height && Math.random() > 0.975) {
-          drops[i] = Math.random() * -20;
-          speeds[i] = 0.5 + Math.random() * 0.9;
+        if (y > height && random() > 0.975) {
+          drops[i] = random() * -20;
+          speeds[i] = 0.5 + random() * 0.9;
         }
       }
+    }
+
+    function frame(time: number) {
+      const delta = Math.min((time - lastFrameTime) / 16.67, 3) || 1;
+      lastFrameTime = time;
+      draw(delta);
       frameHandle = requestAnimationFrame(frame);
     }
 
     resize();
-    frameHandle = requestAnimationFrame(frame);
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
+
+    if (seed === undefined) {
+      frameHandle = requestAnimationFrame(frame);
+      const observer = new ResizeObserver(resize);
+      observer.observe(canvas);
+      return () => {
+        cancelAnimationFrame(frameHandle);
+        observer.disconnect();
+      };
+    }
+
+    // The seeded path draws once and stops. No `requestAnimationFrame`, because
+    // a frame that arrives when the browser feels like it is the thing being
+    // designed out; no `ResizeObserver`, because a second `resize` would draw
+    // fresh columns from further along the same stream and the seed would no
+    // longer decide the picture on its own.
+    //
+    // The wait is not cosmetic. The glyphs are rasterised by the canvas in
+    // Share Tech Mono, and a canvas asked to draw a font the document has not
+    // finished loading silently falls back to another one — so drawing early
+    // would produce a picture that depends on how fast the font arrived, which
+    // is exactly the flake this seed exists to remove.
+    let cancelled = false;
+    const fontsReady = document.fonts?.ready ?? Promise.resolve();
+    void fontsReady.then(() => {
+      if (cancelled) return;
+      for (let count = 0; count < FROZEN_FRAMES; count++) draw(1);
+      canvas.dataset.rainSettled = "true";
+    });
 
     return () => {
-      cancelAnimationFrame(frameHandle);
-      observer.disconnect();
+      cancelled = true;
     };
-  }, [isEnabled, fontSize, color, headColor, fade]);
+  }, [isEnabled, fontSize, color, headColor, fade, seed]);
 
   // Nothing rendered at all when disabled — a hidden canvas would still be a
   // canvas the browser has to composite, and there is no visual to preserve.

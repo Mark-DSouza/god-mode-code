@@ -53,6 +53,7 @@ Go the judge is skipped, which nothing yet depends on.
 | `packages/api-client`        | Generated OpenAPI document and the typed client built from it          |
 | `infra/`                     | Infrastructure definitions — currently the reverse proxy               |
 | `e2e/`                       | Playwright suite, driven against the containerised stack               |
+| `visual/`                    | Visual regression suite and its committed screenshot baselines         |
 | `mockups-and-design-system/` | The shipped design system and UI mockups, treated as source of truth   |
 
 ## One origin, no CORS
@@ -90,7 +91,7 @@ mismatch.
 
 ## Testing
 
-Four seams, each exercising a real boundary:
+Five seams, each exercising a real boundary:
 
 | Seam         | What is real                                                         | Run it            |
 | ------------ | -------------------------------------------------------------------- | ----------------- |
@@ -98,12 +99,19 @@ Four seams, each exercising a real boundary:
 | **judge**    | HTTP over a socket, against the real router                          | `pnpm judge:test` |
 | **frontend** | the rendered application, with HTTP intercepted at the network layer | `pnpm test:web`   |
 | **e2e**      | a browser against the containerised stack — nothing stubbed          | `pnpm test:e2e`   |
+| **visual**   | the rendered pixels, compared against committed baselines            | `pnpm visual`     |
 
 The frontend seam intercepts requests rather than stubbing the client, so URLs,
 methods, status codes and JSON bodies are all under test. Its mock payloads are
 typed from the generated client, so a backend change that alters a response
 shape fails to compile rather than producing a mock that no longer resembles the
 real thing.
+
+Every one of those four is structural — a token resolves, a role is present, the
+backend answers — and all four were green while the walking skeleton shipped
+three visible defects. The visual seam is the one that looks at the screen; see
+[`visual/README.md`](./visual/README.md) and
+[ADR-0012](./docs/adr/0012-design-fidelity-is-checked-against-committed-baselines.md).
 
 ```sh
 pnpm typecheck && pnpm test   # everything JavaScript/TypeScript

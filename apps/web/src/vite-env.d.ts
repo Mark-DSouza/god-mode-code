@@ -15,6 +15,11 @@ interface ImportMetaEnv {
   readonly VITE_SENTRY_ENVIRONMENT?: string;
   /** The commit this bundle was built from; the release uploaded maps hang off. */
   readonly VITE_COMMIT_SHA?: string;
+  /**
+   * Freezes the digital rain into one reproducible still, for the visual
+   * regression suite. Never set for a build anyone visits (ADR-0012).
+   */
+  readonly VITE_RAIN_SEED?: string;
 }
 
 interface ImportMeta {

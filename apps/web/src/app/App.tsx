@@ -1,19 +1,43 @@
+import type { Challenge, Discipline, TypingRun } from "@gmc/api-client";
+import { useState } from "react";
 import { useHealth } from "../api/health.ts";
-import { Badge, Card, Kbd } from "../design-system/index.ts";
+import { useRequestChallenge } from "../api/typing.ts";
+import { Badge } from "../design-system/index.ts";
+import { HomeScreen } from "../run/HomeScreen.tsx";
+import { ResultScreen } from "../run/ResultScreen.tsx";
+import { RunScreen } from "../run/RunScreen.tsx";
 import { Header } from "./Header.tsx";
 import { RainBackdrop } from "./RainBackdrop.tsx";
 
 /**
- * The walking skeleton.
+ * Where the player is.
  *
- * Deliberately not the home screen — no Disciplines, no Challenges, nothing
- * that pretends the product exists. What it proves is the whole path: a browser
- * loads the built bundle, the bundle calls the backend on the same origin, the
- * backend answers from a migrated database, and the design foundation renders
- * underneath all of it.
+ * Component state rather than a router, because none of these are places you
+ * can link to. A Challenge is issued to one User for one sitting and expires;
+ * a URL that reissued it on load would spend a fresh Issue on every refresh,
+ * and a URL that did not would be a link to somebody else's Passage.
+ */
+type Screen =
+  | { name: "choosing" }
+  | { name: "running"; challenge: Challenge }
+  | { name: "result"; run: TypingRun };
+
+/**
+ * Choose a Discipline, type the Passage, see what the server made of it.
  */
 export function App() {
-  const health = useHealth();
+  const [screen, setScreen] = useState<Screen>({ name: "choosing" });
+  // Remembered so "Run again" means "another one of these" rather than sending
+  // the player back to the tiles to say the same thing twice.
+  const [lastPlayed, setLastPlayed] = useState<Discipline>("QUOTES");
+  const request = useRequestChallenge();
+
+  function start(discipline: Discipline) {
+    setLastPlayed(discipline);
+    request.mutate(discipline, {
+      onSuccess: (challenge) => setScreen({ name: "running", challenge }),
+    });
+  }
 
   return (
     <>
@@ -23,66 +47,37 @@ export function App() {
         <Header />
 
         <main className="mx-auto flex w-full max-w-[var(--container-app)] flex-1 flex-col justify-center gap-6 px-5 py-9">
-          <div className="flex flex-col gap-3">
-            <h1 className="font-display text-2xl tracking-wider text-heading uppercase [text-shadow:var(--glow-md)]">
-              System online
-            </h1>
-            <p className="max-w-[60ch] font-body text-md text-muted">
-              The rain is falling and the backend is answering. Nothing else is built yet.
-            </p>
-          </div>
+          {screen.name === "choosing" && (
+            <HomeScreen
+              status={<BackendStatus />}
+              onStart={start}
+              pending={request.isPending}
+              failed={request.isError}
+            />
+          )}
 
-          {/* No `glow`. In the mockups the bright green ring is the selected
-              state — it is what marks the chosen discipline tile apart from the
-              two beside it. A resting panel carries the hairline border only,
-              and glowing this one would mean "selected" with nothing to select. */}
-          <Card scanlines className="flex flex-col gap-5" aria-labelledby="status-heading">
-            <div className="flex items-center justify-between gap-4">
-              <h2
-                id="status-heading"
-                className="font-display text-sm tracking-wider text-muted uppercase"
-              >
-                Backend status
-              </h2>
-              <StatusBadge
-                isPending={health.isPending}
-                isError={health.isError}
-                status={health.data?.status}
-              />
-            </div>
+          {screen.name === "running" && (
+            <RunScreen
+              // Keyed by the Issue so that asking for another Passage starts a
+              // genuinely new Run: same component, but a fresh countdown, an
+              // empty surface and a clock that has not started. Without this,
+              // "Run again" would inherit the finished Run's state.
+              key={screen.challenge.issueId}
+              challenge={screen.challenge}
+              onRecorded={(run) => setScreen({ name: "result", run })}
+              onLeave={() => setScreen({ name: "choosing" })}
+            />
+          )}
 
-            {/* Not `Stat`. That component is the oversized CRT numeral readout —
-                every use of it in the design is a number (78 wpm, 99.1%, 12s),
-                and VT323 is a numeral face. Setting a status word and a version
-                string in it reads as a rendering fault rather than a style.
-                These are labelled values, so they are set as labelled values. */}
-            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
-              <Readout
-                label="Database"
-                value={health.isPending ? "—" : (health.data?.database ?? "?")}
-                tone={health.data?.database === "UP" ? "accent" : "error"}
-              />
-              {/* The judge is a dependency of exactly one Discipline, so it gets
-                  its own readout rather than being folded into the badge above.
-                  A degraded judge means Patterns are unavailable and everything
-                  else is fine — which is a sentence the overall status cannot
-                  say, and the reason the badge stays green (ADR-0005). */}
-              <Readout
-                label="Judge"
-                value={health.isPending ? "—" : (health.data?.judge ?? "?")}
-                tone={health.data?.judge === "UP" ? "accent" : "error"}
-              />
-              <Readout
-                label="Version"
-                value={health.isPending ? "—" : (health.data?.version ?? "?")}
-                tone="heading"
-              />
-            </div>
-          </Card>
-
-          <p className="font-body text-sm text-disabled">
-            Press <Kbd>Enter</Kbd> to start a run — once there is something to run.
-          </p>
+          {screen.name === "result" && (
+            <ResultScreen
+              run={screen.run}
+              onRunAgain={() => start(lastPlayed)}
+              onChangeDiscipline={() => setScreen({ name: "choosing" })}
+              pending={request.isPending}
+              failed={request.isError}
+            />
+          )}
         </main>
       </div>
     </>
@@ -90,45 +85,50 @@ export function App() {
 }
 
 /**
- * A labelled value, using the design's label treatment: a small uppercased
- * wide-tracked caption under the value, the same pairing the run screen puts
- * beneath SPEED and ACCURACY.
+ * Whether the backend is answering, in the pill the mockups put above the
+ * headline.
+ *
+ * The design draws this as decoration reading "System online". It is wired to
+ * the real health endpoint instead, because a status light that is always green
+ * is worse than no status light: the one moment it matters is the one moment it
+ * would be lying.
  */
-function Readout({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "accent" | "error" | "heading";
-}) {
-  const toneClass = {
-    accent: "text-accent [text-shadow:var(--glow-sm)]",
-    error: "text-error [text-shadow:var(--glow-error)]",
-    heading: "text-heading",
-  }[tone];
+function BackendStatus() {
+  const health = useHealth();
+  const judge = health.data?.judge;
 
   return (
-    <div className="flex flex-col gap-1">
-      <span className={`font-display text-lg tracking-wide ${toneClass}`}>{value}</span>
-      <span className="font-display text-2xs tracking-wider text-muted uppercase">{label}</span>
+    <div className="flex flex-col items-center gap-3">
+      {overallBadge(health)}
+
+      {/* The judge is a dependency of exactly one Discipline, so it is reported
+          apart from the badge above rather than folded into it. A degraded judge
+          means Patterns are unavailable and everything else is fine — a sentence
+          the overall status cannot say, and the reason the badge stays green
+          (ADR-0005).
+
+          Shown only when it is not well. The walking skeleton carried this in a
+          permanent readout beside Database and Version, which was a diagnostic
+          panel; this screen is the product, and a line that reads "JUDGE: UP"
+          forever tells a player nothing they can act on. The moment it has
+          something to say, it says it. */}
+      {judge && judge !== "UP" && (
+        <div className="flex flex-col items-center gap-1">
+          <span className="font-display text-lg tracking-wide text-error [text-shadow:var(--glow-error)]">
+            {judge}
+          </span>
+          <span className="font-display text-2xs tracking-wider text-muted uppercase">Judge</span>
+        </div>
+      )}
     </div>
   );
 }
 
-function StatusBadge({
-  isPending,
-  isError,
-  status,
-}: {
-  isPending: boolean;
-  isError: boolean;
-  status: "UP" | "DEGRADED" | undefined;
-}) {
-  // `role="status"` so the result is announced when it arrives, rather than
-  // changing silently for anyone not watching this corner of the screen.
-  if (isPending) {
+/** The one badge that speaks for the site as a whole. */
+function overallBadge(health: ReturnType<typeof useHealth>) {
+  // `role="status"` so the result is announced when it arrives rather than
+  // changing silently in the corner of the screen.
+  if (health.isPending) {
     return (
       <Badge tone="neutral" dot role="status">
         Checking
@@ -138,7 +138,7 @@ function StatusBadge({
   // A request that never arrived is a different failure from a backend
   // reporting itself degraded, and conflating them sends you debugging the
   // wrong service.
-  if (isError) {
+  if (health.isError) {
     return (
       <Badge tone="error" dot role="status">
         Unreachable
@@ -146,8 +146,8 @@ function StatusBadge({
     );
   }
   return (
-    <Badge tone={status === "UP" ? "green" : "warning"} dot role="status">
-      {status === "UP" ? "Online" : "Degraded"}
+    <Badge tone={health.data?.status === "UP" ? "green" : "warning"} dot role="status">
+      {health.data?.status === "UP" ? "Online" : "Degraded"}
     </Badge>
   );
 }

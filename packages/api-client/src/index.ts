@@ -1,5 +1,5 @@
 import createClient from "openapi-fetch";
-import type { paths } from "./schema.js";
+import type { components, paths } from "./schema.js";
 
 export type { paths, components } from "./schema.js";
 
@@ -8,6 +8,22 @@ export type Health = paths["/api/health"]["get"]["responses"][200]["content"]["a
 
 /** Anyone who has played, Claimed or otherwise. One shape for both states (ADR-0007). */
 export type User = paths["/api/users/me"]["get"]["responses"][200]["content"]["application/json"];
+
+/**
+ * The domain's own words, re-exported under them.
+ *
+ * `components["schemas"]["Passage"]` is the same type, and no screen should have
+ * to say that to talk about a Passage. Naming them here is also what keeps the
+ * frontend's vocabulary tied to the backend's: rename a schema and every import
+ * of it fails to compile rather than quietly meaning something else.
+ */
+export type Discipline = components["schemas"]["Passage"]["discipline"];
+export type Passage = components["schemas"]["Passage"];
+export type Challenge = components["schemas"]["Challenge"];
+export type TypingRun = components["schemas"]["TypingRun"];
+export type TypingRunSubmission = components["schemas"]["TypingRunSubmission"];
+export type Rejection = components["schemas"]["Rejection"];
+export type RejectionReason = Rejection["reason"];
 
 /**
  * The origin the application is being served from.

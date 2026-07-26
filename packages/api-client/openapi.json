@@ -13,8 +13,14 @@
     "name" : "Users",
     "description" : "Anyone who has played, Claimed or otherwise"
   }, {
+    "name" : "Challenges",
+    "description" : "Being handed something to type"
+  }, {
     "name" : "Health",
     "description" : "Liveness and dependency status"
+  }, {
+    "name" : "Typing Runs",
+    "description" : "Runs against a Passage, verified server-side"
   } ],
   "paths" : {
     "/api/users" : {
@@ -51,6 +57,101 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/typing-runs" : {
+      "post" : {
+        "tags" : [ "Typing Runs" ],
+        "summary" : "Submit a finished Run for Verification",
+        "description" : "Takes raw data — the text as typed, the keystroke count, the two timestamps — and recomputes WPM and Accuracy from it. The request body has nowhere to put a client-computed metric, because none would be believed (ADR-0003).\n\nA refusal is 422 with a machine-readable reason, not a 400: the request was well formed and was understood, and it is the Run that did not survive.\n",
+        "operationId" : "submit",
+        "parameters" : [ {
+          "name" : "gmc_recognition",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TypingRunSubmission"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "The Run as the server computed it",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TypingRun"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "This browser is nobody yet"
+          },
+          "422" : {
+            "description" : "The Run was not recorded, and why",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Rejection"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/challenges" : {
+      "post" : {
+        "tags" : [ "Challenges" ],
+        "summary" : "Be handed a Passage to transcribe",
+        "description" : "Records an Issue against the User — who got what, when, and until when — and returns the Passage. Which Passage arrives is the server's choice.\n\nAsking again abandons the Challenge the User was holding, so a player can skip a Passage they do not fancy, and nobody can hold several at once and submit whichever went best (ADR-0003).\n",
+        "operationId" : "request",
+        "parameters" : [ {
+          "name" : "gmc_recognition",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChallengeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "The Challenge, and when it stops being answerable",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Challenge"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "This browser is nobody yet — create a User first"
+          },
+          "404" : {
+            "description" : "That Discipline has no Passages. Code never will (ADR-0004)"
           }
         }
       }
@@ -141,6 +242,177 @@
           }
         },
         "required" : [ "claimed", "handle", "id" ]
+      },
+      "TypingRunSubmission" : {
+        "type" : "object",
+        "description" : "The raw data a finished Run is verified from",
+        "properties" : {
+          "issueId" : {
+            "type" : "string",
+            "format" : "uuid",
+            "description" : "The Issue this Run answers"
+          },
+          "typedText" : {
+            "type" : "string",
+            "description" : "The text as typed, in full",
+            "minLength" : 1
+          },
+          "keystrokes" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Total character keystrokes, mistakes included",
+            "example" : 312
+          },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "The client's clock at the first keystroke"
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "The client's clock at the last keystroke"
+          }
+        },
+        "required" : [ "completedAt", "issueId", "keystrokes", "startedAt", "typedText" ]
+      },
+      "TypingRun" : {
+        "type" : "object",
+        "description" : "A completed and verified Run against a Passage",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "passageId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "discipline" : {
+            "type" : "string",
+            "description" : "One of the three ways to play",
+            "enum" : [ "QUOTES", "PROSE", "CODE" ]
+          },
+          "wpm" : {
+            "type" : "number",
+            "description" : "Correct characters over five, per minute, computed by the server",
+            "example" : 78.4
+          },
+          "accuracy" : {
+            "type" : "number",
+            "description" : "Correct keystrokes over total keystrokes, as a percentage",
+            "example" : 99.1
+          },
+          "elapsedMillis" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "How long the Run took",
+            "example" : 31240
+          },
+          "keystrokes" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Total character keystrokes, mistakes included",
+            "example" : 312
+          },
+          "correctCharacters" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Characters of the Passage the final text got right",
+            "example" : 309
+          },
+          "errors" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Keystrokes that were not correct characters",
+            "example" : 3
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "accuracy", "completedAt", "correctCharacters", "discipline", "elapsedMillis", "errors", "id", "keystrokes", "passageId", "wpm" ]
+      },
+      "Rejection" : {
+        "type" : "object",
+        "description" : "A submitted Run that was not recorded, and why",
+        "properties" : {
+          "reason" : {
+            "type" : "string",
+            "description" : "Why a submitted Run was not recorded",
+            "enum" : [ "NO_SUCH_ISSUE", "ISSUE_EXPIRED", "ISSUE_ALREADY_USED", "ISSUE_SUPERSEDED", "PASSAGE_MISMATCH", "IMPOSSIBLE_DURATION", "IMPLAUSIBLE_KEYSTROKES", "IMPLAUSIBLE_SPEED" ]
+          },
+          "explanation" : {
+            "type" : "string",
+            "description" : "Human-readable restatement of the reason",
+            "example" : "The typed text does not correspond to the Passage that was issued."
+          }
+        },
+        "required" : [ "explanation", "reason" ]
+      },
+      "ChallengeRequest" : {
+        "type" : "object",
+        "description" : "A request for a Challenge in one Discipline",
+        "properties" : {
+          "discipline" : {
+            "type" : "string",
+            "description" : "One of the three ways to play",
+            "enum" : [ "QUOTES", "PROSE", "CODE" ]
+          }
+        },
+        "required" : [ "discipline" ]
+      },
+      "Challenge" : {
+        "type" : "object",
+        "description" : "A Passage to transcribe, and the Issue that recorded it going out",
+        "properties" : {
+          "issueId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "passage" : {
+            "$ref" : "#/components/schemas/Passage"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "After this moment the Challenge can no longer be answered"
+          }
+        },
+        "required" : [ "expiresAt", "issueId", "passage" ]
+      },
+      "Passage" : {
+        "type" : "object",
+        "description" : "A fixed piece of text to be transcribed",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "discipline" : {
+            "type" : "string",
+            "description" : "One of the three ways to play",
+            "enum" : [ "QUOTES", "PROSE", "CODE" ]
+          },
+          "text" : {
+            "type" : "string",
+            "description" : "The text to transcribe, printable ASCII throughout",
+            "example" : "Call me Ishmael."
+          },
+          "attribution" : {
+            "type" : "string",
+            "description" : "Who said or wrote it",
+            "example" : "Herman Melville, Moby-Dick, 1851"
+          },
+          "characterCount" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "How many characters the text is",
+            "example" : 302
+          }
+        },
+        "required" : [ "attribution", "characterCount", "discipline", "id", "text" ]
       },
       "HealthStatus" : {
         "type" : "object",

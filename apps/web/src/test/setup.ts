@@ -72,6 +72,42 @@ function installWebLocks(): void {
 }
 
 /**
+ * Vitest's fake timers, plus the one shim that makes Testing Library notice
+ * them.
+ *
+ * Two gaps have to be closed, and both of them bite as a test that times out
+ * rather than as a test that fails.
+ *
+ * `toFake` is a short list on purpose. Faking everything also replaces
+ * `setImmediate`, `queueMicrotask` and `process.nextTick`, and the HTTP
+ * interception layer schedules its own work on those — fake them and no request
+ * ever resolves.
+ *
+ * The `jest` stub is uglier and unavoidable. Testing Library decides whether
+ * fake timers are installed with `typeof jest !== "undefined" &&
+ * hasOwnProperty(setTimeout, "clock")`, and vitest defines no `jest` global —
+ * so `waitFor` takes its real-timer path, schedules a `setInterval` that is now
+ * fake, and waits forever for a tick nobody will deliver. The stub is the
+ * advance function it looks for, pointed at vitest's.
+ *
+ * Used by the Run tests, which have a three-second countdown to sit through and
+ * an elapsed clock whose whole point is that it does not start when the
+ * countdown ends.
+ */
+export function useFakeClock(): void {
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+  });
+  vi.stubGlobal("jest", { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) });
+}
+
+/** Puts the real clock back, and takes the shim away with it. */
+export function useRealClock(): void {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+}
+
+/**
  * Points `matchMedia` at a given reduced-motion answer.
  *
  * Tests that care about the preference call this before rendering. Everything

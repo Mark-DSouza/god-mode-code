@@ -9,7 +9,7 @@ import { App } from "./App.tsx";
  * The frontend test seam: the rendered application, with HTTP intercepted at
  * the network layer.
  */
-describe("the walking skeleton", () => {
+describe("the backend status", () => {
   it("reports the backend online once it answers", async () => {
     renderApp(<App />);
 
@@ -17,21 +17,18 @@ describe("the walking skeleton", () => {
     // rather than blocking on it.
     expect(screen.getByRole("status")).toHaveTextContent(/checking/i);
 
-    // Scoped to the status badge on purpose: the heading also says "System
-    // online", and a loose text match would pass without the backend ever
-    // having answered.
+    // The design draws this pill as decoration reading "System online". It is
+    // wired to the real endpoint, so this is the value that only appears once
+    // the browser has actually reached the backend.
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/^online$/i));
-    expect(screen.getByText("0.0.1-test")).toBeInTheDocument();
   });
 
   it("distinguishes a degraded backend from an unreachable one", async () => {
     respondDegraded();
     const { unmount } = renderApp(<App />);
 
-    // A 503 is the backend answering. The version still renders, because the
-    // backend told us what it is.
+    // A 503 is the backend answering, and saying which dependency is down.
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/degraded/i));
-    expect(screen.getByText("0.0.1-test")).toBeInTheDocument();
     unmount();
 
     respondUnreachable();

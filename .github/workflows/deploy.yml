@@ -15,12 +15,10 @@ concurrency:
   group: deploy-production
   cancel-in-progress: false
 
+# Declared per job rather than here, so this is only the floor a job inherits
+# when it says nothing: read-only, and never the OIDC token.
 permissions:
   contents: read
-  packages: write
-  # Required for the OIDC token exchanged for a short-lived AWS role. This is
-  # what replaces a stored access key.
-  id-token: write
 
 # Every `uses:` below is pinned to a commit rather than a tag, and it matters
 # more here than in CI: this is the workflow that can reach AWS. A tag is a
@@ -48,6 +46,15 @@ jobs:
     # under QEMU emulation instead would take the JVM image from about two
     # minutes to well over ten.
     runs-on: ubuntu-24.04-arm
+    # Enough to check out the repository and push images to ghcr, and nothing
+    # else. Three third-party `docker/*` actions run here, and none of them has
+    # any business holding an OIDC token: one that did could exchange it for
+    # the deploy role. ADR-0005 works through what a stolen IAM role costs —
+    # hundreds of GPU instances inside ten minutes — for a different host, but
+    # it is the same arithmetic arriving through a different door.
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         include:
@@ -114,6 +121,13 @@ jobs:
     # deploy to.
     if: vars.AWS_DEPLOY_ROLE_ARN != ''
     environment: production
+    # The OIDC token exchanged for a short-lived AWS role, which is what
+    # replaces a stored access key. No `contents`: this job drives the AWS CLI
+    # and never checks the repository out, so a step added later that expects a
+    # working tree fails saying so rather than quietly inheriting the ability
+    # to read one.
+    permissions:
+      id-token: write
     steps:
       - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:

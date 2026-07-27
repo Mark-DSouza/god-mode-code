@@ -46,6 +46,9 @@ backend.hcl
 crash.log
 crash.*.log
 
+# Agent worktrees — not `.claude/`, whose vendored skills are committed
+.claude/worktrees/
+
 # Local environment overrides
 .env
 .env.local

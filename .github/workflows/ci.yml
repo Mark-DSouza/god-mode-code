@@ -25,6 +25,7 @@ jobs:
       contract: ${{ steps.filter.outputs.contract }}
       stack: ${{ steps.filter.outputs.stack }}
       infra: ${{ steps.filter.outputs.infra }}
+      credentials: ${{ steps.filter.outputs.credentials }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -96,6 +97,12 @@ jobs:
               - 'infra/terraform/**'
               - 'infra/observability/**'
               - '.github/workflows/deploy.yml'
+            # Deliberately not `*shared`: the detector has no dependencies and
+            # no manifest, so a lockfile refresh cannot affect it and running
+            # its fixtures for one would be noise.
+            credentials:
+              - '.github/workflows/ci.yml'
+              - 'scripts/*credential_detector.py'
 
   web:
     needs: changes
@@ -321,10 +328,30 @@ jobs:
           path: e2e/playwright-report/
           retention-days: 7
 
+  # The credential detector's fixtures, in both directions: known credential
+  # shapes are refused, and realistic placeholders are not.
+  #
+  # It runs here rather than on request because the detector is about to become
+  # load-bearing in three places — the commit guard, the repository sweep and
+  # the Claude Code write guard — and a silent regression in it would disable
+  # all three at once, with nothing failing to say so.
+  credentials:
+    needs: changes
+    if: needs.changes.outputs.credentials == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Not through pnpm, and that is the point rather than an oversight. The
+      # detector's premise is that it needs no ecosystem toolchain — which is
+      # what lets the commit hook cost milliseconds and work for a contributor
+      # who only ever touches Go or Java. A job that installed one in order to
+      # test it would quietly stop proving that.
+      - run: python3 -m unittest discover --start-directory scripts --top-level-directory scripts --verbose
+
   # One status to require on the branch, so a skipped job does not read as a
   # missing check. `always()` is what lets this run when upstream jobs skip.
   ci:
-    needs: [web, visual, api, judge, contract, infra, e2e]
+    needs: [web, visual, api, judge, contract, infra, e2e, credentials]
     if: always()
     runs-on: ubuntu-latest
     steps:

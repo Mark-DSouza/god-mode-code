@@ -15,6 +15,11 @@ apps/web/dist/
 # bundle may, so it is kept out of `dist` rather than overwriting it.
 apps/web/dist-visual/
 
+# Python. Only the credential detector and its tests are written in it, and
+# they have no packaging of their own — but running them leaves bytecode next
+# to them, and a `.pyc` carries the string constants of the file it came from.
+__pycache__/
+
 # Java
 target/
 !.mvn/wrapper/maven-wrapper.jar

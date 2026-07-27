@@ -48,7 +48,7 @@ pending forever; `ci.yml`'s aggregate job already solves this and the shape is
 reused rather than rediscovered.
 
 Dependency review is the one gate that does not go through SARIF. It reads the
-pull request's dependency changes directly and fails when the diff *adds* a
+pull request's dependency changes directly and fails when the diff _adds_ a
 package with a known vulnerability. The exception is in the plumbing only: it
 still gates on the change rather than the repository, and all it declines
 to look at is Dependabot's alert stream, not this gate's.
@@ -61,7 +61,7 @@ Every base image here is named by a floating tag — `node:24-alpine`,
 `caddy:2-alpine`, `golang:1.26-alpine` and
 `gcr.io/distroless/static-debian12:nonroot` — and images are rebuilt from
 scratch on every push to `main`, so OS packages are continuously patched with
-no bot and no pull request. Pinning digests would freeze them and *create* the
+no bot and no pull request. Pinning digests would freeze them and _create_ the
 staleness problem a bot would then exist to solve. Rollback is unaffected: a
 built image is immutable in ghcr once pushed and is tagged with the commit that
 produced it, so rolling back redeploys an earlier image rather than rebuilding

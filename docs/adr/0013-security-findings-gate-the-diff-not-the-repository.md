@@ -37,6 +37,12 @@ anything. Nor does a baseline file have to be maintained, which matters more
 than it sounds: a baseline lives in the repository, and is therefore edited by
 the same pull request that introduces the finding it excuses.
 
+None of which makes suppression illegitimate — the two are opposites. A
+suppression attached to one resource, naming the decision it encodes, is an
+argument a reader can check and disagree with. A baseline file, or an exclusion
+written across the whole repository, is a silence. The first is how a deliberate
+deviation gets recorded; the second is indistinguishable from having no scanner.
+
 Two things follow from routing through the mechanism rather than the tool. The
 gate is code scanning's reading of the diff, not the scanner's exit status — a
 scanner that exits non-zero on pre-existing findings fails the job before code
@@ -50,43 +56,54 @@ reused rather than rediscovered.
 Dependency review is the one gate that does not go through SARIF. It reads the
 pull request's dependency changes directly and fails when the diff _adds_ a
 package with a known vulnerability. The exception is in the plumbing only: it
-still gates on the change rather than the repository, and all it declines
-to look at is Dependabot's alert stream, not this gate's.
+still gates on the change rather than the repository, and what it declines to
+look at — packages already there, and CVEs published against packages the diff
+never touched — is Dependabot's job, not this gate's.
 
 ## Consequences
 
 **Base images keep floating tags, and the deploy is the patching mechanism.**
-Every base image here is named by a floating tag — `node:24-alpine`,
-`maven:3.9-eclipse-temurin-21`, `eclipse-temurin:21-jre-alpine`,
-`caddy:2-alpine`, `golang:1.26-alpine` and
-`gcr.io/distroless/static-debian12:nonroot` — and images are rebuilt from
-scratch on every push to `main`, so OS packages are continuously patched with
-no bot and no pull request. Pinning digests would freeze them and _create_ the
-staleness problem a bot would then exist to solve. Rollback is unaffected: a
-built image is immutable in ghcr once pushed and is tagged with the commit that
-produced it, so rolling back redeploys an earlier image rather than rebuilding
-an earlier `FROM`. Docker is therefore deliberately absent from the Dependabot
+The two images the deploy builds are named by floating tags —
+`maven:3.9-eclipse-temurin-21` and `eclipse-temurin:21-jre-alpine` for the
+application, `node:24-alpine` and `caddy:2-alpine` for the proxy — and both are
+rebuilt on every push to `main`, so their OS packages are patched continuously
+with no bot and no pull request. Pinning digests would freeze them and _create_
+the staleness problem a bot would then exist to solve. Rollback is unaffected:
+every build is tagged with the commit that produced it and nothing repoints
+those tags, so rolling back redeploys an earlier image rather than rebuilding an
+earlier `FROM`. Docker is therefore deliberately absent from the Dependabot
 ecosystems. This is the decision most likely to be "fixed" by a well-meaning
 reviewer who does not realise they are turning off automatic patching.
 
+The judge is the exception, and it is the one to watch. It runs as a host
+process from a machine image built out of band (ADR-0005,
+`infra/judge-ami/provision.sh`), so `python:3.13-alpine` — the image every
+sandbox container starts from, and the only image here that ever holds hostile
+code — is frozen as of the day that image was taken. Re-provisioning is its
+patching mechanism, it is manual, and nothing prompts for it. That is a real
+gap rather than a decision, and it is recorded here so it is not mistaken for
+one.
+
 **Container OS packages are knowingly uncovered.** GitHub's dependency graph
-reads manifests, not image layers, so nothing watches the alpine and Debian
-packages inside the runtime images. Accepted, for two reasons that hold
-together and would not hold apart. The images are small by construction —
-alpine for the JVM and the proxy, and `distroless/static` for the judge, which
-has essentially no OS packages to have vulnerabilities in — and the application
-host accepts no inbound traffic at all, an invariant
+reads manifests, not image layers, so nothing watches the alpine packages
+inside the images that run. Accepted, for two reasons that hold together and
+would not hold apart. The images are small by construction — alpine for the
+JVM, the proxy and the sandbox — and neither host is reachable from anywhere it
+should not be. The application accepts no inbound traffic at all, an invariant
 `infra/terraform/tests/security.tftest.hcl` asserts on every pull request that
 touches the infrastructure, because traffic arrives through the
-outbound-initiated tunnel of ADR-0002. A vulnerable library on a host nothing
-can dial is a different proposition from one behind an open port. If a runtime
-image ever grows a package manager, or the host ever accepts a connection, this
-paragraph expires with it.
+outbound-initiated tunnel of ADR-0002; the judge accepts one port from the
+application's security group and has no egress and no credentials at all
+(ADR-0005). A vulnerable library on a host nothing can dial is a different
+proposition from one behind an open port. If a runtime image ever grows a
+package manager, or either host ever accepts a connection from somewhere new,
+this paragraph expires with it.
 
-**The commit guard is the control; the Claude Code hook guards the controls; CI
-finds the vulnerabilities.** A hook in `.claude/settings.json` covers one agent
-in one checkout: it is absent for every human, for every agent that has never
-heard of Claude Code, and for anything pushed from anywhere else. The commit
+**The commit guard is the control; the Claude Code hook keeps the controls from
+being quietly weakened; CI finds the vulnerabilities.** A hook in
+`.claude/settings.json` covers one agent in one checkout: it is absent for every
+human, for every agent that has never heard of Claude Code, and for anything
+pushed from anywhere else. The commit
 guard — a git hook — covers every commit, no matter who or what makes it, and
 CI covers every pull request and everything that reaches `main`. So credential
 detection does not rest on the Claude Code hook, and duplicating CI's scanning

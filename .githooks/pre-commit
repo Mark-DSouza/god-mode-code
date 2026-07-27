@@ -7,21 +7,29 @@
 # covers commits made by every human and every agent, including agents that
 # have never heard of Claude Code.
 #
-# What it does not cover, stated rather than implied: git does not run this
-# hook for a merge or a rebase, so content arriving that way is not re-read.
-# That is tolerable because it was read when it was first committed — the hole
-# is a conflict resolution, where somebody types new content into a commit this
-# hook never sees. Nor does it re-read a commit being amended, since the amend
-# adds nothing relative to the commit it replaces. The whole-repository sweep
-# is what covers all three; this is the fast layer, not the only one.
+# What it sees and what it does not, each tested rather than assumed:
+#
+#   - An ordinary commit, and the commit that finishes a conflicted merge: the
+#     hook runs, and reads what that commit adds.
+#   - A clean merge, and a rebase: git writes those commits itself and runs no
+#     pre-commit hook at all. Tolerable, because the content was read when it
+#     was first committed.
+#   - An amend: the hook runs, but the staged diff is taken against the commit
+#     being replaced, so content already inside that commit is not re-read.
+#
+# The residue is what the whole-repository sweep is for — a later ticket in
+# this set, not something that exists yet. This is the fast layer, and for now
+# it is the only one, which is a reason to keep it honest rather than a reason
+# to widen it.
 #
 # It reads the *added lines* of the staged diff, not the staged files. Scanning
 # whole files would mean one pre-existing finding anywhere in a file blocks
 # every future commit that touches it — including the commit that removes the
-# finding. (The exception is a merge commit, where everything arriving from the
-# other branch reads as added. Nothing in this repository trips the detector
+# finding. A conflicted merge is where that inverts: everything arriving from
+# the other branch reads as added, so a finding already committed over there
+# refuses the merge commit. Nothing in this repository trips the detector
 # today, so that stays theoretical; if it ever bites, the answer is to mark the
-# line, not to bypass the hook.)
+# line, not to bypass the hook.
 #
 # Latency is the design constraint. A commit is the most latency-sensitive
 # moment in the loop, and a hook people wait on is a hook they bypass, so this

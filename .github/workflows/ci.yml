@@ -108,6 +108,9 @@ jobs:
             credentials:
               - '.github/workflows/ci.yml'
               - 'scripts/*credential_detector.py'
+              # The installer and the hook, because the job below proves the
+              # one actually installs the other. A detector nobody installs
+              # guards nothing.
               - 'scripts/install-git-hooks.sh'
               - '.githooks/**'
               - '**/*.example'
@@ -356,6 +359,16 @@ jobs:
       # who only ever touches Go or Java. A job that installed one in order to
       # test it would quietly stop proving that.
       - run: python3 scripts/test_credential_detector.py --verbose
+      # The other half of the guard. The fixtures prove the detector can tell a
+      # credential from a placeholder; this proves the thing ever gets
+      # installed, which is the half that fails silently — git ignores a
+      # `core.hooksPath` pointing nowhere without saying a word.
+      - name: The installer configures git, and the hook it points at exists
+        run: |
+          git config --unset core.hooksPath || true
+          ./scripts/install-git-hooks.sh
+          test "$(git config --get core.hooksPath)" = ".githooks"
+          test -x .githooks/pre-commit
 
   # One status to require on the branch, so a skipped job does not read as a
   # missing check. `always()` is what lets this run when upstream jobs skip.

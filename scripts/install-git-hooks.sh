@@ -39,8 +39,23 @@ hooks_path=".githooks"
 # built from a context with `.git` excluded. Installing hooks there is both
 # impossible and pointless, so this is a no-op rather than a failure — a build
 # must not break over a developer convenience it has no use for.
-command -v git >/dev/null 2>&1 || exit 0
-git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+#
+# It says so rather than exiting quietly. A control that skips itself in
+# silence is indistinguishable from one that ran, and this script has exactly
+# one job to be wrong about.
+if ! command -v git >/dev/null 2>&1 || ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "==> Not a git repository, so no git hooks to install"
+  exit 0
+fi
+
+# The success message below has to mean something. Git ignores a
+# `core.hooksPath` pointing at a directory that is not there, without a word,
+# so announcing success without looking would just move the silence one step
+# along.
+if [ ! -x "$hooks_path/pre-commit" ]; then
+  echo "Cannot install git hooks: $hooks_path/pre-commit is missing or not executable." >&2
+  exit 1
+fi
 
 # Somebody may have pointed this somewhere themselves. Overwriting is still the
 # right answer — the guard has to be installed — but doing it without saying so

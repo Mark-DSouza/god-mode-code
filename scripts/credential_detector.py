@@ -45,9 +45,8 @@ import argparse
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Sequence
+from typing import Iterable, Iterator, NamedTuple, Sequence
 
 # Written on the offending line itself, so the reason travels with the string
 # and a reviewer sees it in the same diff hunk. The alternative — a separate
@@ -60,8 +59,7 @@ ALLOW_MARKER = "credential-detector: allow"
 PREFIX_SHOWN = 4
 
 
-@dataclass(frozen=True)
-class Shape:
+class Shape(NamedTuple):
     """One credential shape, and the name a report calls it by."""
 
     name: str
@@ -208,8 +206,10 @@ EXAMPLE_ASSIGNMENT = re.compile(r"^\s*(?P<key>[A-Za-z_][A-Za-z0-9_.\-]*)\s*[:=]\
 FILLED_IN_EXAMPLE = "filled-in value in an example file"
 
 
-@dataclass(frozen=True)
-class Finding:
+# NamedTuple rather than a dataclass, and that is a latency decision rather
+# than a style one: importing `dataclasses` costs about twelve milliseconds of
+# a guard whose whole budget is a tenth of a second.
+class Finding(NamedTuple):
     """One credential shape, in one place. Never carries the match in full."""
 
     path: str

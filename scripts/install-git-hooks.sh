@@ -1,9 +1,14 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #
 # Point git at the tracked hooks directory. Run by the `prepare` script, which
 # means it runs on every `pnpm install`.
 #
-# This file exists so that the `prepare` entry in package.json is not an
+# POSIX sh rather than the `#!/usr/bin/env bash` the other scripts here use,
+# and that is a found-the-hard-way deviation rather than a preference: `pnpm
+# install` runs `prepare` inside the web image's build too, and node:24-alpine
+# ships no bash. The script has nothing in it that wants a shell that large.
+#
+# This file exists at all so that the `prepare` entry in package.json is not an
 # unexplained line that silently reconfigures git — which is exactly the sort of
 # thing a reviewer should be suspicious of. So, the reasons:
 #
@@ -23,9 +28,9 @@
 # working tree, so a relative `core.hooksPath` resolves inside whichever
 # worktree the commit is being made in, while an absolute one would point every
 # worktree at the checkout that happened to run `pnpm install` first.
-set -euo pipefail
+set -eu
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 
 hooks_path=".githooks"
@@ -41,7 +46,7 @@ git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 # right answer — the guard has to be installed — but doing it without saying so
 # would make their hooks disappear with no explanation anywhere.
 existing="$(git config --get core.hooksPath || true)"
-if [[ -n "$existing" && "$existing" != "$hooks_path" ]]; then
+if [ -n "$existing" ] && [ "$existing" != "$hooks_path" ]; then
   echo "==> Replacing core.hooksPath: was $existing"
 fi
 

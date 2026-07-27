@@ -15,6 +15,12 @@ matches them, so that no source line in this file carries a credential shape.
 That is not decoration: this file is committed through the very guard it tests,
 and a test suite that can only be committed by bypassing the guard would teach
 exactly the wrong habit. Do not "tidy" the halves back together.
+
+The halving applies to the "must not be caught" fixtures too, which looks
+redundant and is not. GitHub's push protection reads this file with its own
+list, and that list is not ours — it refused a push over the Stripe *test* key
+below, which our detector allows on purpose because Stripe publishes it. Two
+readers, two lists, and only one of them can be argued with.
 """
 
 from __future__ import annotations
@@ -42,7 +48,9 @@ SLACK_TOKEN = "xoxb-" + "0086989145134-9824019683411-pwx08w5thgoADXWp4kOrDFNB"
 SLACK_WEBHOOK = (
     "https://hooks.slack.com/services/" + "T7EZSZ5XPEK/BIGS89YG9QU/TXZ7TQUotNMdsQDfXVdzlWEa"
 )
-STRIPE_KEY = "sk_live_" + "T3XYsZVxjNkDMFBUXb4ZkmKt"
+STRIPE_LIVE_KEY = "sk_live_" + "T3XYsZVxjNkDMFBUXb4ZkmKt"
+# Stripe publishes its test keys; ours allows them, push protection does not.
+STRIPE_TEST_KEY = "sk_test_" + "T3XYsZVxjNkDMFBUXb4ZkmKt"
 GOOGLE_API_KEY = "AIza" + "i916RljHIeINtK2FjHcrBFv6HfjTyogLD2c"
 OPENAI_KEY = "sk-proj-" + "mSnJjzlKl2bDVzRj1riyn58oni1ihxuXy-FEHz8xM7VWHwB5"
 ANTHROPIC_KEY = "sk-ant-" + "api03-Gh5tQxNSEFIGfdtM8_n5lIJP3eaZq99pnt83zr81"
@@ -72,7 +80,7 @@ MUST_BE_CAUGHT = [
     ("GitHub token", GITHUB_FINE_GRAINED),
     ("Slack token", SLACK_TOKEN),
     ("Slack webhook", SLACK_WEBHOOK),
-    ("Stripe live key", STRIPE_KEY),
+    ("Stripe live key", STRIPE_LIVE_KEY),
     ("Google API key", GOOGLE_API_KEY),
     ("OpenAI key", OPENAI_KEY),
     ("Anthropic key", ANTHROPIC_KEY),
@@ -110,7 +118,7 @@ MUST_NOT_BE_CAUGHT = [
     ('token = os.environ["GITHUB_TOKEN"]', "reading it from the environment"),
     # Stripe's test keys are published in Stripe's own documentation and are
     # meant to be committed.
-    ("sk_test_" + "T3XYsZVxjNkDMFBUXb4ZkmKt", "a Stripe test key"),
+    (STRIPE_TEST_KEY, "a Stripe test key"),
     # A JWT-shaped string with a stub signature — what a test fixture holds.
     (
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.signature",

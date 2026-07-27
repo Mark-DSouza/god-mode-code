@@ -134,11 +134,11 @@ MUST_NOT_BE_CAUGHT = [
 
 class MustBeCaught(unittest.TestCase):
     def test_every_credential_shape_is_reported(self) -> None:
-        for expected_rule, line in MUST_BE_CAUGHT:
-            with self.subTest(rule=expected_rule, line=line[:24]):
+        for expected_shape, line in MUST_BE_CAUGHT:
+            with self.subTest(shape=expected_shape, line=line[:24]):
                 findings = detector.scan_text(SOURCE_PATH, line)
                 self.assertTrue(findings, "nothing matched")
-                self.assertEqual(expected_rule, findings[0].rule)
+                self.assertEqual(expected_shape, findings[0].shape)
 
 
 class MustNotBeCaught(unittest.TestCase):
@@ -206,7 +206,7 @@ class ExampleFiles(unittest.TestCase):
         content = 'grafana_auth = "hJ3kQz9WmR2vT8xL5nB7cF4dP0sY6gA1"\n'
         findings = detector.scan_text(self.EXAMPLE_PATH, content)
         self.assertEqual(1, len(findings))
-        self.assertEqual("filled-in value in an example file", findings[0].rule)
+        self.assertEqual("filled-in value in an example file", findings[0].shape)
 
     def test_placeholders_under_secret_keys_pass(self) -> None:
         content = "\n".join(
@@ -222,6 +222,17 @@ class ExampleFiles(unittest.TestCase):
             ]
         )
         self.assertEqual([], detector.scan_text(self.EXAMPLE_PATH, content))
+
+    def test_a_placeholder_word_buried_inside_a_value_does_not_excuse_it(self) -> None:
+        """The placeholder words are matched as words, not as substrings.
+
+        A random token will sooner or later contain the letters of one of them.
+        If that were enough to pass, the stricter rule for example files would
+        have a hole in it that nobody could see from the outside.
+        """
+        content = 'api_secret = "aB3xQ9zRvT2kLmNherePQ7wYsK"\n'
+        findings = detector.scan_text(self.EXAMPLE_PATH, content)
+        self.assertEqual(1, len(findings), "`here` inside a value excused the whole value")
 
     def test_a_non_secret_key_is_not_held_to_the_rule(self) -> None:
         content = 'bucket = "gmc-terraform-state-3f9a2b7c1d"\n'
@@ -257,13 +268,13 @@ class AllowMarker(unittest.TestCase):
 
 
 class Reporting(unittest.TestCase):
-    def test_a_finding_names_the_file_the_line_and_the_rule(self) -> None:
+    def test_a_finding_names_the_file_the_line_and_the_shape(self) -> None:
         content = "\n".join(["const a = 1;", "const b = 2;", f'const key = "{AWS_KEY_ID}";'])
         findings = detector.scan_text(SOURCE_PATH, content)
         self.assertEqual(1, len(findings))
         self.assertEqual(SOURCE_PATH, findings[0].path)
         self.assertEqual(3, findings[0].line)
-        self.assertEqual("AWS access key id", findings[0].rule)
+        self.assertEqual("AWS access key id", findings[0].shape)
 
     def test_the_report_does_not_repeat_the_credential(self) -> None:
         """A refusal that echoes the secret writes it into a terminal
@@ -338,6 +349,29 @@ deleted file mode 100644
 """
         self.assertEqual([], detector.scan_added_lines(diff))
 
+    def test_an_added_line_that_looks_like_a_file_header_is_content(self) -> None:
+        """Otherwise the guard is bypassable by anyone who knows the format.
+
+        `+++ b/x` inside a hunk is an added line whose text happens to start
+        with three pluses — a diff snippet in a markdown document does it by
+        accident. A parser that reads it as a header retargets or discards
+        every added line after it, which is a hole big enough to walk a key
+        through deliberately.
+        """
+        diff = f"""diff --git a/notes.md b/notes.md
+index 1234567..89abcde 100644
+--- a/notes.md
++++ b/notes.md
+@@ -1,0 +2,3 @@
+++++ b/decoy.ts
+++++ /dev/null
++const key = "{AWS_KEY_ID}";
+"""
+        findings = detector.scan_added_lines(diff)
+        self.assertEqual(1, len(findings))
+        self.assertEqual("notes.md", findings[0].path)
+        self.assertEqual(4, findings[0].line)
+
     def test_a_binary_file_contributes_nothing(self) -> None:
         diff = """diff --git a/logo.png b/logo.png
 index 1234567..89abcde 100644
@@ -364,7 +398,7 @@ class CommandLine(unittest.TestCase):
         result = self.run_detector("--stdin", "--as", SOURCE_PATH, stdin="const a = 1;\n")
         self.assertEqual(0, result.returncode, result.stderr)
 
-    def test_a_finding_exits_one_and_names_the_rule(self) -> None:
+    def test_a_finding_exits_one_and_names_the_shape(self) -> None:
         result = self.run_detector(
             "--stdin", "--as", SOURCE_PATH, stdin=f'const key = "{AWS_KEY_ID}";\n'
         )

@@ -100,9 +100,16 @@ jobs:
             # Deliberately not `*shared`: the detector has no dependencies and
             # no manifest, so a lockfile refresh cannot affect it and running
             # its fixtures for one would be noise.
+            #
+            # The example and compose files are here because the fixtures
+            # assert on the committed ones directly — someone pasting a real
+            # value into a `.example` file fails that assertion, and a filter
+            # that did not list them would never run the job that says so.
             credentials:
               - '.github/workflows/ci.yml'
               - 'scripts/*credential_detector.py'
+              - '**/*.example'
+              - 'compose.*.yaml'
 
   web:
     needs: changes
@@ -346,7 +353,7 @@ jobs:
       # what lets the commit hook cost milliseconds and work for a contributor
       # who only ever touches Go or Java. A job that installed one in order to
       # test it would quietly stop proving that.
-      - run: python3 -m unittest discover --start-directory scripts --top-level-directory scripts --verbose
+      - run: python3 scripts/test_credential_detector.py --verbose
 
   # One status to require on the branch, so a skipped job does not read as a
   # missing check. `always()` is what lets this run when upstream jobs skip.

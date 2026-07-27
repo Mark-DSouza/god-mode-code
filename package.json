@@ -7,6 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "prepare": "./scripts/install-git-hooks.sh",
     "dev": "./scripts/dev.sh",
     "dev:web": "pnpm --filter @gmc/web dev",
     "build": "pnpm --filter @gmc/web build",

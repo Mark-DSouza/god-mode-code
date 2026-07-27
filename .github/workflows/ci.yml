@@ -108,6 +108,7 @@ jobs:
             credentials:
               - '.github/workflows/ci.yml'
               - 'scripts/*credential_detector.py'
+              - '.githooks/**'
               - '**/*.example'
               - 'compose.*.yaml'
 

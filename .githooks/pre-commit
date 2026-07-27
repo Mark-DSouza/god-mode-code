@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#
+# Refuse a commit that would put a credential into this repository.
+#
+# This is the control, rather than one of the layers on top of it. A hook in
+# `.claude/settings.json` covers Claude Code sessions in one checkout; this
+# covers every commit from every human and every agent, including agents that
+# have never heard of Claude Code (ADR-0013).
+#
+# It reads the *added lines* of the staged diff, not the staged files. Scanning
+# whole files would mean one pre-existing finding anywhere in a file blocks
+# every future commit that touches it — including the commit that removes the
+# finding. Judging what is already committed is the repository sweep's job.
+#
+# Latency is the design constraint. A commit is the most latency-sensitive
+# moment in the loop, and a hook people wait on is a hook they bypass, so this
+# is one `git diff` and one python3 process: no network, no Docker, no
+# ecosystem toolchain.
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+detector="$repo_root/scripts/credential_detector.py"
+
+# Failing loudly is the right default for a control. A guard that quietly lets
+# the commit through when its interpreter is missing is worse than no guard,
+# because everyone believes it ran.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "Commit refused: the credential guard needs python3, which is not on PATH." >&2
+  echo >&2
+  echo "python3 ships with macOS and every Linux distribution this project" >&2
+  echo "targets. If you genuinely cannot install it, say so on the pull" >&2
+  echo "request rather than reaching for --no-verify." >&2
+  exit 1
+fi
+
+# Invoked through python3 rather than through its shebang, so the guard does
+# not also depend on the executable bit surviving every checkout and archive
+# this file travels through.
+status=0
+findings="$(python3 "$detector" --staged 2>&1)" || status=$?
+
+case "$status" in
+0)
+  exit 0
+  ;;
+1)
+  echo "Commit refused: a staged change carries a credential." >&2
+  echo >&2
+  echo "$findings" >&2
+  exit 1
+  ;;
+*)
+  echo "Commit refused: the credential guard could not run." >&2
+  echo >&2
+  echo "$findings" >&2
+  exit 1
+  ;;
+esac

@@ -75,16 +75,15 @@ redeploys an earlier image rather than rebuilding an earlier `FROM`. This is
 the decision most likely to be "fixed" by a well-meaning reviewer who does not
 realise they are turning off automatic patching.
 
-Docker is therefore deliberately absent from the Dependabot ecosystems, and the
-reason is worth stating, because the exclusion otherwise looks like an
-oversight. Everything the ecosystem can see here is either already patched by
-the rebuild — the application's tags and the proxy's — or never deployed:
-`apps/judge/Dockerfile` is local-only by its own first line, and the
+Docker is therefore deliberately absent from the Dependabot ecosystems.
+Everything that ecosystem can see here is either already patched by the rebuild
+— the application's tags and the proxy's — or never deployed:
+`apps/judge/Dockerfile` is local-only by its own opening comment, and the
 `postgres:17-alpine` in the compose files is development scaffolding, since
-production runs RDS. The one image where staleness genuinely accrues is
-`python:3.13-alpine`, and it is named in a shell variable rather than a `FROM`,
-which is exactly what the ecosystem cannot see. Configured here, the bot would
-open pull requests about everything except the thing that matters.
+production runs RDS. The one deployed image it cannot see is
+`python:3.13-alpine`, which is named in a shell variable rather than a `FROM`.
+Configured here, the bot would open pull requests about everything except the
+thing that matters.
 
 The judge is the exception, and it is the one to watch. It runs as a host
 process from a machine image built out of band (ADR-0005,
@@ -108,11 +107,13 @@ touches the infrastructure, because traffic arrives through the
 outbound-initiated tunnel of ADR-0002; the judge accepts one port from the
 application's security group and has no egress and no credentials at all
 (ADR-0005). A vulnerable library on a host nothing can dial is a different
-proposition from one behind an open port — and on the judge, where hostile code
-is inside by design rather than by accident, it is the containment ADR-0005
-builds that does this work, not the currency of a package list. If the runtime
-images ever stop being minimal, or either host ever accepts a connection from
-somewhere new, this paragraph expires with it.
+proposition from one behind an open port. The judge needs the stronger form of
+that argument, since hostile code is inside it by design and ADR-0005 assumes
+an escape rather than hoping against one: what protects it is that the host
+holds nothing worth taking and has nowhere to send it, which is a property no
+package version changes. If the runtime images ever stop being minimal, or
+either host ever accepts a connection from somewhere new, this paragraph
+expires with it.
 
 **The commit guard is the control; the Claude Code hook keeps the controls from
 being quietly weakened; CI finds the vulnerabilities.** A hook in

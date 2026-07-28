@@ -19,6 +19,10 @@ name: Security
 # check, which says the diff introduced nothing new.
 
 on:
+  # Not in the ticket, and load-bearing anyway: "new versus pre-existing" is
+  # computed against the base branch's analysis, so without a run on `main`
+  # there is nothing to be pre-existing and the first pull request to touch a
+  # file inherits everything in it.
   push:
     branches: [main]
   pull_request:
@@ -31,7 +35,14 @@ on:
 
 concurrency:
   group: security-${{ github.ref }}
-  cancel-in-progress: true
+  # Not plain `true`, which is what `ci.yml` can afford and this cannot. A
+  # scheduled run's ref is `refs/heads/main`, indistinguishable from a push to
+  # `main`, so `true` means any merge lands inside the weekly full analysis and
+  # cancels it — silently, with nothing failing to say so and nothing retrying
+  # until the following Monday. That is the alert tier ADR-0013 calls
+  # deliberately fed, quietly starved. Superseding a pull request is still
+  # worth doing; superseding the run that populates the Security tab is not.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -56,7 +67,10 @@ jobs:
       # below, so the languages a change cannot have affected are never
       # analysed rather than being analysed and discarded.
       languages: ${{ steps.languages.outputs.changes || '["javascript-typescript","java-kotlin","go"]' }}
-      deps: ${{ steps.deps.outputs.deps || 'true' }}
+      # No `|| 'true'` fallback, unlike its sibling above. The only job that
+      # reads this is gated on `pull_request`, which is the one event where
+      # the step is not skipped, so a fallback would be unreachable.
+      deps: ${{ steps.deps.outputs.deps }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -173,7 +187,9 @@ jobs:
     if: github.event_name == 'pull_request' && needs.changes.outputs.deps == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # No checkout. The action reads the pull request's dependency changes
+      # from the API, and would want a working tree only to load a config file
+      # this does not have.
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           # Set here rather than left to the action's default, because the

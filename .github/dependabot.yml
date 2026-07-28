@@ -1,0 +1,70 @@
+version: 2
+
+# What keeps the pinned actions in `.github/workflows` moving. An action pinned
+# to a commit and then forgotten is running last year's code, and nothing about
+# a SHA makes anyone notice. The bot rewrites the pin and its `# vX.Y.Z`
+# comment together, which is why those two cannot drift.
+#
+# Monthly, and grouped so each ecosystem opens one pull request per cycle
+# rather than one per dependency. This is a solo repository, and the failure
+# mode of an ungrouped bot is not noise — it is a maintainer who mutes it, at
+# which point the alerts still arrive and nobody is reading them.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # One entry covers the whole pnpm workspace: `apps/web`, `packages/*`, `e2e`
+  # and `visual` all resolve through the single lockfile at the root.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      npm:
+        patterns: ["*"]
+
+  - package-ecosystem: maven
+    directory: /apps/api
+    schedule:
+      interval: monthly
+    groups:
+      maven:
+        patterns: ["*"]
+
+  # Near-vacuous today: the judge has no third-party Go dependencies and no
+  # `go.sum` (see the `cache-dependency-path` note in ci.yml). Configured
+  # anyway, because the day it acquires its first dependency is not a day
+  # anyone gets a reminder to come back here.
+  - package-ecosystem: gomod
+    directory: /apps/judge
+    schedule:
+      interval: monthly
+    groups:
+      gomod:
+        patterns: ["*"]
+
+  # Listed rather than globbed: each of these is a separate root with its own
+  # state and its own `required_providers`, and Terraform updates do not
+  # recurse into subdirectories.
+  - package-ecosystem: terraform
+    directories:
+      - /infra/terraform
+      - /infra/terraform/bootstrap
+      - /infra/terraform/observability
+    schedule:
+      interval: monthly
+    groups:
+      terraform:
+        patterns: ["*"]
+
+# Docker is absent on purpose, and ADR-0013 is where that is argued: the tags
+# it would pin are floating so that each deploy rebuilds against a patched
+# base, and the one deployed image the ecosystem cannot see is named in a shell
+# variable rather than a `FROM`. Read it before adding the ecosystem here —
+# turning those tags into digests turns off automatic patching, which is not
+# what it looks like from the diff.

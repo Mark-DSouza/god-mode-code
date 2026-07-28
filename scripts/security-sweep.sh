@@ -329,19 +329,18 @@ What this run did not check, and could not
   - Dependabot alerts, over declared dependencies. Security tab, under
     Dependabot. Container OS packages are covered by nothing, which ADR-0013
     records as a deliberate acceptance rather than an oversight.
+  - CodeQL over the three languages written here, and Trivy over the
+    Terraform, both from `.github/workflows/security.yml`. They report into
+    code scanning, which decides per pull request which alerts are new.
+  - Dependency review, which fails a pull request that adds a vulnerable
+    package. Same workflow, pull request events only.
 
-  Named in ADR-0013 and NOT configured on this repository as of this file's
-  last change — so nothing is doing this today, here or there:
+  Check rather than trusting this paragraph. The first names the tools that
+  have actually reported into code scanning, which is the question — code
+  scanning's *default setup* is deliberately off here, and asking after it
+  would say "not-configured" about a workflow that runs:
 
-  - CodeQL. Code scanning's default setup is not enabled and there is no
-    CodeQL workflow, so no source analysis has ever run over the three
-    languages written here.
-  - Dependency review, which would fail a pull request that adds a
-    vulnerable package. There is no workflow for it.
-
-  Check both rather than trusting this paragraph:
-
-    gh api repos/OWNER/REPO/code-scanning/default-setup --jq .state
+    gh api repos/OWNER/REPO/code-scanning/analyses --jq '[.[].tool.name]|unique'
     gh api repos/OWNER/REPO --jq .security_and_analysis
 
   The judge's machine image is checked by nothing either. It is built out of

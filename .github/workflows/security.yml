@@ -64,17 +64,20 @@ jobs:
         id: languages
         if: github.event_name != 'schedule'
         with:
-          # The keys are CodeQL's own language identifiers, not names chosen
-          # here, because `outputs.changes` becomes the matrix verbatim.
+          # Every key here is a CodeQL language identifier, not a name chosen
+          # for readability, because `outputs.changes` becomes the matrix
+          # verbatim. Which is also why this workflow's own path is repeated
+          # three times instead of factored into a `shared:` anchor the way
+          # `ci.yml` does it: an anchor needs a key to hang off, that key is a
+          # filter like any other, and a change to this file put `shared` in
+          # the matrix as a language. Measured, not reasoned about.
           filters: |
-            shared: &shared
-              - '.github/workflows/security.yml'
             # By extension rather than by directory: TypeScript lives in six
             # places already and the analysis follows the files, not the
             # layout. A directory list would go stale the first time a seventh
             # appeared, and it would go stale silently.
             javascript-typescript:
-              - *shared
+              - '.github/workflows/security.yml'
               - '**/*.ts'
               - '**/*.tsx'
               - '**/*.js'
@@ -82,10 +85,10 @@ jobs:
               - '**/*.mjs'
               - '**/*.cjs'
             java-kotlin:
-              - *shared
+              - '.github/workflows/security.yml'
               - 'apps/api/**'
             go:
-              - *shared
+              - '.github/workflows/security.yml'
               - 'apps/judge/**'
 
       - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3

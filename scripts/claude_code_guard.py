@@ -133,6 +133,16 @@ def _bypass(name: str, regex: str) -> Bypass:
     return Bypass(name, re.compile(regex))
 
 
+# Where a commit starts in a segment: `commit` as git's subcommand, with only
+# git's own options — `-c core.quotePath=false` and friends, hence the optional
+# value each may take — allowed to stand in front of it.
+#
+# Anchoring on `git` has been the fix to the same bug twice. `\bcommit\b` alone
+# was satisfied by `.githooks/pre-commit`, because the hyphen is a word
+# boundary, and then by a bare `commit` anywhere in the segment.
+GIT_COMMIT = r"\bgit\b(?:\s+-\S+(?:\s+[^-\s]\S*)?)*\s+commit(?![\w\-./])"
+
+
 # Read against one shell segment at a time, because `-n` means one thing to
 # `git commit` and something else entirely to `git push`, and that distinction
 # is lost the moment the whole command line is treated as a bag of words.
@@ -157,7 +167,14 @@ BYPASSES: tuple[Bypass, ...] = (
     _bypass("skipping the commit hooks", r"\bgit\b(?:\s+\S+)*?\s+--no-veri[a-z]*\b"),
     # The short form, and only for `commit`: `git push -n` is a dry run, which
     # is the most harmless command in the set.
-    _bypass("skipping the commit hooks", r"\bcommit\b(?:\s+\S+)*?\s+-[A-Za-z]*n"),
+    #
+    # Only flags may stand between the subcommand and the bundle. Accepting any
+    # word there (`(?:\s+\S+)*?`) meant the first `-…n…` token anywhere later in
+    # the segment was read as belonging to the commit: `git commit -m x` in a
+    # loop that also ran `find . -name '*.py'` was reported as skipping the
+    # commit hooks. The trailing `[A-Za-z]*(?![\w-])` is what keeps this to a
+    # whole short-flag bundle rather than a prefix of any longer word.
+    _bypass("skipping the commit hooks", GIT_COMMIT + r"(?:\s+-\S+)*?\s+-[A-Za-z]*n[A-Za-z]*(?![\w-])"),
     # No abbreviation rule needed here, unlike `--no-verify` above: `--force`
     # is the shortest unambiguous prefix git accepts — `git push --forc` is
     # refused as ambiguous against `--force-with-lease` and
@@ -211,6 +228,40 @@ def _path_regex(entry: Protected) -> re.Pattern[str]:
 
 PROTECTED_IN_COMMAND = tuple((entry, _path_regex(entry)) for entry in PROTECTED_PATHS)
 
+# The commands that only read. Prompting on these was, by a distance, the
+# largest thing this guard did: of the ten prompts in the first session that
+# ran it, nine were a `cat`, a `git diff` or a `git log` of a control — reading
+# the guard in order to work on it, which is the one thing every change to
+# these files has to start with.
+#
+# An allowlist and not a test for writes, so the failure direction is a prompt:
+# a command this has never heard of still asks. The git subcommands are named
+# one by one because `git log <path>` and `git checkout -- <path>` are the same
+# program, and only one of them is a read.
+READ_ONLY = re.compile(
+    r"^\s*(?:cat|bat|head|tail|less|more|nl|wc|file|stat|ls|tree|"
+    r"grep|egrep|fgrep|rg|ag|ack|diff|cmp|md5sum|sha\d+sum|"
+    r"git\s+(?:log|diff|show|status|blame|grep|ls-files|cat-file|rev-parse|describe))"
+    r"(?![\w.-])"
+)
+
+
+# The redirections that land nowhere: `2>/dev/null` discards, `2>&1` points one
+# stream at another. Neither can put bytes in a file, and `2>/dev/null` is
+# ordinary enough on a `cat` of a file that may not exist that treating it as a
+# write put the prompt straight back on a read.
+DISCARDED = re.compile(r"\d*>>?\s*/dev/null|\d*>&\d*")
+
+
+def only_reads(segment: str) -> bool:
+    """Whether this segment can be trusted to leave the path where it is.
+
+    The redirection check is not decoration: `cat x > .githooks/pre-commit`
+    truncates the commit guard using nothing but a reader. `<` is left out, as
+    reading a file into a reader is still a read.
+    """
+    return bool(READ_ONLY.match(segment)) and ">" not in DISCARDED.sub("", segment)
+
 
 def protected_by(path: str) -> Protected | None:
     """Which control, if any, this path is part of.
@@ -239,9 +290,9 @@ def protected_in_command(segments: Sequence[str]) -> Protected | None:
 
     Deliberately not an attempt to work out whether the command writes. That
     analysis is exactly what an agent routes around — `python3 -c "open(...)"`
-    is not a write to anything watching for redirections — and being asked
-    about a `cat` of a protected file is a cheaper mistake than not being asked
-    about a `sed -i` of one.
+    is not a write to anything watching for redirections — so everything is
+    read as a write unless it is one of the plain readers in `only_reads`,
+    which is a list that can only ever be too short.
 
     The limit, stated rather than papered over: this matches the path as
     written. A glob (`.githook?/pre-commit`), a variable or a substitution
@@ -253,6 +304,8 @@ def protected_in_command(segments: Sequence[str]) -> Protected | None:
     always going to be argued about.
     """
     for segment in segments:
+        if only_reads(segment):
+            continue
         for entry, regex in PROTECTED_IN_COMMAND:
             if regex.search(segment):
                 return entry
@@ -283,24 +336,13 @@ MESSAGE_VALUE = re.compile(
     r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|[^\s;|&<>]+)"
 )
 
-# Where a commit starts in a segment. Everything after it can have its `-m`
-# value taken out; everything before it cannot.
-#
-# This has been wrong twice, both times by asking a weaker question. `\bcommit\b`
-# was satisfied by `.githooks/pre-commit`, because the hyphen is a word
-# boundary, so the protected path talked the guard out of reading the command
-# that named it. Excluding `-`, `/` and `.` on both sides fixed the paths and
-# left the same hole open to a bare word: `sort -m .githooks/pre-commit commit`
-# went silent, because *anywhere* in the segment was enough.
-#
-# So it is a position now rather than a test, and it wants `git` in front of
-# it. A `-m` before the subcommand is not a commit message and is left alone.
-#
-# `commit` has to be the subcommand, which is to say only git's own options
-# may stand between the two — `-c core.quotePath=false` and friends, hence the
-# optional value each may take. Allowing any word there let
-# `git log --format=%s commit -m .githooks/pre-commit` back through.
-A_COMMIT = re.compile(r"\bgit\b(?:\s+-\S+(?:\s+[^-\s]\S*)?)*\s+commit(?![\w\-./])")
+# The same position, compiled: everything after it can have its `-m` value
+# taken out, everything before it cannot. A `-m` in front of the subcommand is
+# not a commit message and is left alone. Excluding `-`, `/` and `.` after the
+# word is what stops `sort -m .githooks/pre-commit commit` licensing the strip,
+# and requiring git's own options rather than any word in front of it is what
+# stops `git log --format=%s commit -m .githooks/pre-commit`.
+A_COMMIT = re.compile(GIT_COMMIT)
 
 
 def readable_segments(command: str) -> list[str]:

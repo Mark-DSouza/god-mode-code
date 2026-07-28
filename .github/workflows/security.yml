@@ -57,9 +57,10 @@ jobs:
   # A stylesheet change has not affected the Go service and should not spend
   # minutes proving it.
   #
-  # Both steps are skipped on a scheduled run, where there is no base ref to
-  # diff against, and each output falls back to "everything" — which is what
-  # the weekly run is for.
+  # All three steps are skipped on a scheduled run, where there is no base ref
+  # to diff against, and the outputs that anything reads on that event fall
+  # back to "everything" — which is what the weekly run is for. `deps` is the
+  # exception and says why below.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -232,9 +233,12 @@ jobs:
           output: trivy.sarif
           # Explicit, and load-bearing: see above.
           exit-code: "0"
-          # Pinned to the version `scripts/security-sweep.sh` runs, so the
-          # sweep a person runs locally reports what this job reports. The two
-          # move together or the local run stops being evidence about CI.
+          # Pinned to the version `scripts/security-sweep.sh` falls back to,
+          # so a local sweep on a machine without Trivy installed reports what
+          # this job reports. That is as far as the parity goes and the
+          # overclaim is worth resisting: the sweep prefers whatever `trivy` is
+          # on PATH, so a person with their own install is comparing against a
+          # version nothing here pins. Move the two together anyway.
           version: v0.72.0
         env:
           # Terraform only — the Dockerfiles and compose files are application

@@ -63,8 +63,8 @@ resource "aws_db_parameter_group" "main" {
 # them: Trivy reads upward from the block and stops at the first comment line
 # that is not one, so a suppression separated from it by prose is silently
 # ignored.
-#trivy:ignore:AVD-AWS-0078
 #trivy:ignore:AVD-AWS-0176
+#trivy:ignore:AVD-AWS-0078
 resource "aws_db_instance" "main" {
   identifier     = "gmc-${var.environment}"
   engine         = "postgres"

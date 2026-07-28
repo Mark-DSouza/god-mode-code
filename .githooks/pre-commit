@@ -3,8 +3,8 @@
 # Refuse a commit that would put a credential into this repository.
 #
 # This is the control, rather than one of the layers on top of it. The Claude
-# Code write guard planned alongside it would cover one agent in one checkout,
-# and does not exist yet; this covers commits made by every human and every
+# Code write guard now alongside it (`scripts/claude_code_guard.py`) covers one
+# agent in one checkout; this covers commits made by every human and every
 # agent, including agents that have never heard of Claude Code. Which is the
 # order they were built in on purpose, not an accident of scheduling.
 #

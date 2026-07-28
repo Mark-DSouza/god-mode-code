@@ -43,16 +43,29 @@ Exit status, which is the whole interface for every caller:
 
 from __future__ import annotations
 
-import argparse
 # `os` and `re` are already in memory by the time this module is imported —
-# `pathlib` and `subprocess` both pull them in — so neither costs the guard
-# anything at the moment it runs.
+# `pathlib` pulls both in — so neither costs the guard anything at the moment
+# it runs.
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Iterable, Iterator, NamedTuple, Sequence
+
+# `argparse` and `subprocess` are imported where they are used rather than
+# here, and that is the same latency decision as the NamedTuples below.
+# Between them they cost about five milliseconds — measured as importing both
+# with `pathlib`, `re` and `os` already in memory, which is the situation this
+# module is actually in, over forty-one fresh interpreters. Whole-process
+# timings on this machine swing by more than the saving, so five is the
+# figure that reproduces and the larger ones quoted here previously were
+# reading noise. The Claude Code write guard imports this module for
+# `scan_text` alone and runs on every mutating tool call, so it would pay that
+# on every one of them for two names it never touches.
+#
+# `argparse` sits in `main`; `subprocess` sits in `_git_bytes`, which every git
+# call goes through. So the commit hook and both sweep modes still reach them —
+# the imports just happen a few lines later.
 
 # Written on the offending line itself, so the reason travels with the string
 # and a reviewer sees it in the same diff hunk. The alternative — a separate
@@ -329,6 +342,8 @@ def scan_paths(paths: Iterable[Path | str]) -> list[Finding]:
 def _git_bytes(*args: str, stdin: str = "") -> bytes:
     """One git command, failing loudly. A scan that cannot read the repository
     has found nothing, and must never be reported as having found nothing."""
+    import subprocess
+
     result = subprocess.run(
         ["git", "-c", "core.quotePath=false", *args],
         input=stdin.encode(),
@@ -604,6 +619,8 @@ def report(findings: Sequence[Finding], stream=sys.stderr, in_history: bool = Fa
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    import argparse
+
     parser = argparse.ArgumentParser(
         description="Refuse content that carries a credential.",
         epilog=f"Mark a false positive on its own line with: {ALLOW_MARKER}",

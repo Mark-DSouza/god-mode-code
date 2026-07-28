@@ -39,8 +39,8 @@ AWS_KEY_ID = "AKIA" + "G1XOLRE4WF6IZD7E"
 GITHUB_TOKEN = "ghp_" + "hUHzGgaqG1wBLkvZEqm1DiNBKmK0qVg3wGXN"
 
 # The files under test, copied to the paths they occupy here. The sweep finds
-# the detector relative to its own location, so the layout is part of what is
-# being tested.
+# the detector at `scripts/credential_detector.py` under the top of the
+# repository it is sweeping, so the layout is part of what is being tested.
 SHIPPED_FILES = (
     "scripts/credential_detector.py",
     "scripts/security-sweep.sh",
@@ -208,12 +208,31 @@ class TrackedFiles(RepositoryTest):
         # What git stores for a symlink is the target path, so that is what is
         # read. Following it would read a file twice when it points inside the
         # repository, and something outside the repository when it does not.
+        #
+        # The target here carries the credential, so this fails if the link is
+        # counted but not read — which a test asserting only the count cannot
+        # tell apart.
         self.repo.write("src/config.ts", "const timeout = 30;\n")
-        (self.repo.path / "src/link.ts").symlink_to("config.ts")
+        (self.repo.path / "src/link.ts").symlink_to(f"vault/{AWS_KEY_ID}.pem")
         self.repo.commit_all("a symlink")
         result = self.repo.detector("--tracked")
-        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        output = result.stdout + result.stderr
+        self.assertEqual(1, result.returncode, output)
+        self.assertIn("src/link.ts:1", output)
         self.assertIn("and 1 symlinks", result.stderr)
+
+    def test_a_symlink_is_not_followed(self) -> None:
+        # Following it would read the target's content, and the target is not
+        # what git committed here. A credential inside the pointed-at file is
+        # that file's finding, reported once, at its own path.
+        self.repo.write("src/config.ts", f'const key = "{AWS_KEY_ID}";\n')
+        (self.repo.path / "src/link.ts").symlink_to("config.ts")
+        self.repo.commit_all("a symlink to a file with a credential")
+        result = self.repo.detector("--tracked")
+        output = result.stdout + result.stderr
+        self.assertEqual(1, result.returncode, output)
+        self.assertIn("src/config.ts:1", output)
+        self.assertNotIn("src/link.ts", output)
 
     def test_a_binary_file_does_not_break_the_scan(self) -> None:
         (self.repo.path / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x01\xff\xfe")
@@ -411,6 +430,14 @@ class TheSweep(RepositoryTest):
         result = self.repo.sweep(path=without_python)
         self.assertEqual(2, result.returncode, result.stdout + result.stderr)
         self.assertIn("python3", result.stdout + result.stderr)
+
+    def test_starting_from_a_subdirectory_still_sweeps_the_repository(self) -> None:
+        # The sweep is documented as covering the repository, not the corner
+        # of it somebody happened to be standing in.
+        self.repo.commit_file("src/config.ts", f'const key = "{AWS_KEY_ID}";\n')
+        result = self.repo.sweep(cwd=self.repo.path / "src")
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        self.assertIn("src/config.ts:1", result.stdout + result.stderr)
 
     def test_outside_a_repository_it_exits_two(self) -> None:
         outside = self.repo.path.parent / "not-a-repository"

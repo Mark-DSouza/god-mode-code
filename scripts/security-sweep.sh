@@ -117,6 +117,14 @@ classify() {
   fi
 }
 
+# Asked separately from the question below it, because `git rev-parse` failing
+# and `git` not being installed produce the same empty answer and want
+# opposite responses from the reader.
+if ! command -v git >/dev/null 2>&1; then
+  echo "The sweep reads a git repository, and git is not on PATH." >&2
+  exit 2
+fi
+
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"
 if [[ -z "$repo_root" ]]; then
   echo "The sweep reads a git repository, and this is not one." >&2
@@ -125,7 +133,15 @@ if [[ -z "$repo_root" ]]; then
 fi
 cd "$repo_root" || exit 2
 
+# Resolved from the repository being swept rather than from this script's own
+# location: what is scanned and what scans it come from the same checkout, so
+# a sweep never reports one repository's findings using another's shape list.
 detector="$repo_root/scripts/credential_detector.py"
+if [[ ! -f "$detector" ]]; then
+  echo "The credential detector is not at $detector." >&2
+  echo "Two of the four tiers are that file, so this is not a sweep." >&2
+  exit 2
+fi
 
 # Failing loudly is the right default for a control, and the same argument the
 # commit hook makes: a sweep that quietly reports nothing when its interpreter
@@ -182,9 +198,6 @@ classify "history" $? 1 "the credential detector failed"
 # the suppressions that say so is a separate piece of work. Severity is not
 # filtered for the same reason: the point is to see the list.
 #
-# Preferring a local `trivy` to the container is not only about speed. The
-# container needs the repository bind-mounted into it, which a machine running
-# Docker in a VM does not always make possible.
 # ---------------------------------------------------------------------------
 heading "Infrastructure: misconfiguration in the Terraform and the Dockerfiles"
 

@@ -17,6 +17,7 @@
     "@sentry/react": "^10.68.0",
     "@tanstack/react-query": "^5.90.2",
     "clsx": "^2.1.1",
+    "lodash": "4.17.15",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwind-merge": "^3.3.1"

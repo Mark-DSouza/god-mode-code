@@ -266,14 +266,21 @@ def protected_in_command(segments: Sequence[str]) -> Protected | None:
 # would take the bypass out along with the message. That is how this was first
 # written, and the `-nm` test is what caught it.
 #
-# The unquoted value stops at a shell separator rather than running to the
-# next space. `\S+` would read `curl -m x;git commit --no-veri` as a message of
-# `x;git` and delete the `git` the bypass rule needs to see — which is the
-# second thing this got wrong, and the reason the value is now anchored to
-# characters that cannot end a word.
+# The unquoted value stops at the characters that end a word without being
+# whitespace, rather than running to the next space. Two of them were measured
+# escaping through `\S+`:
+#
+#   `curl -m 5&git commit --no-veri` was read as a message of `5&git`, which
+#   deleted the `git` the abbreviation rule is anchored on. `&` and not `;`,
+#   because `;`, `|` and `&&` already split the segment before any of this
+#   runs — they are in the class for symmetry, and cannot be reached.
+#
+#   `git commit -m wip>.githooks/pre-commit` was read as a message of
+#   `wip>.githooks/pre-commit`, which is the redirection that truncates the
+#   commit guard, deleted entire.
 MESSAGE_VALUE = re.compile(
     r"(?:^|\s)(?P<keep>-[A-Za-z]*|--)m(?:essage)?(?:\s+|=)"
-    r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|[^\s;|&]+)"
+    r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|[^\s;|&<>]+)"
 )
 
 # What makes a segment one whose `-m` is a commit message rather than somebody
@@ -284,7 +291,13 @@ MESSAGE_VALUE = re.compile(
 # word boundary, so the protected path talked the guard into treating any
 # command naming it as a commit and stripping the token after its `-m`.
 # `sort -m .githooks/pre-commit other` went silent on exactly that.
-A_COMMIT = re.compile(r"(?<![\w-])commit\b")
+#
+# The separators are excluded on both sides, and `/` and `.` for the same
+# reason the hyphen is: `.githooks/commit-msg` is the standard companion to
+# `pre-commit` and would otherwise walk straight back through the hole, as
+# would `.github/workflows/commit.yml`. A word here has to be the subcommand,
+# not a path that happens to contain it.
+A_COMMIT = re.compile(r"(?<![\w\-./])commit(?![\w\-./])")
 
 
 def readable_segments(command: str) -> list[str]:

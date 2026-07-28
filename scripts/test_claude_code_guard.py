@@ -335,6 +335,22 @@ class TouchingAControlAsks(GuardTest):
         self.assertAsked(bash("sort -m .githooks/pre-commit other"))
         self.assertAsked(bash("python3 -m .github/workflows"))
 
+    def test_a_protected_path_that_is_itself_a_commit_word_asks(self) -> None:
+        # `commit-msg` is the standard companion hook to `pre-commit`, so the
+        # moment a second hook lands this is a real file. Excluding only the
+        # hyphen left it, and any other `commit` inside a path, able to argue
+        # the guard out of looking at the command that names it.
+        self.assertAsked(bash("sort -m .githooks/commit-msg other"))
+        self.assertAsked(bash("cat -m .github/workflows/commit.yml"))
+
+    def test_a_redirection_after_a_message_is_still_seen(self) -> None:
+        # `>` ends a word without being whitespace, so a value that ran to the
+        # next space swallowed the redirect target — and the redirection is
+        # what truncates the file, not the message.
+        self.assertAsked(bash('git commit -m wip>.githooks/pre-commit'))
+        self.assertAsked(bash('git commit -m wip>>.github/workflows/ci.yml'))
+        self.assertAsked(bash('git commit -m wip<.githooks/pre-commit'))
+
     def test_an_ordinary_shell_command_does_not_ask(self) -> None:
         self.assertNoDecision(bash("git status --short"))
         self.assertNoDecision(bash("python3 scripts/test_credential_detector.py"))

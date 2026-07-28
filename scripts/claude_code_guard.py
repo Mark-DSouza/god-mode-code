@@ -62,7 +62,7 @@ import json
 import re
 import sys
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, NamedTuple
+from typing import Any, Iterable, NamedTuple, Sequence
 
 # The tools that can put bytes on disk. `scripts/test_claude_code_guard.py`
 # asserts that the matcher in `.claude/settings.json` names exactly these — a
@@ -234,7 +234,7 @@ def protected_by(path: str) -> Protected | None:
     return None
 
 
-def protected_in_command(command: str) -> Protected | None:
+def protected_in_command(segments: Sequence[str]) -> Protected | None:
     """The same set, read out of a shell command.
 
     Deliberately not an attempt to work out whether the command writes. That
@@ -246,52 +246,78 @@ def protected_in_command(command: str) -> Protected | None:
     The limit, stated rather than papered over: this matches the path as
     written. A glob (`.githook?/pre-commit`), a variable or a substitution
     reaches the same file and is not seen, and nothing short of running the
-    command would see it. Unlike the credential rule this
-    has no commit-time backstop, since the commit guard reads content and not
-    which files a change touches — so what covers the residue is a human
-    reading the diff on the pull request, which is where a change to these
-    files was always going to be argued about.
+    command would see it. Unlike the credential rule, this has
+    no commit-time backstop: the commit guard reads content and not which
+    files a change touches, so what covers the residue is a human reading the
+    diff on the pull request, which is where a change to these files was
+    always going to be argued about.
     """
-    for entry, regex in PROTECTED_IN_COMMAND:
-        if regex.search(command):
-            return entry
+    for segment in segments:
+        for entry, regex in PROTECTED_IN_COMMAND:
+            if regex.search(segment):
+                return entry
     return None
 
 
-# A `-m`/`--message` flag and the value it takes. `keep` is what the flag was
-# bundled with and is put back, because `git commit -nm "wip"` is `-n` and
-# `-m` written together: swallowing the whole flag would take the bypass out
-# along with the message, which is how this was first written and what the
-# `-nm` test caught.
+# A `-m`/`--message` flag and the value it takes.
+#
+# `keep` is whatever the flag was bundled with, and is put back: `git commit
+# -nm "wip"` is `-n` and `-m` written together, so swallowing the whole flag
+# would take the bypass out along with the message. That is how this was first
+# written, and the `-nm` test is what caught it.
+#
+# The unquoted value stops at a shell separator rather than running to the
+# next space. `\S+` would read `curl -m x;git commit --no-veri` as a message of
+# `x;git` and delete the `git` the bypass rule needs to see — which is the
+# second thing this got wrong, and the reason the value is now anchored to
+# characters that cannot end a word.
 MESSAGE_VALUE = re.compile(
     r"(?:^|\s)(?P<keep>-[A-Za-z]*|--)m(?:essage)?(?:\s+|=)"
-    r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|\S+)"
+    r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|[^\s;|&]+)"
 )
 
+# What makes a segment one whose `-m` is a commit message rather than somebody
+# else's flag. Without it, `python3 -m http.server` loses `http.server` from
+# both scans — a strip that reaches past what its name claims.
+#
+# Not `\bcommit\b`, which `.githooks/pre-commit` satisfies: the hyphen is a
+# word boundary, so the protected path talked the guard into treating any
+# command naming it as a commit and stripping the token after its `-m`.
+# `sort -m .githooks/pre-commit other` went silent on exactly that.
+A_COMMIT = re.compile(r"(?<![\w-])commit\b")
 
-def without_message_values(command: str) -> str:
-    """The command with commit-message text taken out.
+
+def readable_segments(command: str) -> list[str]:
+    """The command in shell segments, with commit-message text taken out.
 
     Only for the two rules that ask what a command touches and what it does.
     A message is text on its way to a commit, not to disk, so a message that
     quotes a protected path or spells a bypass flag is describing the work
     rather than doing it. Both were measured before this existed: `git commit
     -m "ci: pin .github/workflows actions"` and `git commit -m "docs: explain
-    -n usage"` both prompted, on a branch whose own commits look like that.
-    Prompts that fire on ordinary work are how a guard stops being read.
+    -n usage"` both prompted, on a branch whose own commits look exactly like
+    that. Prompts that fire on ordinary work are how a guard stops being read.
 
     The credential rule deliberately does not use this. A credential in a
     commit message is a credential in the repository.
+
+    Stripping runs inside a segment and only where that segment mentions a
+    commit, so it can neither reach across a separator nor take a `-m` that
+    belongs to some other program.
 
     What it gives up: `git commit -m "$(cat .githooks/pre-commit)"` no longer
     names a protected path. That is a read, and reads were already the
     generous half of `protected_in_command`.
     """
-    return MESSAGE_VALUE.sub(r" \g<keep> ", command)
+    segments = SEGMENTS.split(CONTINUATION.sub(" ", command))
+    return [
+        MESSAGE_VALUE.sub(r" \g<keep> ", segment) if A_COMMIT.search(segment) else segment
+        for segment in segments
+    ]
 
 
-def bypass_in_command(command: str) -> Bypass | None:
-    for segment in SEGMENTS.split(CONTINUATION.sub(" ", command)):
+def bypass_in_command(segments: Sequence[str]) -> Bypass | None:
+    for segment in segments:
         for candidate in BYPASSES:
             if candidate.regex.search(segment):
                 return candidate
@@ -376,13 +402,13 @@ def decide(payload: dict[str, Any]) -> tuple[str, str] | None:
 
     for written in writes:
         if written.is_command:
-            # Read with commit-message values removed, which the credential
-            # scan above deliberately did not do. See `without_message_values`.
-            command = without_message_values(written.content)
-            bypass = bypass_in_command(command)
+            # Read in segments, with commit-message values removed — neither
+            # of which the credential scan above does. See `readable_segments`.
+            segments = readable_segments(written.content)
+            bypass = bypass_in_command(segments)
             if bypass:
                 return "ask", routing_around(bypass)
-            hit = protected_in_command(command)
+            hit = protected_in_command(segments)
             named = hit.path if hit else ""
         else:
             hit = protected_by(written.path)

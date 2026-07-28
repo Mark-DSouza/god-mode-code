@@ -323,6 +323,18 @@ class TouchingAControlAsks(GuardTest):
     def test_a_protected_path_outside_the_message_still_asks(self) -> None:
         self.assertAsked(bash('git commit -m "wip" -- .githooks/pre-commit'))
 
+    def test_a_message_flag_belonging_to_another_program_is_left_alone(self) -> None:
+        # Taking the message out only runs where the segment is actually a
+        # commit. `-m` means something to plenty of other programs — `sort -m`
+        # takes files — and eating their arguments would be a guard reading
+        # less than it claims to.
+        #
+        # `.githooks/pre-commit` is the case that matters, because the path
+        # itself contains the word: a looser test for "is this a commit" let
+        # the protected path argue itself out of being seen.
+        self.assertAsked(bash("sort -m .githooks/pre-commit other"))
+        self.assertAsked(bash("python3 -m .github/workflows"))
+
     def test_an_ordinary_shell_command_does_not_ask(self) -> None:
         self.assertNoDecision(bash("git status --short"))
         self.assertNoDecision(bash("python3 scripts/test_credential_detector.py"))
@@ -413,6 +425,16 @@ class RoutingAroundTheCommitGuardAsks(GuardTest):
         self.assertNoDecision(bash('git commit -m "docs: explain -n usage"'))
         self.assertNoDecision(bash('git commit -am "note the --no-verify escape"'))
         self.assertNoDecision(bash("git commit --message='force-push notes'"))
+
+    def test_a_message_value_does_not_swallow_the_next_command(self) -> None:
+        # Taking the message out is text deletion, and an unquoted value that
+        # ran to the next space deleted past the `&` that ends the command:
+        # `curl -m 5&git commit --no-veri` lost the `git` the abbreviation rule
+        # is anchored on, and the bypass went through silently. `&` and not `;`
+        # because a `;` already splits the segment before any of this runs.
+        self.assertAsked(bash("curl -m 5&git commit --no-veri"))
+        self.assertAsked(bash("curl -m 5 && git commit --no-verify -m 'wip'"))
+        self.assertAsked(bash("curl -m x;git commit --no-veri"))
 
     def test_a_bypass_bundled_with_the_message_flag_still_asks(self) -> None:
         # `-nm "wip"` is `-n` and `-m` written together. Taking the message out

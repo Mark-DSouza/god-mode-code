@@ -41,7 +41,10 @@ GITHUB_TOKEN = "ghp_" + "hUHzGgaqG1wBLkvZEqm1DiNBKmK0qVg3wGXN"
 # The files under test, copied to the paths they occupy here. The sweep finds
 # the detector relative to its own location, so the layout is part of what is
 # being tested.
-SHIPPED_FILES = ("scripts/credential_detector.py",)
+SHIPPED_FILES = (
+    "scripts/credential_detector.py",
+    "scripts/security-sweep.sh",
+)
 
 # What the sweep is allowed to find on `PATH` during these tests. Everything
 # the shell and git need, and nothing a tier could scan with — so `docker`,
@@ -90,10 +93,14 @@ class Repository:
         self.commit_all("the tools under test")
 
     def run(
-        self, argv: list[str], check: bool = False, cwd: Path | None = None
+        self,
+        argv: list[str],
+        check: bool = False,
+        cwd: Path | None = None,
+        path: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         environment = dict(os.environ)
-        environment["PATH"] = reduced_path(self.path.parent / "bin")
+        environment["PATH"] = path or reduced_path(self.path.parent / "bin")
         result = subprocess.run(
             argv, cwd=cwd or self.path, capture_output=True, text=True, env=environment
         )
@@ -126,8 +133,11 @@ class Repository:
         detector = str(self.path / "scripts" / "credential_detector.py")
         return self.run(["python3", detector, *args], cwd=cwd)
 
-    def sweep(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return self.run(["./scripts/security-sweep.sh", *args])
+    def sweep(
+        self, *args: str, cwd: Path | None = None, path: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        sweep = str(self.path / "scripts" / "security-sweep.sh")
+        return self.run([sweep, *args], cwd=cwd, path=path)
 
 
 class RepositoryTest(unittest.TestCase):
@@ -316,6 +326,100 @@ class History(RepositoryTest):
         # disclosure: the commit is still there, and so is every clone of it.
         self.repo.commit_file("src/leaked.ts", f'const key = "{AWS_KEY_ID}";\n')
         self.assertIn("Rotate it", self.repo.detector("--history").stderr)
+
+
+class TheSweep(RepositoryTest):
+    """The command itself: what it reports, and what its exit status means.
+
+    Every test here runs it without `docker`, `trivy` or `go`, which is both
+    the fast path and the interesting one. A sweep that cannot run a tier and
+    does not say so is worse than one that fails outright, because the reader
+    believes the part that is missing.
+    """
+
+    def test_a_clean_repository_exits_zero(self) -> None:
+        self.repo.commit_file("src/config.ts", "const timeout = 30;\n")
+        result = self.repo.sweep()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_a_credential_in_the_tree_is_found_and_exits_one(self) -> None:
+        self.repo.commit_file("src/config.ts", f'const key = "{AWS_KEY_ID}";\n')
+        result = self.repo.sweep()
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        self.assertIn("src/config.ts:1", result.stdout + result.stderr)
+
+    def test_a_credential_only_in_history_is_found_and_exits_one(self) -> None:
+        self.repo.commit_file("src/leaked.ts", f'const key = "{AWS_KEY_ID}";\n')
+        self.repo.delete("src/leaked.ts")
+        result = self.repo.sweep()
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        self.assertIn("src/leaked.ts", result.stdout + result.stderr)
+
+    def plant_the_tiers_targets(self) -> None:
+        """Enough of the shape of this repository for the tool-dependent tiers
+        to have something to point at, so what they report is the missing tool
+        rather than the missing directory."""
+        self.repo.write("infra/terraform/main.tf", 'resource "null_resource" "a" {}\n')
+        self.repo.write("apps/judge/go.mod", "module judge\n\ngo 1.26\n")
+        self.repo.commit_all("something for each tier to scan")
+
+    def test_a_tier_whose_tooling_is_missing_is_reported_as_not_run(self) -> None:
+        self.plant_the_tiers_targets()
+        summary = self.summary_of(self.repo.sweep())
+        self.assertRegex(summary, r"infrastructure\s+not run — needs trivy")
+        self.assertRegex(summary, r"go\s+not run — needs the Go toolchain")
+
+    def test_a_tier_with_nothing_to_scan_says_that_rather_than_blaming_a_tool(self) -> None:
+        # The two are different facts and the reader acts on them differently:
+        # one is "install Docker", the other is "there is nothing here".
+        summary = self.summary_of(self.repo.sweep())
+        self.assertRegex(summary, r"infrastructure\s+not run — there is no infra/")
+
+    def test_a_tier_that_did_not_run_is_not_reported_as_clean(self) -> None:
+        # The distinction the whole summary exists for. A tier that could not
+        # run has found nothing, and so has a tier that ran and was satisfied;
+        # only one of those is worth anything to the reader.
+        self.repo.commit_file("src/config.ts", "const timeout = 30;\n")
+        summary = self.summary_of(self.repo.sweep())
+        self.assertRegex(summary, r"tree\s+no findings")
+        self.assertRegex(summary, r"infrastructure\s+not run")
+
+    def test_a_missing_tier_alone_does_not_fail_the_run(self) -> None:
+        # Exit status answers "did it find something", not "did every tier
+        # run" — the second question is answered in words, where the reason
+        # can be given. A laptop without Docker is the ordinary case.
+        self.repo.commit_file("src/config.ts", "const timeout = 30;\n")
+        self.assertEqual(0, self.repo.sweep().returncode)
+
+    def test_it_ends_by_saying_what_it_cannot_check_locally(self) -> None:
+        # An unqualified "no problems found" is the misleading output this
+        # ticket exists to prevent: parts of the posture only run on GitHub.
+        output = self.repo.sweep().stdout + self.repo.sweep().stderr
+        self.assertIn("CodeQL", output)
+        self.assertIn("Dependabot", output)
+        self.assertIn("secret scanning", output.lower())
+
+    def test_a_scan_that_could_not_run_exits_two(self) -> None:
+        # Not one, which would say "found something" — and not zero, which
+        # would say "found nothing" about a scan that never happened.
+        without_python = reduced_path(
+            self.repo.path.parent / "bin-no-python",
+            tuple(tool for tool in TOOLS_ALLOWED if tool != "python3"),
+        )
+        result = self.repo.sweep(path=without_python)
+        self.assertEqual(2, result.returncode, result.stdout + result.stderr)
+        self.assertIn("python3", result.stdout + result.stderr)
+
+    def test_outside_a_repository_it_exits_two(self) -> None:
+        outside = self.repo.path.parent / "not-a-repository"
+        outside.mkdir()
+        result = self.repo.sweep(cwd=outside)
+        self.assertEqual(2, result.returncode, result.stdout + result.stderr)
+
+    def summary_of(self, result: subprocess.CompletedProcess[str]) -> str:
+        output = result.stdout + result.stderr
+        self.assertIn("Summary", output, output)
+        return output[output.index("Summary") :]
 
 
 if __name__ == "__main__":

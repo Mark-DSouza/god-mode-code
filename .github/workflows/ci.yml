@@ -117,6 +117,10 @@ jobs:
               - '.github/workflows/ci.yml'
               - 'scripts/*credential_detector.py'
               - 'scripts/test_repository_sweep.py'
+              # The sweep is not run in CI — that would be the
+              # whole-repository gate ADR-0013 refuses — but the tests that
+              # prove it reports a missing tier honestly are.
+              - 'scripts/security-sweep.sh'
               # The installer and the hook, because the job below proves the
               # one actually installs the other. A detector nobody installs
               # guards nothing.

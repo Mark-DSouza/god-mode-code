@@ -21,6 +21,7 @@
     "visual:canary": "./visual/run-in-ci-image.sh canary",
     "api:test": "cd apps/api && ./mvnw -B verify",
     "judge:test": "cd apps/judge && go test ./...",
+    "security:sweep": "./scripts/security-sweep.sh",
     "contract:generate": "./scripts/generate-contract.sh",
     "contract:check": "./scripts/check-contract-drift.sh",
     "stack:up": "docker compose -f compose.e2e.yaml up -d --build --wait",

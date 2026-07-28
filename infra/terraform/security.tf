@@ -67,3 +67,20 @@ resource "aws_security_group" "db" {
     Name = "gmc-${var.environment}-db"
   }
 }
+
+# TEMPORARY — introduced to demonstrate the gate on issue #38, reverted in the
+# next commit. A security group nothing references, open to the internet on
+# port 22. `tests/security.tftest.hcl` asserts on the three groups it knows
+# about and says nothing about a fourth, which is exactly the class of mistake
+# the scanner exists for.
+resource "aws_security_group" "demonstration" {
+  name   = "gmc-${var.environment}-demonstration"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}

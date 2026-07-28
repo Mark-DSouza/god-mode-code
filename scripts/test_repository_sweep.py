@@ -89,11 +89,13 @@ class Repository:
             shutil.copy2(REPO_ROOT / name, target)
         self.commit_all("the tools under test")
 
-    def run(self, argv: list[str], check: bool = False) -> subprocess.CompletedProcess[str]:
+    def run(
+        self, argv: list[str], check: bool = False, cwd: Path | None = None
+    ) -> subprocess.CompletedProcess[str]:
         environment = dict(os.environ)
         environment["PATH"] = reduced_path(self.path.parent / "bin")
         result = subprocess.run(
-            argv, cwd=self.path, capture_output=True, text=True, env=environment
+            argv, cwd=cwd or self.path, capture_output=True, text=True, env=environment
         )
         if check and result.returncode != 0:
             raise AssertionError(f"{argv} failed: {result.stdout}\n{result.stderr}")
@@ -120,8 +122,9 @@ class Repository:
         self.git("rm", "--quiet", name)
         return self.commit_all(f"remove {name}")
 
-    def detector(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return self.run(["python3", "scripts/credential_detector.py", *args])
+    def detector(self, *args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+        detector = str(self.path / "scripts" / "credential_detector.py")
+        return self.run(["python3", detector, *args], cwd=cwd)
 
     def sweep(self, *args: str) -> subprocess.CompletedProcess[str]:
         return self.run(["./scripts/security-sweep.sh", *args])
@@ -172,6 +175,34 @@ class TrackedFiles(RepositoryTest):
         result = self.repo.detector("--tracked")
         self.assertRegex(result.stderr, r"Read \d+ tracked files")
 
+    def test_starting_from_a_subdirectory_still_scans_the_repository(self) -> None:
+        # `git ls-files` is relative to the working directory, so this is the
+        # scan that reads four files, says nothing is wrong, and is believed.
+        self.repo.commit_file("src/config.ts", f'const key = "{AWS_KEY_ID}";\n')
+        result = self.repo.detector("--tracked", cwd=self.repo.path / "scripts")
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        self.assertIn("src/config.ts:1", result.stdout + result.stderr)
+
+    def test_a_file_deleted_from_the_working_tree_is_counted_out_loud(self) -> None:
+        # Still tracked, not on disk. Skipping it silently would shrink the
+        # scan without shrinking what the report claims to have covered.
+        self.repo.commit_file("src/config.ts", "const timeout = 30;\n")
+        (self.repo.path / "src/config.ts").unlink()
+        result = self.repo.detector("--tracked")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("1 tracked paths held nothing to read", result.stderr)
+
+    def test_a_symlink_is_read_as_its_target_path(self) -> None:
+        # What git stores for a symlink is the target path, so that is what is
+        # read. Following it would read a file twice when it points inside the
+        # repository, and something outside the repository when it does not.
+        self.repo.write("src/config.ts", "const timeout = 30;\n")
+        (self.repo.path / "src/link.ts").symlink_to("config.ts")
+        self.repo.commit_all("a symlink")
+        result = self.repo.detector("--tracked")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("and 1 symlinks", result.stderr)
+
     def test_a_binary_file_does_not_break_the_scan(self) -> None:
         (self.repo.path / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x01\xff\xfe")
         self.repo.commit_all("a binary file")
@@ -204,8 +235,8 @@ class History(RepositoryTest):
         planted = self.repo.commit_file("src/leaked.ts", f'const key = "{AWS_KEY_ID}";\n')
         self.repo.commit_file("src/leaked.ts", f'const key = "{AWS_KEY_ID}"; // moved\n')
 
-        output = self.repo.detector("--history").stdout + self.repo.detector("--history").stderr
-        self.assertIn(planted, output, "the commit that first carried it")
+        result = self.repo.detector("--history")
+        self.assertIn(planted, result.stdout + result.stderr, "the commit that first carried it")
 
     def test_a_credential_edited_out_of_a_file_is_still_in_history(self) -> None:
         planted = self.repo.commit_file("src/config.ts", f'const key = "{AWS_KEY_ID}";\n')
@@ -234,10 +265,46 @@ class History(RepositoryTest):
         self.repo.write("scratch.ts", f'const key = "{AWS_KEY_ID}";\n')
         self.assertEqual(0, self.repo.detector("--history").returncode)
 
+    def test_a_credential_introduced_by_a_merge_is_found_and_attributed(self) -> None:
+        # The case that decided blobs over diffs. `git log -p` shows no diff
+        # for a merge commit, so a credential written while resolving a
+        # conflict exists in no diff anywhere — and attribution has to be
+        # asked the same question the same way, or the finding is reported
+        # with nothing to look at.
+        self.repo.commit_file("src/config.ts", "const timeout = 30;\n")
+        self.repo.git("checkout", "-b", "side")
+        self.repo.commit_file("src/config.ts", "const timeout = 60;\n")
+        self.repo.git("checkout", "main")
+        self.repo.commit_file("src/config.ts", "const timeout = 90;\n")
+
+        conflicted = self.repo.git("merge", "side", check=False)
+        self.assertNotEqual(0, conflicted.returncode, "expected a conflict to resolve")
+        self.repo.write("src/config.ts", f'const key = "{AWS_KEY_ID}";\n')
+        resolved = self.repo.commit_all("resolve the conflict")
+
+        result = self.repo.detector("--history")
+        output = result.stdout + result.stderr
+        self.assertEqual(1, result.returncode, output)
+        self.assertIn(resolved, output)
+
     def test_the_scan_says_how_much_it_read(self) -> None:
         self.repo.commit_file("src/config.ts", "const timeout = 30;\n")
         result = self.repo.detector("--history")
         self.assertRegex(result.stderr, r"Read \d+ blobs from \d+ commits")
+
+    def test_a_shallow_clone_is_refused_rather_than_reported_clean(self) -> None:
+        # The worst output this file can produce: a truncated history scanned
+        # in full, reported as clean, and indistinguishable from the real
+        # thing. The old commits a shallow clone drops are exactly the ones a
+        # sweep exists to read.
+        self.repo.commit_file("src/config.ts", "const timeout = 30;\n")
+        shallow = self.repo.path.parent / "shallow"
+        self.repo.run(
+            ["git", "clone", "--depth", "1", f"file://{self.repo.path}", str(shallow)], check=True
+        )
+        result = self.repo.detector("--history", cwd=shallow)
+        self.assertEqual(2, result.returncode, result.stdout + result.stderr)
+        self.assertIn("shallow", result.stderr)
 
     def test_the_report_does_not_repeat_the_credential(self) -> None:
         self.repo.commit_file("src/leaked.ts", f'const key = "{AWS_KEY_ID}";\n')

@@ -42,12 +42,6 @@ resource "aws_db_parameter_group" "main" {
   }
 }
 
-# Performance Insights is not available on `db.t4g.micro` — AWS excludes the
-# micro and small burstable classes — so enabling it would fail the apply
-# rather than buy anything. The instance class is the ADR-0001 decision and
-# this finding is downstream of it. PostgreSQL's own logs go to CloudWatch
-# below, and the rest of the signal lives in Grafana (ADR-0008).
-#
 # IAM authentication is a second way in rather than a replacement for the
 # first: the flag alone leaves the password working, so setting it would change
 # nothing about how this database is actually reached while reading as though
@@ -57,11 +51,19 @@ resource "aws_db_parameter_group" "main" {
 # application fetching and refreshing fifteen-minute tokens, which is an
 # application change and not a Terraform argument.
 #
-# Both directives sit on the line above the resource with nothing between
+# Performance Insights arrives encrypted with the default `aws/rds` key, and
+# AWS-0078 asks for a customer-managed one. Declined on the same terms as the
+# state bucket's: $1/month for a second authorisation surface in front of
+# query statistics, in an account whose principals would hold the grant
+# anyway. Worth noting how this finding got here — turning Performance
+# Insights on introduced it, which is the diff-scoped gate working exactly as
+# ADR-0013 describes on the very change that fixed the finding above it.
+#
+# Both directives sit on the lines above the resource with nothing between
 # them: Trivy reads upward from the block and stops at the first comment line
 # that is not one, so a suppression separated from it by prose is silently
 # ignored.
-#trivy:ignore:AVD-AWS-0133
+#trivy:ignore:AVD-AWS-0078
 #trivy:ignore:AVD-AWS-0176
 resource "aws_db_instance" "main" {
   identifier     = "gmc-${var.environment}"
@@ -115,6 +117,17 @@ resource "aws_db_instance" "main" {
 
   # Sends PostgreSQL's own logs somewhere they survive the instance.
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
+
+  # The one Trivy finding here that was a gap rather than a decision. Seven
+  # days is the free tier and the reason for the number — a month costs per
+  # vCPU — and it survives the July 2026 move to CloudWatch Database Insights,
+  # where the free tier becomes Standard mode at the same price of nothing.
+  # This is not the ADR-0008 argument: that one is about custom metrics charged
+  # per metric, and this costs neither money nor a collector. It is worth
+  # having on a database no one can open a shell to, where "which query" is
+  # otherwise unanswerable after the fact.
+  performance_insights_enabled          = true
+  performance_insights_retention_period = 7
 
   tags = {
     Name = "gmc-${var.environment}"

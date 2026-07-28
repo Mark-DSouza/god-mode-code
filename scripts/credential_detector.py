@@ -29,6 +29,8 @@ repository's glossary (CONTEXT.md) and means something else entirely.
 Usage:
 
     credential_detector.py --staged             added lines of the staged diff
+    credential_detector.py --tracked            every tracked file, in full
+    credential_detector.py --history            every blob ever committed
     credential_detector.py PATH [PATH ...]      whole files
     credential_detector.py --stdin --as PATH    content that is not on disk yet
 
@@ -41,19 +43,26 @@ Exit status, which is the whole interface for every caller:
 
 from __future__ import annotations
 
+# `os` and `re` are already in memory by the time this module is imported —
+# `pathlib` pulls both in — so neither costs the guard anything at the moment
+# it runs.
+import os
 import re
 import sys
 from pathlib import Path
 from typing import Iterable, Iterator, NamedTuple, Sequence
 
 # `argparse` and `subprocess` are imported where they are used rather than
-# here, and that is the same latency decision as the NamedTuples below: between
-# them they cost about twenty-eight milliseconds of import, and both belong to
-# the command-line entry point. The Claude Code write guard imports this module
-# for `scan_text` alone and runs on every mutating tool call, so it would pay
-# that on every one of them for two names it never touches. The commit hook
-# reaches this file through `main`, so nothing there gets slower — the imports
-# just happen a few lines later.
+# here, and that is the same latency decision as the NamedTuples below.
+# Between them they cost about fifteen milliseconds: median of thirty-one
+# fresh imports of this module, 20ms with them deferred against 37ms with them
+# at the top. The Claude Code write guard imports this module for `scan_text`
+# alone and runs on every mutating tool call, so it would pay that on every one
+# of them for two names it never touches.
+#
+# `argparse` sits in `main`; `subprocess` sits in `_git_bytes`, which every git
+# call goes through. So the commit hook and both sweep modes still reach them —
+# the imports just happen a few lines later.
 
 # Written on the offending line itself, so the reason travels with the string
 # and a reviewer sees it in the same diff hunk. The alternative — a separate
@@ -64,6 +73,12 @@ ALLOW_MARKER = "credential-detector: allow"
 # writes it into a terminal scrollback, a CI log and, on a shared runner, an
 # artifact — turning a near miss into an actual disclosure.
 PREFIX_SHOWN = 4
+
+# Stands where a commit would go when a history finding could not be traced to
+# one. Written out rather than left blank, because a blank column reads as "the
+# working tree" and would quietly downgrade a published credential to a local
+# one.
+UNATTRIBUTED = "(no commit found)"
 
 
 class Shape(NamedTuple):
@@ -223,9 +238,15 @@ class Finding(NamedTuple):
     line: int
     shape: str
     redacted: str
+    # Empty for everything that reads the working tree, and the commit that
+    # first carried the content for everything that reads history. A finding
+    # nobody can locate is a finding nobody acts on, and `git show` needs a
+    # commit — the path alone points at a file that may no longer exist.
+    commit: str = ""
 
     def render(self) -> str:
-        return f"{self.path}:{self.line}: {self.shape} ({self.redacted})"
+        where = f"{self.commit} " if self.commit else ""
+        return f"{where}{self.path}:{self.line}: {self.shape} ({self.redacted})"
 
 
 def _redact(matched: str) -> str:
@@ -315,6 +336,203 @@ def scan_paths(paths: Iterable[Path | str]) -> list[Finding]:
     return findings
 
 
+def _git_bytes(*args: str, stdin: str = "") -> bytes:
+    """One git command, failing loudly. A scan that cannot read the repository
+    has found nothing, and must never be reported as having found nothing."""
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "-c", "core.quotePath=false", *args],
+        input=stdin.encode(),
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.decode(errors="replace").strip()
+        raise RuntimeError(stderr or f"git {args[0]} failed")
+    return result.stdout
+
+
+def _git(*args: str, stdin: str = "") -> str:
+    return _git_bytes(*args, stdin=stdin).decode(errors="replace")
+
+
+def repository_root() -> Path:
+    """Where the repository-wide modes have to stand to see all of it.
+
+    `git ls-files` is relative to the working directory, so a scan started from
+    `scripts/` reads nine files, prints "no findings" and exits zero. That is
+    the exact failure these modes exist to prevent, arrived at from the inside.
+    """
+    return Path(_git("rev-parse", "--show-toplevel").strip())
+
+
+def tracked_paths() -> list[str]:
+    """Every file git is tracking, which is every file that will ever be
+    pushed. Deliberately not every file on disk: `node_modules`, build output
+    and somebody's scratch file are not the repository, and reporting them
+    would teach the reader to skim past the report."""
+    return [path for path in _git("ls-files", "-z").split("\0") if path]
+
+
+def scan_tracked_files() -> tuple[list[Finding], str]:
+    """Every tracked path, and a sentence saying what was actually read.
+
+    Three kinds of path arrive from `git ls-files`, and each is read as what
+    git stores rather than as what the filesystem makes of it:
+
+      A file is its content. A symlink is the *target path* — following it
+      would read the same bytes twice when it points inside the repository,
+      and read something that is not in the repository at all when it points
+      out. A submodule is a pointer to a commit in another repository, so
+      there is nothing here to read; the submodule's own guard covers it.
+
+    The counts are returned rather than logged from inside, so the caller can
+    put them in front of the reader. A scan that quietly read less than it was
+    asked to is the failure mode this whole mode exists to close.
+    """
+    tracked = tracked_paths()
+    links = [path for path in tracked if Path(path).is_symlink()]
+    files = [path for path in tracked if not Path(path).is_symlink() and Path(path).is_file()]
+
+    findings = scan_paths(files)
+    for link in links:
+        findings.extend(scan_text(link, os.readlink(link)))
+
+    summary = f"Read {len(files)} tracked files and {len(links)} symlinks."
+    unread = len(tracked) - len(files) - len(links)
+    if unread:
+        summary += f" {unread} tracked paths held nothing to read: a submodule,"
+        summary += " or a file deleted from the working tree."
+    return findings, summary
+
+
+def commit_count() -> int:
+    """Reported alongside a history scan, so the reader can tell a sweep of
+    this repository from a sweep of a shallow clone that holds one commit."""
+    return int(_git("rev-list", "--all", "--count").strip() or 0)
+
+
+def refuse_a_shallow_clone() -> None:
+    """A shallow clone holds a truncated history and says nothing about it.
+
+    Scanning one and reporting "no findings" is the worst output this file can
+    produce: it is indistinguishable from having scanned everything, and the
+    commits that were not fetched are exactly the old ones a sweep is for.
+    """
+    if _git("rev-parse", "--is-shallow-repository").strip() == "true":
+        raise RuntimeError(
+            "this is a shallow clone, so most of the history is not here. "
+            "Fetch it with `git fetch --unshallow` and scan again."
+        )
+
+
+# How many blobs are read from git in one `cat-file` batch. The whole point of
+# batching is that the alternative — one process per blob — turns a scan of a
+# few thousand objects into a few thousand process spawns; the chunking is so
+# that a repository holding a large binary cannot put all of history in memory
+# at once.
+BLOBS_PER_BATCH = 256
+
+
+def history_blobs() -> list[tuple[str, str]]:
+    """Every blob reachable from any ref, as `(object id, a path it had)`.
+
+    Blobs rather than diffs, and that is the whole correctness argument. A
+    diff-walking scan has to decide what to do about merge commits — `git log
+    -p` shows no diff for them at all by default — so a credential introduced
+    while resolving a conflict is invisible to it. Every version of every file
+    that any commit ever held is a blob, so reading the blobs cannot miss one.
+
+    `--all` covers every branch and tag, not just the checked-out one: a branch
+    nobody merged is still pushed, still cloned, and still public.
+
+    The path is the one git happened to name the object by. A blob committed at
+    two paths is one object with one of them, which is a cosmetic loss — the
+    content is scanned either way.
+    """
+    listing = _git("rev-list", "--objects", "--all")
+
+    # An entry with no path is a commit or a tag; a tree has one, so the type
+    # is asked for rather than guessed.
+    named: dict[str, str] = {}
+    for line in listing.splitlines():
+        object_id, _, path = line.partition(" ")
+        if path and object_id not in named:
+            named[object_id] = path
+
+    kinds = _git("cat-file", "--batch-check=%(objectname) %(objecttype)", stdin="\n".join(named))
+    blobs = []
+    for line in kinds.splitlines():
+        object_id, _, kind = line.partition(" ")
+        if kind == "blob":
+            blobs.append((object_id, named[object_id]))
+    return blobs
+
+
+def _read_blobs(object_ids: Sequence[str]) -> Iterator[tuple[str, bytes]]:
+    """`git cat-file --batch` output, unpacked. One process per batch."""
+    stream = _git_bytes("cat-file", "--batch", stdin="\n".join(object_ids) + "\n")
+    at = 0
+    while at < len(stream):
+        end_of_header = stream.index(b"\n", at)
+        header = stream[at:end_of_header].decode().split()
+        # `<oid> missing` — impossible for an object git itself just listed,
+        # and skipped rather than crashed on so a concurrent `gc` cannot turn
+        # a sweep into an error.
+        if len(header) != 3:
+            at = end_of_header + 1
+            continue
+        object_id, size = header[0], int(header[2])
+        content_starts = end_of_header + 1
+        yield object_id, stream[content_starts : content_starts + size]
+        # The batch format writes a newline after the content itself.
+        at = content_starts + size + 1
+
+
+def introducing_commit(object_id: str) -> str:
+    """The oldest commit that carried this content, for a reader to `git show`.
+
+    Looked up once per blob that holds a finding, never per blob scanned — a
+    git process for each of a few thousand objects is a different program.
+
+    `-m` is what makes this agree with the blob walk above. Without it, `git
+    log --find-object` shows no diff for a merge commit at all, so a credential
+    introduced while resolving a conflict is found by the scan and then
+    attributed to nothing — reported, and unlocatable. With it, a merge is
+    diffed against each parent in turn, which is where the credential shows up.
+    Output is newest-first, so the oldest is the last line.
+    """
+    commits = _git("log", "--all", "-m", "--format=%h", f"--find-object={object_id}").split()
+    return commits[-1] if commits else ""
+
+
+def scan_history(blobs: Sequence[tuple[str, str]]) -> list[Finding]:
+    """Every blob ever committed, in full.
+
+    History is what a scan of the working tree cannot see and what editing the
+    working tree cannot fix: a credential deleted from a file is still in the
+    commit that carried it, reachable by anyone who has ever cloned this
+    repository. Findings here are reported, never rewritten out — `main`
+    refuses force pushes by policy, and rewriting published history is a
+    decision for a person rather than for a scan.
+    """
+    findings = []
+    paths = dict(blobs)
+    object_ids = [object_id for object_id, _ in blobs]
+
+    for start in range(0, len(object_ids), BLOBS_PER_BATCH):
+        batch = object_ids[start : start + BLOBS_PER_BATCH]
+        for object_id, content in _read_blobs(batch):
+            # Undecodable bytes mean a binary file, which cannot hold a
+            # credential this list would recognise anyway.
+            text = content.decode("utf-8", errors="replace")
+            in_this_blob = scan_text(paths[object_id], text)
+            if in_this_blob:
+                commit = introducing_commit(object_id) or UNATTRIBUTED
+                findings.extend(finding._replace(commit=commit) for finding in in_this_blob)
+    return findings
+
+
 def iter_added_lines(diff: str) -> Iterator[tuple[str, int, str]]:
     """Added lines of a unified diff, with the line numbers they will have.
 
@@ -366,33 +584,34 @@ def staged_diff() -> str:
     produce and to parse. `core.quotePath=false` because a path with a
     non-ASCII character would otherwise arrive escaped and be unopenable.
     """
-    import subprocess
-
-    result = subprocess.run(
-        [
-            "git",
-            "-c",
-            "core.quotePath=false",
-            "diff",
-            "--cached",
-            "--no-color",
-            "--no-ext-diff",
-            "--unified=0",
-            "--diff-filter=ACMR",
-        ],
-        capture_output=True,
-        text=True,
+    return _git(
+        "diff",
+        "--cached",
+        "--no-color",
+        "--no-ext-diff",
+        "--unified=0",
+        "--diff-filter=ACMR",
     )
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "git diff --cached failed")
-    return result.stdout
 
 
-def report(findings: Sequence[Finding], stream=sys.stderr) -> None:
+def report(findings: Sequence[Finding], stream=sys.stderr, in_history: bool = False) -> None:
+    """`in_history` is passed by the caller rather than inferred from whether
+    the findings carry a commit. A history finding that could not be attributed
+    would otherwise be handed the working tree's advice — edit the file — which
+    is precisely the wrong thing to do about a credential that is published."""
     for finding in findings:
         print(f"  {finding.render()}", file=stream)
     print(file=stream)
-    print("Move the value into the environment and leave a placeholder behind.", file=stream)
+    if in_history:
+        # Deliberately not "remove it from history". A rewrite invalidates
+        # every clone and every open pull request, `main` refuses force pushes
+        # by policy, and none of that undoes a disclosure that has already
+        # happened — the credential was public for as long as the commit was.
+        print("A credential in history has been published. Rotate it.", file=stream)
+        print("Rewriting history is a decision for a person, and it is not a", file=stream)
+        print("substitute for rotating: the clones are already out there.", file=stream)
+    else:
+        print("Move the value into the environment and leave a placeholder behind.", file=stream)
     print(f"If a line is genuinely not a credential, mark it: {ALLOW_MARKER}", file=stream)
 
 
@@ -405,6 +624,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--staged", action="store_true", help="scan the added lines of the staged diff"
+    )
+    parser.add_argument(
+        "--tracked", action="store_true", help="scan every tracked file in full"
+    )
+    parser.add_argument(
+        "--history", action="store_true", help="scan every blob ever committed, in full"
     )
     parser.add_argument(
         "--stdin",
@@ -420,14 +645,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("paths", nargs="*", help="files to scan in full")
     args = parser.parse_args(argv)
 
-    if sum([args.staged, args.stdin, bool(args.paths)]) != 1:
-        parser.error("choose exactly one of --staged, --stdin, or a list of paths")
+    if sum([args.staged, args.tracked, args.history, args.stdin, bool(args.paths)]) != 1:
+        parser.error(
+            "choose exactly one of --staged, --tracked, --history, --stdin, or a list of paths"
+        )
     if args.stdin and not args.as_path:
         parser.error("--stdin needs --as PATH, so a finding can name the file")
 
     try:
         if args.staged:
             findings = scan_added_lines(staged_diff())
+        # Both repository-wide modes stand at the top of the working tree and
+        # say how much they read. "No findings" over nothing at all looks
+        # exactly like "no findings" over everything, and the way to scan
+        # almost nothing by accident is to start from a subdirectory.
+        elif args.tracked:
+            os.chdir(repository_root())
+            findings, summary = scan_tracked_files()
+            print(summary, file=sys.stderr)
+        elif args.history:
+            os.chdir(repository_root())
+            refuse_a_shallow_clone()
+            blobs = history_blobs()
+            findings = scan_history(blobs)
+            print(f"Read {len(blobs)} blobs from {commit_count()} commits.", file=sys.stderr)
         elif args.stdin:
             findings = scan_text(args.as_path, sys.stdin.read())
         else:
@@ -435,10 +676,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, RuntimeError) as error:
         print(f"credential detector: {error}", file=sys.stderr)
         return 2
+    except Exception:
+        # Anything unforeseen is "the scan could not run", never "the scan
+        # found something" — and an uncaught exception would exit 1, which is
+        # this program's word for the second. A caller cannot tell those
+        # apart, and the one it would get wrong is the one that matters.
+        import traceback
+
+        traceback.print_exc()
+        print("credential detector: the scan did not finish.", file=sys.stderr)
+        return 2
 
     if not findings:
         return 0
-    report(findings)
+    report(findings, in_history=args.history)
     return 1
 
 

@@ -116,6 +116,11 @@ jobs:
             credentials:
               - '.github/workflows/ci.yml'
               - 'scripts/*credential_detector.py'
+              - 'scripts/test_repository_sweep.py'
+              # The sweep is not run in CI — that would be the
+              # whole-repository gate ADR-0013 refuses — but the tests that
+              # prove it reports a missing tier honestly are.
+              - 'scripts/security-sweep.sh'
               # The installer and the hook, because the job below proves the
               # one actually installs the other. A detector nobody installs
               # guards nothing.
@@ -385,10 +390,15 @@ jobs:
       # fails silently — git ignores a `core.hooksPath` pointing nowhere
       # without saying a word.
       - run: python3 scripts/test_commit_guard.py --verbose
-      # The third enforcement point: the Claude Code write guard, driven the
-      # way Claude Code drives it. These also assert that the matcher in
-      # `.claude/settings.json` still names the tools the guard inspects, which
-      # is the pair of files most likely to be edited apart.
+      # The two repository-wide modes, each exercised against a throwaway
+      # repository with a credential planted in its history. Nothing else here
+      # ever reads a commit that is not the one being made, so nothing else
+      # would notice these breaking.
+      - run: python3 scripts/test_repository_sweep.py --verbose
+      # The Claude Code write guard, driven the way Claude Code drives it.
+      # These also assert that the matcher in `.claude/settings.json` still
+      # names the tools the guard inspects, which is the pair of files most
+      # likely to be edited apart.
       - run: python3 scripts/test_claude_code_guard.py --verbose
       # What those tests cannot see from inside a repository they built
       # themselves: that anything in *this* one still runs the installer.

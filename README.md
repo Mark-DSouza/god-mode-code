@@ -117,6 +117,35 @@ three visible defects. The visual seam is the one that looks at the screen; see
 pnpm typecheck && pnpm test   # everything JavaScript/TypeScript
 ```
 
+## Security
+
+Two controls, and they look at different things on purpose. A commit hook reads
+what each commit _adds_ and refuses a credential before it is written down —
+installed by `pnpm install`, costing milliseconds, covering every human and
+every agent. CI reads the pull request. Neither ever looks at what is already
+here, which is deliberate ([ADR-0013](./docs/adr/0013-security-findings-gate-the-diff-not-the-repository.md)):
+a gate that fails a change for something it did not introduce is a gate people
+learn to route around.
+
+The sweep is what looks at everything else.
+
+```sh
+pnpm security:sweep   # the whole tree, the whole history, and the gaps
+```
+
+It reads every tracked file, every blob any commit ever held — where a
+credential deleted from a file still is — the Terraform and Dockerfiles through
+Trivy, and the judge's Go dependencies through `govulncheck`. Findings are
+reported and never remediated: nothing here rotates a credential or rewrites
+history, both of which are decisions for a person.
+
+It is a command rather than a check, and nothing in CI runs it. A tier whose
+tooling is missing — Trivy needs Docker, `govulncheck` needs Go — is reported
+as **not run**, distinctly from a tier that ran and found nothing, and the run
+closes by naming what only exists on GitHub's side and cannot be checked
+locally at all. Exit status is 0 for nothing found, 1 for something found, and
+2 for a sweep that could not run.
+
 ## Accessibility
 
 The design system is authoritative except in four places, all accessibility

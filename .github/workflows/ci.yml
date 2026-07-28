@@ -116,6 +116,7 @@ jobs:
             credentials:
               - '.github/workflows/ci.yml'
               - 'scripts/*credential_detector.py'
+              - 'scripts/test_repository_sweep.py'
               # The installer and the hook, because the job below proves the
               # one actually installs the other. A detector nobody installs
               # guards nothing.
@@ -378,6 +379,11 @@ jobs:
       # fails silently — git ignores a `core.hooksPath` pointing nowhere
       # without saying a word.
       - run: python3 scripts/test_commit_guard.py --verbose
+      # The third enforcement point: the two repository-wide modes, each
+      # exercised against a throwaway repository with a credential planted in
+      # its history. Nothing else here ever reads a commit that is not the one
+      # being made, so nothing else would notice these breaking.
+      - run: python3 scripts/test_repository_sweep.py --verbose
       # What those tests cannot see from inside a repository they built
       # themselves: that anything in *this* one still runs the installer.
       # `prepare` is the only thing that does, and it is one deletable line.

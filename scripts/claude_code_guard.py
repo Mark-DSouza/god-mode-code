@@ -137,18 +137,28 @@ def _bypass(name: str, regex: str) -> Bypass:
 # `git commit` and something else entirely to `git push`, and that distinction
 # is lost the moment the whole command line is treated as a bag of words.
 #
-# None of this survives a determined shell — `git commit $(echo --no-verify)`
-# defeats any parse short of running it. It does not have to: this is a
-# prompt on the obvious spelling of a thing nobody does by accident, and the
-# commit guard is what covers the case where somebody means it.
+# None of this survives a determined shell. It reads the command as text, so
+# anything that assembles the flag rather than writing it — `git commit
+# "--no-$(echo verify)"` — goes through untouched; a substitution that still
+# contains the literal spelling, like `$(echo --no-verify)`, does not, which is
+# an accident of where the characters land rather than a parse. Not having to
+# survive that is the point: this is a prompt on the obvious spelling of a
+# thing nobody does by accident, and the commit guard covers the case where
+# somebody means it. `scripts/test_claude_code_guard.py` asserts both sides.
 BYPASSES: tuple[Bypass, ...] = (
     _bypass("skipping the commit hooks", r"--no-verify\b"),
+    # Git accepts any unambiguous prefix of a long option, so `--no-veri` is
+    # `--no-verify`. Scoped to a segment mentioning git, because `--no-ver…`
+    # abbreviates something harmless elsewhere and `--no-verbose` is not this.
+    _bypass("skipping the commit hooks", r"\bgit\b(?:\s+\S+)*?\s+--no-ver[a-z]*\b"),
     # The short form, and only for `commit`: `git push -n` is a dry run, which
     # is the most harmless command in the set.
     _bypass("skipping the commit hooks", r"\bcommit\b(?:\s+\S+)*?\s+-[A-Za-z]*n"),
     _bypass("force-pushing", r"\bpush\b(?:\s+\S+)*?\s+(?:--force\b|--force-with-lease\b|-[A-Za-z]*f)"),
-    # A leading `+` on a refspec is a force push spelled without a flag.
-    _bypass("force-pushing", r"\bpush\b(?:\s+\S+)*?\s+\+\S+:\S+"),
+    # A leading `+` on a refspec is a force push spelled without a flag, and
+    # the destination half is optional — `git push origin +main` forces just
+    # as hard as `+main:main`.
+    _bypass("force-pushing", r"\bpush\b(?:\s+\S+)*?\s+\+\S+"),
     _bypass("repointing git's hooks directory", r"\bcore\.hooksPath\b"),
     _bypass("merging past the required checks", r"\bmerge\b(?:\s+\S+)*?\s+--admin\b"),
 )
@@ -157,7 +167,11 @@ BYPASSES: tuple[Bypass, ...] = (
 # one command as belonging to another.
 SEGMENTS = re.compile(r"(?:\|\||&&|[;|\n])")
 
-DECISION_TEMPLATE = "hookSpecificOutput"
+# A backslash-newline is a line continuation, not a separator. Folding it away
+# before splitting is what stops a command written across two lines from
+# putting `push` in one segment and `--force` in the next, where no rule
+# anchored on the subcommand could ever see them together.
+CONTINUATION = re.compile(r"\\\n\s*")
 
 
 def emit(decision: str, reason: str) -> None:
@@ -165,7 +179,7 @@ def emit(decision: str, reason: str) -> None:
     print(
         json.dumps(
             {
-                DECISION_TEMPLATE: {
+                "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": decision,
                     "permissionDecisionReason": reason,
@@ -218,6 +232,15 @@ def protected_in_command(command: str) -> Protected | None:
     is not a write to anything watching for redirections — and being asked
     about a `cat` of a protected file is a cheaper mistake than not being asked
     about a `sed -i` of one.
+
+    The limit, stated rather than papered over: this matches the path as
+    written. A glob (`.githook?/pre-commit`), a variable or a substitution
+    reaches the same file and is not seen, and no amount of pattern-matching
+    short of running the command would see it. Unlike the credential rule this
+    has no commit-time backstop, since the commit guard reads content and not
+    which files a change touches — so what covers the residue is a human
+    reading the diff on the pull request, which is where a change to these
+    files was always going to be argued about.
     """
     for entry, regex in PROTECTED_IN_COMMAND:
         if regex.search(command):
@@ -226,7 +249,7 @@ def protected_in_command(command: str) -> Protected | None:
 
 
 def bypass_in_command(command: str) -> Bypass | None:
-    for segment in SEGMENTS.split(command):
+    for segment in SEGMENTS.split(CONTINUATION.sub(" ", command)):
         for candidate in BYPASSES:
             if candidate.regex.search(segment):
                 return candidate
@@ -234,10 +257,19 @@ def bypass_in_command(command: str) -> Bypass | None:
 
 
 class Written(NamedTuple):
-    """What a tool call would put on disk: some content, at some path."""
+    """What a tool call would put on disk.
 
-    path: str
+    A shell command is content and destination at once, and `is_command` is
+    what says so. Without it `path` would have to hold a command line for the
+    `Bash` case — a field lying about what it holds, which every later reader
+    then has to un-lie by asking which tool it came from.
+    """
+
     content: str
+    # The file this would be written to. Empty for a shell command, where the
+    # destination is wherever the command decides to put it.
+    path: str = ""
+    is_command: bool = False
 
 
 def written_by(tool: str, tool_input: dict[str, Any]) -> Iterable[Written]:
@@ -247,20 +279,19 @@ def written_by(tool: str, tool_input: dict[str, Any]) -> Iterable[Written]:
     silent for `Read` and `Grep` instead of guessing at them.
     """
     if tool == "Write":
-        yield Written(str(tool_input["file_path"]), str(tool_input.get("content", "")))
+        yield Written(str(tool_input.get("content", "")), str(tool_input["file_path"]))
     elif tool == "Edit":
-        yield Written(str(tool_input["file_path"]), str(tool_input.get("new_string", "")))
+        yield Written(str(tool_input.get("new_string", "")), str(tool_input["file_path"]))
     elif tool == "MultiEdit":
         path = str(tool_input["file_path"])
         for one in tool_input.get("edits", []):
-            yield Written(path, str(one.get("new_string", "")))
+            yield Written(str(one.get("new_string", "")), path)
     elif tool == "NotebookEdit":
-        yield Written(str(tool_input["notebook_path"]), str(tool_input.get("new_source", "")))
+        yield Written(str(tool_input.get("new_source", "")), str(tool_input["notebook_path"]))
     elif tool == "Bash":
-        # The whole command, path and content at once. A credential in a
+        # The whole command, content and destination at once. A credential in a
         # command line is worth refusing wherever in it it appears.
-        command = str(tool_input.get("command", ""))
-        yield Written(command, command)
+        yield Written(str(tool_input.get("command", "")), is_command=True)
 
 
 def readable(path: str, cwd: str) -> str:
@@ -296,13 +327,13 @@ def decide(payload: dict[str, Any]) -> tuple[str, str] | None:
     # approve writing a credential into the commit guard is offering them a
     # decision nobody should be asked to make.
     for written in writes:
-        where = "the command" if tool == "Bash" else readable(written.path, cwd)
+        where = "the command" if written.is_command else readable(written.path, cwd)
         findings = credential_detector.scan_text(where, written.content)
         if findings:
             return "deny", denial(findings, credential_detector.ALLOW_MARKER)
 
     for written in writes:
-        if tool == "Bash":
+        if written.is_command:
             bypass = bypass_in_command(written.content)
             if bypass:
                 return "ask", routing_around(bypass)
@@ -354,9 +385,10 @@ def main() -> int:
     try:
         payload = json.load(sys.stdin)
         decision = decide(payload)
-    except Exception as error:  # noqa: BLE001 — see the module docstring
-        # Everything unexpected asks. The alternative is a guard that is absent
-        # in a way that looks identical to a guard that passed.
+    except Exception as error:
+        # Deliberately every exception, not a named few. Everything unexpected
+        # asks, because the alternative is a guard that is absent in a way that
+        # looks identical to a guard that passed.
         emit(
             "ask",
             f"The repository's write guard could not run, so this call was not "

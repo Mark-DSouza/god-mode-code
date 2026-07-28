@@ -46,7 +46,8 @@ GUARD = REPO_ROOT / "scripts" / "claude_code_guard.py"
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import claude_code_guard  # noqa: E402
+# After the path insert, which is what makes it importable at all.
+import claude_code_guard
 
 # Split at a point that breaks the shape matching it, for the reason given at
 # length in `test_credential_detector.py`: this file is committed through the
@@ -348,6 +349,30 @@ class RoutingAroundTheCommitGuardAsks(GuardTest):
         self.assertAsked(bash("git push --force-with-lease"))
         self.assertAsked(bash("git push origin +main:main"))
 
+    def test_a_refspec_force_push_without_a_destination_asks(self) -> None:
+        # `+main` is the ordinary short form and forces exactly as hard as
+        # `+main:main`. A rule that required the colon read the second and
+        # waved the first through.
+        self.assertAsked(bash("git push origin +main"))
+        self.assertAsked(bash("git push origin +refs/heads/main"))
+
+    def test_a_bypass_written_across_a_line_continuation_asks(self) -> None:
+        # Segmenting on newlines is what keeps `git push -n` apart from
+        # `git commit -n`, and a backslash continuation is the one newline that
+        # is not a separator — it put `push` and `--force` in different
+        # segments, where no rule anchored on the subcommand could see them.
+        self.assertAsked(bash("git push origin main \\\n  --force"))
+        self.assertAsked(bash("git commit \\\n  --no-verify \\\n  -m 'wip'"))
+
+    def test_an_abbreviated_no_verify_asks(self) -> None:
+        # Git accepts any unambiguous prefix of a long option.
+        self.assertAsked(bash('git commit --no-veri -m "wip"'))
+        self.assertAsked(bash('git commit --no-ver -m "wip"'))
+
+    def test_an_abbreviation_shaped_flag_to_something_else_does_not_ask(self) -> None:
+        # The abbreviation rule is scoped to git for this reason.
+        self.assertNoDecision(bash("pnpm --filter @gmc/web test --no-verbose"))
+
     def test_repointing_the_hooks_directory_asks(self) -> None:
         self.assertAsked(bash("git config core.hooksPath /dev/null"))
         self.assertAsked(bash("git config --unset core.hooksPath"))
@@ -371,6 +396,42 @@ class RoutingAroundTheCommitGuardAsks(GuardTest):
 
     def test_a_merge_without_admin_does_not_ask(self) -> None:
         self.assertNoDecision(bash("gh pr merge 36 --squash"))
+
+
+class WhatTheGuardDoesNotSee(GuardTest):
+    """The known gaps, one test each, in the style of `WhatTheHookSees`.
+
+    Written as observation rather than aspiration. Every one of these is a
+    route the guard is documented as not covering, and asserting them means
+    that if the coverage ever changes a test fails and the comment saying so
+    has to follow, rather than quietly rotting into a lie.
+    """
+
+    def test_a_protected_path_reached_through_a_glob_is_not_seen(self) -> None:
+        # `protected_in_command` matches the path as written. Closing this
+        # means expanding the shell, which means running it.
+        self.assertNoDecision(bash("rm .githook?/pre-commit"))
+        self.assertNoDecision(bash("truncate -s0 .github/work*/ci.yml"))
+
+    def test_a_bypass_assembled_rather_than_written_is_not_seen(self) -> None:
+        # The flag never appears as text, so nothing short of running the
+        # command would find it.
+        self.assertNoDecision(bash('git commit "--no-$(echo verify)" -m "wip"'))
+
+    def test_a_substitution_that_still_spells_it_out_is_seen(self) -> None:
+        # The other half of the pair above, and the reason the comment in the
+        # guard distinguishes them: this one is caught, but by where the
+        # characters happen to land rather than by understanding the shell.
+        self.assertAsked(bash('git commit $(echo --no-verify) -m "wip"'))
+
+    def test_what_covers_the_residue_is_written_down(self) -> None:
+        # The tests above are only tolerable because something else reads these
+        # changes. For a credential that is the commit guard; for the protected
+        # paths it is a human reading the diff, since the commit guard reads
+        # content rather than which files a change touches. Both are stated in
+        # the guard, and this asserts the statement is still there.
+        source = (REPO_ROOT / "scripts" / "claude_code_guard.py").read_text()
+        self.assertIn("no commit-time backstop", source)
 
 
 class WhenBothRulesApply(GuardTest):
@@ -466,11 +527,17 @@ class TheSettingsAndTheGuardAgree(unittest.TestCase):
         )
 
     def test_the_configured_command_is_the_guard_that_exists(self) -> None:
+        # The exec form with `args`, which is what the documentation recommends
+        # for a `${CLAUDE_PROJECT_DIR}` path and what was verified against
+        # Claude Code 2.1.220 by running it: a probe hook configured this way
+        # fired, received the expanded path as `argv[1]`, and had its decision
+        # honoured. Asserted rather than tolerated, because the failure mode of
+        # getting this wrong is a hook that never runs — which is the one
+        # failure indistinguishable from a hook that passed.
         (hook,) = self.entry["hooks"]
         self.assertEqual("command", hook["type"])
-        named = " ".join([hook["command"], *hook.get("args", [])])
-        self.assertIn(GUARD.name, named)
-        self.assertIn("${CLAUDE_PROJECT_DIR}", named)
+        self.assertEqual("python3", hook["command"])
+        self.assertEqual([f"${{CLAUDE_PROJECT_DIR}}/scripts/{GUARD.name}"], hook["args"])
 
 
 if __name__ == "__main__":

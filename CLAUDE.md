@@ -12,7 +12,7 @@ The five canonical triage roles, using their default label strings (`needs-triag
 
 ### Security controls
 
-One credential detector behind three enforcement points, gates that read the diff, and a sweep that reads everything. What fires, what it means, and what to do about it — bypassing is never the answer. See `docs/agents/security-controls.md`.
+One credential detector behind three enforcement points, gates that read the diff, and a sweep that reads everything — what fires, what it means, and what to do about it. See `docs/agents/security-controls.md`.
 
 ### Domain docs
 

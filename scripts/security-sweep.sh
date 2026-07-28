@@ -335,9 +335,12 @@ What this run did not check, and could not
   - Dependency review, which fails a pull request that adds a vulnerable
     package. Same workflow, pull request events only.
 
-  Check rather than trusting this paragraph:
+  Check rather than trusting this paragraph. The first names the tools that
+  have actually reported into code scanning, which is the question — code
+  scanning's *default setup* is deliberately off here, and asking after it
+  would say "not-configured" about a workflow that runs:
 
-    gh api repos/OWNER/REPO/code-scanning/default-setup --jq .state
+    gh api repos/OWNER/REPO/code-scanning/analyses --jq '[.[].tool.name]|unique'
     gh api repos/OWNER/REPO --jq .security_and_analysis
 
   The judge's machine image is checked by nothing either. It is built out of

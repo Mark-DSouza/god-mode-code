@@ -662,6 +662,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, RuntimeError) as error:
         print(f"credential detector: {error}", file=sys.stderr)
         return 2
+    except Exception:
+        # Anything unforeseen is "the scan could not run", never "the scan
+        # found something" — and an uncaught exception would exit 1, which is
+        # this program's word for the second. A caller cannot tell those
+        # apart, and the one it would get wrong is the one that matters.
+        import traceback
+
+        traceback.print_exc()
+        print("credential detector: the scan did not finish.", file=sys.stderr)
+        return 2
 
     if not findings:
         return 0

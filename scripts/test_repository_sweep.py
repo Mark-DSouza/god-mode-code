@@ -429,6 +429,9 @@ class TheSweep(RepositoryTest):
         directory = self.repo.path.parent / f"bin-{name}"
         path = reduced_path(directory)
         stub = directory / name
+        # A stub for a tool that is also on the real `PATH` arrives as a
+        # symlink to it, and writing through that symlink would edit the tool.
+        stub.unlink(missing_ok=True)
         stub.write_text(f"#!/bin/sh\n{script}\n")
         stub.chmod(0o755)
         return path
@@ -479,6 +482,63 @@ class TheSweep(RepositoryTest):
         result = self.repo.sweep(path=path)
         self.assertEqual(1, result.returncode, result.stdout + result.stderr)
         self.assertRegex(self.summary_of(result), r"go\s+findings")
+
+    def test_the_go_tier_does_not_claim_more_than_govulncheck_said(self) -> None:
+        # govulncheck exits 0 with vulnerabilities on the screen when they are
+        # in modules the code does not call. "No findings" would overstate
+        # that, and the difference matters the day something starts calling
+        # the package.
+        self.plant_the_tiers_targets()
+        path = self.with_stub(
+            "go",
+            'case "$1" in\n'
+            'install) mkdir -p "$GOBIN" && printf \'#!/bin/sh\\nexit 0\\n\' '
+            '> "$GOBIN/govulncheck" && chmod +x "$GOBIN/govulncheck" ;;\n'
+            "*) exit 0 ;;\n"
+            "esac",
+        )
+        result = self.repo.sweep(path=path)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertRegex(self.summary_of(result), r"go\s+no reachable vulnerabilities")
+
+    def test_a_detector_that_crashes_is_not_reported_as_findings(self) -> None:
+        # The credential tiers read exit 1 as "found something". A detector
+        # that died before scanning anything also exits 1 — python does — so
+        # the sweep asks it a question it knows the answer to before it
+        # believes any of its answers.
+        crashing_python = self.with_stub(
+            "python3", "echo 'Traceback (most recent call last):' >&2; exit 1"
+        )
+        result = self.repo.sweep(path=crashing_python)
+        output = result.stdout + result.stderr
+        self.assertEqual(2, result.returncode, output)
+        # Nothing ran, so there is nothing to summarise — and in particular no
+        # tier reporting findings that were really a stack trace.
+        self.assertNotIn("findings", output)
+        self.assertIn("Nothing below would have been trustworthy", output)
+
+    def test_a_scanner_killed_mid_run_is_a_failure_rather_than_a_tier_that_skipped(self) -> None:
+        # 137 is Docker reporting the container was killed — out of memory,
+        # most likely. It started, so it is not "did not run"; it did not
+        # finish, so it is not a result either.
+        self.plant_the_tiers_targets()
+        path = self.with_stub("docker", "exit 137")
+        result = self.repo.sweep(path=path)
+        self.assertEqual(2, result.returncode, result.stdout + result.stderr)
+        self.assertRegex(self.summary_of(result), r"infrastructure\s+COULD NOT RUN")
+
+    def test_findings_are_still_reported_when_another_tier_broke(self) -> None:
+        # Exit 2 wins, because an incomplete sweep must not be read as a
+        # complete one — but a credential that was found is still a credential
+        # that was found, and swallowing it would be the worse error.
+        self.plant_the_tiers_targets()
+        self.repo.commit_file("src/config.ts", f'const key = "{AWS_KEY_ID}";\n')
+        path = self.with_stub("docker", "exit 1")
+        result = self.repo.sweep(path=path)
+        output = result.stdout + result.stderr
+        self.assertEqual(2, result.returncode, output)
+        self.assertRegex(self.summary_of(result), r"tree\s+findings")
+        self.assertIn("rotated by a person", output)
 
     def test_govulncheck_that_cannot_be_fetched_is_a_tier_that_did_not_run(self) -> None:
         self.plant_the_tiers_targets()

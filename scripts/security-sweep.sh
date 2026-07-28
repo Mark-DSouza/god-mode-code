@@ -79,7 +79,10 @@ record() {
 # words and the signal are set together and never derived from each other: a
 # summary line reworded for readability must not be able to change what the
 # sweep exits with.
-clean() { record "$1" "no findings"; }
+# The words are a parameter because "no findings" is a claim, and not every
+# tool is in a position to make it. govulncheck's success means "nothing you
+# call is vulnerable", which is a smaller statement than "nothing is wrong".
+clean() { record "$1" "${2:-no findings}"; }
 
 found() {
   record "$1" "findings"
@@ -96,7 +99,7 @@ broke() {
   could_not_run=1
 }
 
-# classify TIER STATUS FOUND_STATUS FAILURE
+# classify TIER STATUS FOUND_STATUS FAILURE [WORDS FOR SUCCESS]
 #
 # The one place a tool's exit status is turned into an outcome, because every
 # tool here uses a different number for "found something" and the mapping is
@@ -104,9 +107,9 @@ broke() {
 # success nor that number is a failure, loudly: the alternative is a scanner
 # that broke being reported as a scanner that was satisfied.
 classify() {
-  local tier="$1" status="$2" found_status="$3" failure="$4"
+  local tier="$1" status="$2" found_status="$3" failure="$4" success="${5:-}"
   if [[ "$status" -eq 0 ]]; then
-    clean "$tier"
+    clean "$tier" "$success"
   elif [[ "$status" -eq "$found_status" ]]; then
     found "$tier"
   else
@@ -129,6 +132,20 @@ detector="$repo_root/scripts/credential_detector.py"
 # is missing is worse than no sweep, because everyone believes it ran.
 if ! command -v python3 >/dev/null 2>&1; then
   echo "The sweep needs python3, which is not on PATH." >&2
+  exit 2
+fi
+
+# The credential tiers read exit 1 as "found something", and a python process
+# that died before scanning anything exits 1 too — a traceback, a syntax
+# error, an import that is not there. So the detector is asked a question it
+# cannot find anything in, and its answers are only believed if it gets that
+# one right. Milliseconds, and it is the difference between a broken scan and
+# a scan that reports credentials nobody can find.
+if ! echo "" | python3 "$detector" --stdin --as preflight >/dev/null 2>&1; then
+  echo "The credential detector could not answer a scan of nothing:" >&2
+  echo "" | python3 "$detector" --stdin --as preflight >&2
+  echo >&2
+  echo "Nothing below would have been trustworthy, so nothing below ran." >&2
   exit 2
 fi
 
@@ -201,15 +218,22 @@ elif command -v docker >/dev/null 2>&1; then
     --workdir /repo \
     "$TRIVY_IMAGE" "${trivy_arguments[@]}"
   status=$?
-  # Docker's own range, and it means the container never started — a stopped
-  # daemon, or an image that could not be pulled. That says nothing at all
-  # about this repository, so it is a tier that did not run rather than a
-  # sweep that failed. Below 125 the status came from Trivy itself.
-  if ((status >= 125)); then
+  # Docker's own three, and they all mean the container never started — a
+  # stopped daemon, an image that could not be pulled, an entrypoint that is
+  # not there. That says nothing at all about this repository, so it is a tier
+  # that did not run rather than a sweep that failed.
+  #
+  # Deliberately these three and not "anything above 125": 137 is a container
+  # that started and was killed, most likely for memory, and a scan that died
+  # half way through is a failure rather than a skip.
+  case $status in
+  125 | 126 | 127)
     not_run "infrastructure" "Docker could not run $TRIVY_IMAGE (exit $status)"
-  else
+    ;;
+  *)
     classify "infrastructure" "$status" 2 "trivy failed"
-  fi
+    ;;
+  esac
 else
   not_run "infrastructure" "needs trivy, or Docker to run $TRIVY_IMAGE"
 fi
@@ -238,14 +262,21 @@ else
   # The version is pinned so it is visible in the diff when it moves. The
   # install reaches the network, so no network is a tier that did not run
   # rather than a tier that found nothing.
-  gobin="$(mktemp -d)"
-  if ! GOBIN="$gobin" go install "$GOVULNCHECK"; then
+  # Guarded, because an unset GOBIN does not mean "install nowhere" — it means
+  # install into the user's `~/go/bin`, which is not this script's to write to.
+  if ! gobin="$(mktemp -d)"; then
+    not_run "go" "there was nowhere to install govulncheck"
+  elif ! GOBIN="$gobin" go install "$GOVULNCHECK"; then
     not_run "go" "govulncheck could not be fetched — no network, or no module cache"
+    rm -rf "$gobin"
   else
     (cd "$repo_root/apps/judge" && "$gobin/govulncheck" ./...)
-    classify "go" $? 3 "govulncheck failed"
+    # Not "no findings". govulncheck exits 0 with vulnerabilities on the
+    # screen when they are in modules this code does not call — worth knowing,
+    # and worth not overstating.
+    classify "go" $? 3 "govulncheck failed" "no reachable vulnerabilities"
+    rm -rf "$gobin"
   fi
-  rm -rf "$gobin"
 fi
 
 # ---------------------------------------------------------------------------
@@ -304,14 +335,20 @@ What this run did not check, and could not
 GAPS
 
 echo
+# Both are said when both are true. The exit status can only carry one of
+# them, and the incomplete run wins — a caller that reads 1 as "these are the
+# findings" would be reading a partial list as a whole one. Swallowing the
+# findings to say so would be the worse error, so they are printed either way.
+if ((found_something)); then
+  echo "Findings above. Nothing here has been changed for you: a credential" >&2
+  echo "in history is rotated by a person, and history is not rewritten." >&2
+fi
 if ((could_not_run)); then
   echo "A tier could not run. This sweep did not finish, and nothing above" >&2
   echo "should be read as a clean result." >&2
   exit 2
 fi
 if ((found_something)); then
-  echo "Findings above. Nothing here has been changed for you: a credential" >&2
-  echo "in history is rotated by a person, and history is not rewritten." >&2
   exit 1
 fi
 echo "No findings in the tiers that ran."

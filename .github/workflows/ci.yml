@@ -25,6 +25,7 @@ jobs:
       contract: ${{ steps.filter.outputs.contract }}
       stack: ${{ steps.filter.outputs.stack }}
       infra: ${{ steps.filter.outputs.infra }}
+      credentials: ${{ steps.filter.outputs.credentials }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -96,6 +97,29 @@ jobs:
               - 'infra/terraform/**'
               - 'infra/observability/**'
               - '.github/workflows/deploy.yml'
+            # Deliberately not `*shared`: the detector has no dependencies and
+            # no manifest, so a lockfile refresh cannot affect it and running
+            # its fixtures for one would be noise.
+            #
+            # The example and compose files are here because the fixtures
+            # assert on the committed ones directly — someone pasting a real
+            # value into a `.example` file fails that assertion, and a filter
+            # that did not list them would never run the job that says so.
+            credentials:
+              - '.github/workflows/ci.yml'
+              - 'scripts/*credential_detector.py'
+              # The installer and the hook, because the job below proves the
+              # one actually installs the other. A detector nobody installs
+              # guards nothing.
+              - 'scripts/install-git-hooks.sh'
+              - '.githooks/**'
+              # `package.json` only for its `prepare` entry, which is what
+              # causes the installer to run at all. Deleting that line breaks
+              # the whole chain, and without this the job that says so would
+              # not even be triggered by the commit that did it.
+              - 'package.json'
+              - '**/*.example'
+              - 'compose.*.yaml'
 
   web:
     needs: changes
@@ -321,10 +345,54 @@ jobs:
           path: e2e/playwright-report/
           retention-days: 7
 
+  # The credential detector's fixtures, in both directions: known credential
+  # shapes are refused, and realistic placeholders are not.
+  #
+  # It runs here rather than on request because the detector is about to become
+  # load-bearing in three places — the commit guard, the repository sweep and
+  # the Claude Code write guard — and a silent regression in it would disable
+  # all three at once, with nothing failing to say so.
+  credentials:
+    needs: changes
+    if: needs.changes.outputs.credentials == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Not through pnpm, and that is the point rather than an oversight. The
+      # detector's premise is that it needs no ecosystem toolchain — which is
+      # what lets the commit hook cost milliseconds and work for a contributor
+      # who only ever touches Go or Java. A job that installed one in order to
+      # test it would quietly stop proving that.
+      - run: python3 scripts/test_credential_detector.py --verbose
+      # The other half of the guard. The fixtures prove the detector can tell a
+      # credential from a placeholder; these build a throwaway repository, run
+      # the real installer in it and make real commits, which is the half that
+      # fails silently — git ignores a `core.hooksPath` pointing nowhere
+      # without saying a word.
+      - run: python3 scripts/test_commit_guard.py --verbose
+      # What those tests cannot see from inside a repository they built
+      # themselves: that anything in *this* one still runs the installer.
+      # `prepare` is the only thing that does, and it is one deletable line.
+      - name: The install lifecycle still runs the installer
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          prepare = json.load(open("package.json"))["scripts"].get("prepare", "")
+          if "install-git-hooks.sh" not in prepare:
+              sys.exit(f"package.json `prepare` no longer installs the hooks: {prepare!r}")
+          PY
+      # `--local`, so a runner that happened to carry a global `core.hooksPath`
+      # could not answer for the repository and make this pass vacuously.
+      - name: The installer configures git in this checkout
+        run: |
+          git config --unset core.hooksPath || true
+          ./scripts/install-git-hooks.sh
+          test "$(git config --local --get core.hooksPath)" = ".githooks"
+
   # One status to require on the branch, so a skipped job does not read as a
   # missing check. `always()` is what lets this run when upstream jobs skip.
   ci:
-    needs: [web, visual, api, judge, contract, infra, e2e]
+    needs: [web, visual, api, judge, contract, infra, e2e, credentials]
     if: always()
     runs-on: ubuntu-latest
     steps:

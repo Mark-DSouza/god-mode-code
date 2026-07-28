@@ -13,6 +13,12 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY packages/api-client/package.json packages/api-client/
 COPY packages/design-tokens/package.json packages/design-tokens/
+# The root `prepare` script runs during the install below, even a filtered one,
+# and points at this file. The image has no use for a git hook — the script
+# sees no repository here and does nothing — but it has to exist for the
+# install to succeed. It is copied rather than tolerated as missing, so that
+# `prepare` failing anywhere else stays a failure rather than a shrug.
+COPY scripts/install-git-hooks.sh scripts/
 RUN --mount=type=cache,target=/pnpm-store \
     pnpm config set store-dir /pnpm-store && \
     pnpm install --frozen-lockfile --filter @gmc/web...

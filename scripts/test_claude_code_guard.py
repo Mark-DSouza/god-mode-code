@@ -2,12 +2,17 @@
 """
 Tests for the Claude Code write guard, driven the way Claude Code drives it.
 
-Every test spawns the real script, writes a real `PreToolUse` payload to its
-standard input and reads the decision off its standard output. Nothing is
-stubbed and nothing imports a private helper to assert on it, because the whole
-contract with Claude Code is a JSON document in and a JSON document out — a
-test that reached past that could pass while the guard was invisible in a live
-session.
+Every test of the guard's behaviour spawns the real script, writes a real
+`PreToolUse` payload to its standard input and reads the decision off its
+standard output. Nothing is stubbed and nothing imports a private helper to
+assert on it, because the whole contract with Claude Code is a JSON document in
+and a JSON document out — a test that reached past that could pass while the
+guard was invisible in a live session.
+
+`TheSettingsAndTheGuardAgree` at the bottom is the exception, and is not about
+behaviour: it reads the committed configuration and asks whether it still names
+this script and the tools this script expects to see. There is no payload to
+send for "is the hook wired up at all".
 
 Three things are being held down here, and they fail in different directions:
 
@@ -202,6 +207,13 @@ class ACredentialIsDenied(GuardTest):
         self.assertDenied(bash(f"printf '%s' '{GITHUB_TOKEN}' | tee token.txt"))
         self.assertDenied(bash(f'curl -H "Authorization: Bearer {GITHUB_TOKEN}" https://api.github.com'))
 
+    def test_a_credential_in_a_commit_message_is_denied(self) -> None:
+        # The other two rules stop reading `-m` values, on the grounds that a
+        # message goes to a commit rather than to disk. This one does not, and
+        # must not: a commit message goes into the repository, which is the
+        # thing the credential rule is protecting.
+        self.assertDenied(bash(f'git commit -m "rotating {AWS_KEY_ID}"'))
+
     def test_the_denial_says_what_matched_and_where(self) -> None:
         reason = self.assertDenied(
             write("src/config.ts", f'const a = 1;\nconst key = "{AWS_KEY_ID}";\n')
@@ -300,6 +312,17 @@ class TouchingAControlAsks(GuardTest):
         self.assertAsked(bash("sed -i 's/AKIA//' scripts/credential_detector.py"))
         self.assertAsked(bash("git checkout HEAD~5 -- .github/workflows/ci.yml"))
 
+    def test_a_commit_message_naming_a_protected_path_does_not_ask(self) -> None:
+        # Naming a control in a commit message is describing the work, not
+        # doing it — and it is what the commits that touch these files look
+        # like, so reading the message was a prompt on exactly the change the
+        # rule most wants a human to read carefully.
+        self.assertNoDecision(bash('git commit -m "ci: pin .github/workflows actions"'))
+        self.assertNoDecision(bash("git commit -am 'fix: .githooks/pre-commit wording'"))
+
+    def test_a_protected_path_outside_the_message_still_asks(self) -> None:
+        self.assertAsked(bash('git commit -m "wip" -- .githooks/pre-commit'))
+
     def test_an_ordinary_shell_command_does_not_ask(self) -> None:
         self.assertNoDecision(bash("git status --short"))
         self.assertNoDecision(bash("python3 scripts/test_credential_detector.py"))
@@ -367,11 +390,40 @@ class RoutingAroundTheCommitGuardAsks(GuardTest):
     def test_an_abbreviated_no_verify_asks(self) -> None:
         # Git accepts any unambiguous prefix of a long option.
         self.assertAsked(bash('git commit --no-veri -m "wip"'))
-        self.assertAsked(bash('git commit --no-ver -m "wip"'))
+        self.assertAsked(bash('git commit --no-verif -m "wip"'))
+
+    def test_gits_other_no_ver_option_does_not_ask(self) -> None:
+        # `--no-verbose` is a real git option and has nothing to do with the
+        # hooks. Matching it would not just prompt for no reason: it would tell
+        # the human their command was skipping the commit hooks, which is a
+        # false statement in the one message the rule exists to deliver.
+        # `--no-ver` is the prefix where the two stop being distinguishable,
+        # and git refuses it as ambiguous rather than running it.
+        self.assertNoDecision(bash('git commit --no-verbose -m "wip"'))
 
     def test_an_abbreviation_shaped_flag_to_something_else_does_not_ask(self) -> None:
         # The abbreviation rule is scoped to git for this reason.
         self.assertNoDecision(bash("pnpm --filter @gmc/web test --no-verbose"))
+
+    def test_a_commit_message_that_talks_about_a_bypass_does_not_ask(self) -> None:
+        # The message is on its way to a commit, not to disk. Before the
+        # message value was taken out of what these rules read, every one of
+        # these prompted — and they are the shape of ordinary commits on a
+        # branch that works on the guards.
+        self.assertNoDecision(bash('git commit -m "docs: explain -n usage"'))
+        self.assertNoDecision(bash('git commit -am "note the --no-verify escape"'))
+        self.assertNoDecision(bash("git commit --message='force-push notes'"))
+
+    def test_a_bypass_bundled_with_the_message_flag_still_asks(self) -> None:
+        # `-nm "wip"` is `-n` and `-m` written together. Taking the message out
+        # has to leave the `-n` behind, which the first version of it did not.
+        self.assertAsked(bash('git commit -nm "wip"'))
+        self.assertAsked(bash("git commit -anm 'wip'"))
+
+    def test_a_bypass_outside_the_message_still_asks(self) -> None:
+        # Taking the message out must not take the rest of the command with it.
+        self.assertAsked(bash('git commit -m "docs: explain -n usage" --no-verify'))
+        self.assertAsked(bash('git commit --no-verify -m "note the -n flag"'))
 
     def test_repointing_the_hooks_directory_asks(self) -> None:
         self.assertAsked(bash("git config core.hooksPath /dev/null"))

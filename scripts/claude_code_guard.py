@@ -148,13 +148,23 @@ def _bypass(name: str, regex: str) -> Bypass:
 BYPASSES: tuple[Bypass, ...] = (
     _bypass("skipping the commit hooks", r"--no-verify\b"),
     # Git accepts any unambiguous prefix of a long option, so `--no-veri` is
-    # `--no-verify`. Scoped to a segment mentioning git, because `--no-ver…`
-    # abbreviates something harmless elsewhere and `--no-verbose` is not this.
-    _bypass("skipping the commit hooks", r"\bgit\b(?:\s+\S+)*?\s+--no-ver[a-z]*\b"),
+    # `--no-verify`. It starts at `veri` rather than `ver` because `--no-ver`
+    # is where the abbreviation stops being unambiguous — `--no-verbose` is
+    # also a git option, and matching it would tell a human their command was
+    # skipping the commit hooks when it was doing nothing of the kind. Scoped
+    # to a segment mentioning git, because `--no-ver…` abbreviates something
+    # harmless elsewhere.
+    _bypass("skipping the commit hooks", r"\bgit\b(?:\s+\S+)*?\s+--no-veri[a-z]*\b"),
     # The short form, and only for `commit`: `git push -n` is a dry run, which
     # is the most harmless command in the set.
     _bypass("skipping the commit hooks", r"\bcommit\b(?:\s+\S+)*?\s+-[A-Za-z]*n"),
-    _bypass("force-pushing", r"\bpush\b(?:\s+\S+)*?\s+(?:--force\b|--force-with-lease\b|-[A-Za-z]*f)"),
+    # No abbreviation rule needed here, unlike `--no-verify` above: `--force`
+    # is the shortest unambiguous prefix git accepts — `git push --forc` is
+    # refused as ambiguous against `--force-with-lease` and
+    # `--force-if-includes`, which was checked rather than assumed — and
+    # `--force\b` already covers every longer spelling, since the `-` that
+    # follows is a word boundary.
+    _bypass("force-pushing", r"\bpush\b(?:\s+\S+)*?\s+(?:--force\b|-[A-Za-z]*f)"),
     # A leading `+` on a refspec is a force push spelled without a flag, and
     # the destination half is optional — `git push origin +main` forces just
     # as hard as `+main:main`.
@@ -235,8 +245,8 @@ def protected_in_command(command: str) -> Protected | None:
 
     The limit, stated rather than papered over: this matches the path as
     written. A glob (`.githook?/pre-commit`), a variable or a substitution
-    reaches the same file and is not seen, and no amount of pattern-matching
-    short of running the command would see it. Unlike the credential rule this
+    reaches the same file and is not seen, and nothing short of running the
+    command would see it. Unlike the credential rule this
     has no commit-time backstop, since the commit guard reads content and not
     which files a change touches — so what covers the residue is a human
     reading the diff on the pull request, which is where a change to these
@@ -246,6 +256,38 @@ def protected_in_command(command: str) -> Protected | None:
         if regex.search(command):
             return entry
     return None
+
+
+# A `-m`/`--message` flag and the value it takes. `keep` is what the flag was
+# bundled with and is put back, because `git commit -nm "wip"` is `-n` and
+# `-m` written together: swallowing the whole flag would take the bypass out
+# along with the message, which is how this was first written and what the
+# `-nm` test caught.
+MESSAGE_VALUE = re.compile(
+    r"(?:^|\s)(?P<keep>-[A-Za-z]*|--)m(?:essage)?(?:\s+|=)"
+    r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|\S+)"
+)
+
+
+def without_message_values(command: str) -> str:
+    """The command with commit-message text taken out.
+
+    Only for the two rules that ask what a command touches and what it does.
+    A message is text on its way to a commit, not to disk, so a message that
+    quotes a protected path or spells a bypass flag is describing the work
+    rather than doing it. Both were measured before this existed: `git commit
+    -m "ci: pin .github/workflows actions"` and `git commit -m "docs: explain
+    -n usage"` both prompted, on a branch whose own commits look like that.
+    Prompts that fire on ordinary work are how a guard stops being read.
+
+    The credential rule deliberately does not use this. A credential in a
+    commit message is a credential in the repository.
+
+    What it gives up: `git commit -m "$(cat .githooks/pre-commit)"` no longer
+    names a protected path. That is a read, and reads were already the
+    generous half of `protected_in_command`.
+    """
+    return MESSAGE_VALUE.sub(r" \g<keep> ", command)
 
 
 def bypass_in_command(command: str) -> Bypass | None:
@@ -334,10 +376,13 @@ def decide(payload: dict[str, Any]) -> tuple[str, str] | None:
 
     for written in writes:
         if written.is_command:
-            bypass = bypass_in_command(written.content)
+            # Read with commit-message values removed, which the credential
+            # scan above deliberately did not do. See `without_message_values`.
+            command = without_message_values(written.content)
+            bypass = bypass_in_command(command)
             if bypass:
                 return "ask", routing_around(bypass)
-            hit = protected_in_command(written.content)
+            hit = protected_in_command(command)
             named = hit.path if hit else ""
         else:
             hit = protected_by(written.path)

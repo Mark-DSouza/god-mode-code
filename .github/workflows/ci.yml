@@ -126,7 +126,7 @@ jobs:
               # separately from the script because deleting it is the quiet way
               # to remove the guard — the script would still be there, still
               # pass its tests, and never be invoked again.
-              - 'scripts/claude_code_guard.py'
+              - 'scripts/*claude_code_guard.py'
               - '.claude/settings.json'
               # `package.json` only for its `prepare` entry, which is what
               # causes the installer to run at all. Deleting that line breaks

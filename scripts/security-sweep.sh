@@ -57,9 +57,6 @@ set -uo pipefail
 readonly TRIVY_IMAGE="aquasec/trivy:0.72.0"
 readonly GOVULNCHECK="golang.org/x/vuln/cmd/govulncheck@v1.6.0"
 
-readonly FOUND="findings"
-readonly CLEAN="no findings"
-
 # Tier name, and what became of it. Two arrays rather than one associative
 # array, so the summary prints in the order the tiers ran.
 tier_names=()
@@ -76,14 +73,20 @@ heading() {
 record() {
   tier_names+=("$1")
   tier_outcomes+=("$2")
-  case "$2" in
-  "$FOUND") found_something=1 ;;
-  esac
 }
 
-not_run() {
-  record "$1" "not run — $2"
+# Four outcomes, each with the flag it sets alongside the words it prints. The
+# words and the signal are set together and never derived from each other: a
+# summary line reworded for readability must not be able to change what the
+# sweep exits with.
+clean() { record "$1" "no findings"; }
+
+found() {
+  record "$1" "findings"
+  found_something=1
 }
+
+not_run() { record "$1" "not run — $2"; }
 
 # The sweep's own failure, as opposed to a tier's finding. Reported and then
 # carried to the exit status, so a run where one tier broke is never mistaken
@@ -93,13 +96,31 @@ broke() {
   could_not_run=1
 }
 
+# classify TIER STATUS FOUND_STATUS FAILURE
+#
+# The one place a tool's exit status is turned into an outcome, because every
+# tool here uses a different number for "found something" and the mapping is
+# the part that is silently wrong when it is wrong. Anything that is neither
+# success nor that number is a failure, loudly: the alternative is a scanner
+# that broke being reported as a scanner that was satisfied.
+classify() {
+  local tier="$1" status="$2" found_status="$3" failure="$4"
+  if [[ "$status" -eq 0 ]]; then
+    clean "$tier"
+  elif [[ "$status" -eq "$found_status" ]]; then
+    found "$tier"
+  else
+    broke "$tier" "$failure (exit $status)"
+  fi
+}
+
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"
 if [[ -z "$repo_root" ]]; then
   echo "The sweep reads a git repository, and this is not one." >&2
   echo "Run it from inside a checkout of this project." >&2
   exit 2
 fi
-cd "$repo_root"
+cd "$repo_root" || exit 2
 
 detector="$repo_root/scripts/credential_detector.py"
 
@@ -122,11 +143,7 @@ echo "Sweeping $repo_root"
 # ---------------------------------------------------------------------------
 heading "Tree: every tracked file"
 python3 "$detector" --tracked
-case $? in
-0) record "tree" "$CLEAN" ;;
-1) record "tree" "$FOUND" ;;
-*) broke "tree" "the credential detector failed" ;;
-esac
+classify "tree" $? 1 "the credential detector failed"
 
 # ---------------------------------------------------------------------------
 # History: every blob any commit ever held.
@@ -137,11 +154,7 @@ esac
 # ---------------------------------------------------------------------------
 heading "History: every blob ever committed"
 python3 "$detector" --history
-case $? in
-0) record "history" "$CLEAN" ;;
-1) record "history" "$FOUND" ;;
-*) broke "history" "the credential detector failed" ;;
-esac
+classify "history" $? 1 "the credential detector failed"
 
 # ---------------------------------------------------------------------------
 # Infrastructure misconfiguration, over the Terraform and the Dockerfiles.
@@ -157,22 +170,16 @@ esac
 # Docker in a VM does not always make possible.
 # ---------------------------------------------------------------------------
 heading "Infrastructure: misconfiguration in the Terraform and the Dockerfiles"
-scan_infrastructure() {
-  if command -v trivy >/dev/null 2>&1; then
-    trivy config --exit-code 1 --skip-dirs node_modules .
-    return $?
-  fi
-  if command -v docker >/dev/null 2>&1; then
-    # `--cache-dir` inside the mount would write into the repository, so the
-    # container keeps its cache to itself and re-fetches the checks each run.
-    docker run --rm \
-      --volume "$repo_root:/repo:ro" \
-      --workdir /repo \
-      "$TRIVY_IMAGE" config --exit-code 1 --skip-dirs node_modules .
-    return $?
-  fi
-  return 127
-}
+
+# `--exit-code 2` rather than the more obvious 1, and that is the difference
+# between a report and a rumour: Trivy exits 1 on its own fatal errors, so
+# asking it to also exit 1 on findings makes a scanner that crashed
+# indistinguishable from a scanner that found something — and the crash is the
+# one that prints nothing.
+#
+# `**/node_modules` rather than `node_modules`, which matches only the one at
+# the top: this workspace has six.
+trivy_arguments=(config --exit-code 2 --skip-dirs '**/node_modules' .)
 
 # The scan itself is repository-wide — the Dockerfiles under `apps/` and the
 # compose files are misconfiguration surface too — but it is gated on the
@@ -180,14 +187,31 @@ scan_infrastructure() {
 # over a repository with none of it would report "clean" having read nothing.
 if [[ ! -d "$repo_root/infra" ]]; then
   not_run "infrastructure" "there is no infra/ in this repository"
+elif command -v trivy >/dev/null 2>&1; then
+  # Preferring a local `trivy` to the container is not only about speed: the
+  # container needs the repository bind-mounted into it, which a machine
+  # running Docker in a VM does not always make possible.
+  trivy "${trivy_arguments[@]}"
+  classify "infrastructure" $? 2 "trivy failed"
+elif command -v docker >/dev/null 2>&1; then
+  # Read-only mount: a scanner has no business writing here, and Trivy keeps
+  # its cache inside the container rather than in the repository.
+  docker run --rm \
+    --volume "$repo_root:/repo:ro" \
+    --workdir /repo \
+    "$TRIVY_IMAGE" "${trivy_arguments[@]}"
+  status=$?
+  # Docker's own range, and it means the container never started — a stopped
+  # daemon, or an image that could not be pulled. That says nothing at all
+  # about this repository, so it is a tier that did not run rather than a
+  # sweep that failed. Below 125 the status came from Trivy itself.
+  if ((status >= 125)); then
+    not_run "infrastructure" "Docker could not run $TRIVY_IMAGE (exit $status)"
+  else
+    classify "infrastructure" "$status" 2 "trivy failed"
+  fi
 else
-  scan_infrastructure
-  case $? in
-  0) record "infrastructure" "$CLEAN" ;;
-  1) record "infrastructure" "$FOUND" ;;
-  127) not_run "infrastructure" "needs trivy, or Docker to run $TRIVY_IMAGE" ;;
-  *) broke "infrastructure" "trivy failed" ;;
-  esac
+  not_run "infrastructure" "needs trivy, or Docker to run $TRIVY_IMAGE"
 fi
 
 # ---------------------------------------------------------------------------
@@ -204,17 +228,24 @@ if [[ ! -f "$repo_root/apps/judge/go.mod" ]]; then
 elif ! command -v go >/dev/null 2>&1; then
   not_run "go" "needs the Go toolchain"
 else
-  # `go run` rather than an installed binary, pinned: nothing here has to be
-  # installed first, and the version is visible in the diff when it moves.
-  # It fetches the vulnerability database over the network, so no network is
-  # a tier that did not run rather than a tier that found nothing.
-  (cd "$repo_root/apps/judge" && go run "$GOVULNCHECK" ./...)
-  case $? in
-  0) record "go" "$CLEAN" ;;
-  # govulncheck's own convention: 3 means it found something reachable.
-  3) record "go" "$FOUND" ;;
-  *) not_run "go" "govulncheck could not run — no network, or no module cache" ;;
-  esac
+  # Installed into a throwaway directory and then run, rather than `go run`,
+  # which is the obvious way to write this and is wrong. govulncheck exits 3
+  # when it finds a reachable vulnerability; `go run` reports that as its own
+  # exit 1, and a 1 here is indistinguishable from the tool having failed —
+  # so the one outcome this tier exists for would be recorded as "did not
+  # run", and the sweep would exit 0 having found a live vulnerability.
+  #
+  # The version is pinned so it is visible in the diff when it moves. The
+  # install reaches the network, so no network is a tier that did not run
+  # rather than a tier that found nothing.
+  gobin="$(mktemp -d)"
+  if ! GOBIN="$gobin" go install "$GOVULNCHECK"; then
+    not_run "go" "govulncheck could not be fetched — no network, or no module cache"
+  else
+    (cd "$repo_root/apps/judge" && "$gobin/govulncheck" ./...)
+    classify "go" $? 3 "govulncheck failed"
+  fi
+  rm -rf "$gobin"
 fi
 
 # ---------------------------------------------------------------------------
@@ -222,35 +253,54 @@ fi
 # ---------------------------------------------------------------------------
 echo
 echo "Summary"
-for index in "${!tier_names[@]}"; do
-  printf '  %-16s %s\n' "${tier_names[$index]}" "${tier_outcomes[$index]}"
-done
+if ((${#tier_names[@]})); then
+  for index in "${!tier_names[@]}"; do
+    printf '  %-16s %s\n' "${tier_names[$index]}" "${tier_outcomes[$index]}"
+  done
+fi
 
+# Dated rather than complete, in the idiom SECURITY.md uses for the same
+# reason: this describes what was true of the repository's settings when this
+# file last changed, and the commands are here so a reader can check rather
+# than believe. Nothing below is queried at run time — the sweep works with no
+# network and no GitHub credentials, and a coverage statement that silently
+# degraded to "unknown" would be worse than one that can be checked.
 cat <<'GAPS'
 
 What this run did not check, and could not
-  Four tiers of the posture only exist on GitHub's side, and a local sweep
-  that ends without saying so overstates itself:
+  Some of the posture only exists on GitHub's side. This sweep says nothing
+  about any of it, and a run that ended without saying so would overstate
+  itself.
 
-  - CodeQL, over the three languages written here. Runs on pull requests and
-    on a schedule; results are in the repository's Security tab, under Code
-    scanning.
-  - Dependabot alerts, for known vulnerabilities in declared dependencies.
-    Security tab, under Dependabot. Note that container OS packages are not
-    covered by anything, which ADR-0013 records as a deliberate acceptance.
+  Running, and covering what this does not:
+
   - GitHub secret scanning and push protection, which read every push with
-    their own list rather than this one. Note that
-    `secret_scanning_non_provider_patterns` is disabled on this repository,
-    so anything without a known provider format has never been searched for
-    on that side — the tree and history tiers above are the only reading it
-    has had.
-  - Dependency review, which fails a pull request that adds a vulnerable
-    package. It is a pull request event and has nothing to say about a
-    repository sitting still.
+    their own list rather than this one. But `secret_scanning_non_provider_
+    patterns` is disabled here, so anything without a known provider format
+    has never been read by that side at all — the tree and history tiers
+    above are the only reading it has ever had. Validity checks are off too,
+    so a hit there does not tell you whether the credential still works.
+  - Dependabot alerts, over declared dependencies. Security tab, under
+    Dependabot. Container OS packages are covered by nothing, which ADR-0013
+    records as a deliberate acceptance rather than an oversight.
 
-  The judge's machine image is checked by nothing, here or there. It is built
-  out of band from `infra/judge-ami/provision.sh`, and re-provisioning is
-  manual (ADR-0013).
+  Named in ADR-0013 and NOT configured on this repository as of this file's
+  last change — so nothing is doing this today, here or there:
+
+  - CodeQL. Code scanning's default setup is not enabled and there is no
+    CodeQL workflow, so no source analysis has ever run over the three
+    languages written here.
+  - Dependency review, which would fail a pull request that adds a
+    vulnerable package. There is no workflow for it.
+
+  Check both rather than trusting this paragraph:
+
+    gh api repos/OWNER/REPO/code-scanning/default-setup --jq .state
+    gh api repos/OWNER/REPO --jq .security_and_analysis
+
+  The judge's machine image is checked by nothing either. It is built out of
+  band from `infra/judge-ami/provision.sh`, and re-provisioning is manual
+  (ADR-0013).
 GAPS
 
 echo

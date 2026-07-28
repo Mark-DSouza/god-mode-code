@@ -572,7 +572,7 @@ def staged_diff() -> str:
     produce and to parse. `core.quotePath=false` because a path with a
     non-ASCII character would otherwise arrive escaped and be unopenable.
     """
-    diff = _git(
+    return _git(
         "diff",
         "--cached",
         "--no-color",
@@ -580,8 +580,6 @@ def staged_diff() -> str:
         "--unified=0",
         "--diff-filter=ACMR",
     )
-    assert isinstance(diff, str)
-    return diff
 
 
 def report(findings: Sequence[Finding], stream=sys.stderr, in_history: bool = False) -> None:

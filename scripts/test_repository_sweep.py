@@ -61,6 +61,8 @@ TOOLS_ALLOWED = (
     "grep",
     "cat",
     "rm",
+    "mkdir",
+    "chmod",
     "mktemp",
 )
 
@@ -415,6 +417,75 @@ class TheSweep(RepositoryTest):
         outside.mkdir()
         result = self.repo.sweep(cwd=outside)
         self.assertEqual(2, result.returncode, result.stdout + result.stderr)
+
+    def with_stub(self, name: str, script: str) -> str:
+        """A `PATH` where one tool is a fixture that exits how we say.
+
+        Every tier here reads a tool's exit status and decides from it what to
+        tell the reader, and getting that mapping wrong is silent in exactly
+        one direction: a vulnerability reported as a tier that never ran. The
+        real tools cannot be made to exit on demand; these can.
+        """
+        directory = self.repo.path.parent / f"bin-{name}"
+        path = reduced_path(directory)
+        stub = directory / name
+        stub.write_text(f"#!/bin/sh\n{script}\n")
+        stub.chmod(0o755)
+        return path
+
+    def test_a_tool_that_reports_findings_is_reported_as_findings(self) -> None:
+        self.plant_the_tiers_targets()
+        # Trivy's documented behaviour with `--exit-code 2`, which is why the
+        # sweep asks for 2 rather than 1: 1 is what Trivy itself exits on a
+        # fatal error, and the two must not be the same number.
+        path = self.with_stub("trivy", "exit 2")
+        result = self.repo.sweep(path=path)
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        self.assertRegex(self.summary_of(result), r"infrastructure\s+findings")
+
+    def test_a_tool_that_fails_is_not_reported_as_findings(self) -> None:
+        # The failure this pairing exists to prevent: a scanner that crashed,
+        # printing nothing, recorded as a clean-looking list of no findings —
+        # or worse, as findings nobody can see.
+        self.plant_the_tiers_targets()
+        path = self.with_stub("trivy", "echo 'fatal error' >&2; exit 1")
+        result = self.repo.sweep(path=path)
+        self.assertEqual(2, result.returncode, result.stdout + result.stderr)
+        self.assertRegex(self.summary_of(result), r"infrastructure\s+COULD NOT RUN")
+
+    def test_docker_that_cannot_start_a_container_is_a_tier_that_did_not_run(self) -> None:
+        # A stopped daemon says nothing about this repository, and must not
+        # fail a sweep whose other tiers were satisfied.
+        self.plant_the_tiers_targets()
+        path = self.with_stub("docker", "exit 125")
+        result = self.repo.sweep(path=path)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertRegex(self.summary_of(result), r"infrastructure\s+not run")
+
+    def test_a_go_vulnerability_is_reported_as_a_finding(self) -> None:
+        # govulncheck exits 3 when it finds something reachable — but only if
+        # it is run as a binary. `go run` collapses the program's status into
+        # its own 1, which lands a real vulnerability in the "could not run"
+        # branch and exits the sweep 0. Hence the install, and hence this test.
+        self.plant_the_tiers_targets()
+        path = self.with_stub(
+            "go",
+            'case "$1" in\n'
+            'install) mkdir -p "$GOBIN" && printf \'#!/bin/sh\\nexit 3\\n\' '
+            '> "$GOBIN/govulncheck" && chmod +x "$GOBIN/govulncheck" ;;\n'
+            "*) exit 0 ;;\n"
+            "esac",
+        )
+        result = self.repo.sweep(path=path)
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        self.assertRegex(self.summary_of(result), r"go\s+findings")
+
+    def test_govulncheck_that_cannot_be_fetched_is_a_tier_that_did_not_run(self) -> None:
+        self.plant_the_tiers_targets()
+        path = self.with_stub("go", "echo 'no network' >&2; exit 1")
+        result = self.repo.sweep(path=path)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertRegex(self.summary_of(result), r"go\s+not run")
 
     def summary_of(self, result: subprocess.CompletedProcess[str]) -> str:
         output = result.stdout + result.stderr

@@ -121,6 +121,13 @@ jobs:
               # guards nothing.
               - 'scripts/install-git-hooks.sh'
               - '.githooks/**'
+              # The third enforcement point, and the configuration that is the
+              # only reason it runs at all. `.claude/settings.json` is listed
+              # separately from the script because deleting it is the quiet way
+              # to remove the guard — the script would still be there, still
+              # pass its tests, and never be invoked again.
+              - 'scripts/claude_code_guard.py'
+              - '.claude/settings.json'
               # `package.json` only for its `prepare` entry, which is what
               # causes the installer to run at all. Deleting that line breaks
               # the whole chain, and without this the job that says so would
@@ -378,6 +385,11 @@ jobs:
       # fails silently — git ignores a `core.hooksPath` pointing nowhere
       # without saying a word.
       - run: python3 scripts/test_commit_guard.py --verbose
+      # The third enforcement point: the Claude Code write guard, driven the
+      # way Claude Code drives it. These also assert that the matcher in
+      # `.claude/settings.json` still names the tools the guard inspects, which
+      # is the pair of files most likely to be edited apart.
+      - run: python3 scripts/test_claude_code_guard.py --verbose
       # What those tests cannot see from inside a repository they built
       # themselves: that anything in *this* one still runs the installer.
       # `prepare` is the only thing that does, and it is one deletable line.

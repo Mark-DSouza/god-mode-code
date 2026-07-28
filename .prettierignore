@@ -4,6 +4,12 @@ mockups-and-design-system/
 
 # Vendored agent skills. Same reasoning: they are upstream files that happen to
 # live here, and reformatting them buries the next update's real diff.
+#
+# `.claude/` is ignored wholesale rather than down to `.claude/skills/`, which
+# also takes `.claude/settings.json` — our own file — out of the check. That is
+# deliberate: `.claude/worktrees/` holds full checkouts of this repository, and
+# a prettier run that descended into it would format the same tree several
+# times over.
 .agents/
 .claude/
 skills-lock.json

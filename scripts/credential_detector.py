@@ -41,12 +41,19 @@ Exit status, which is the whole interface for every caller:
 
 from __future__ import annotations
 
-import argparse
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Iterable, Iterator, NamedTuple, Sequence
+
+# `argparse` and `subprocess` are imported where they are used rather than
+# here, and that is the same latency decision as the NamedTuples below: between
+# them they cost about twenty-eight milliseconds of import, and both belong to
+# the command-line entry point. The Claude Code write guard imports this module
+# for `scan_text` alone and runs on every mutating tool call, so it would pay
+# that on every one of them for two names it never touches. The commit hook
+# reaches this file through `main`, so nothing there gets slower — the imports
+# just happen a few lines later.
 
 # Written on the offending line itself, so the reason travels with the string
 # and a reviewer sees it in the same diff hunk. The alternative — a separate
@@ -359,6 +366,8 @@ def staged_diff() -> str:
     produce and to parse. `core.quotePath=false` because a path with a
     non-ASCII character would otherwise arrive escaped and be unopenable.
     """
+    import subprocess
+
     result = subprocess.run(
         [
             "git",
@@ -388,6 +397,8 @@ def report(findings: Sequence[Finding], stream=sys.stderr) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    import argparse
+
     parser = argparse.ArgumentParser(
         description="Refuse content that carries a credential.",
         epilog=f"Mark a false positive on its own line with: {ALLOW_MARKER}",

@@ -24,6 +24,15 @@ locals {
   alarm_email = var.alarm_email != "" ? var.alarm_email : var.budget_notification_email
 }
 
+# Unencrypted, and not for the reason it looks like. The free `alias/aws/sns`
+# key cannot be used here at all: CloudWatch publishing to an encrypted topic
+# needs `cloudwatch.amazonaws.com` granted on the key, that grant is a key
+# policy edit, and AWS-managed keys do not accept one — so the alarms would
+# stop arriving without anything failing to say so. Encryption therefore costs
+# a customer-managed key at $1/month, bought against what is actually in a
+# message: an alarm name, a threshold and a timestamp, forwarded onward as
+# plaintext email to a single subscriber below (ADR-0001).
+#trivy:ignore:AVD-AWS-0095
 resource "aws_sns_topic" "alarms" {
   name = "gmc-${var.environment}-alarms"
 }

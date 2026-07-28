@@ -47,6 +47,14 @@ variable "bucket_name" {
   type        = string
 }
 
+# Server access logging would need a second bucket, which then accumulates a
+# record of one operator and one deploy role reading a bucket nothing else can
+# reach — and which this scanner would ask to encrypt and log in turn.
+# Declined on cost and on there being nobody at the other end to read it
+# (ADR-0001). Object-level access here is genuinely unaudited; what stands in
+# for it is that the bucket is blocked from the internet outright below and
+# reachable by two principals inside one account.
+#trivy:ignore:AVD-AWS-0089
 resource "aws_s3_bucket" "state" {
   bucket = var.bucket_name
 
@@ -68,6 +76,15 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
+# AES256 (SSE-S3) rather than a customer-managed key, which is free rather than
+# $1/month plus a charge per request. Worth stating plainly, because this state
+# holds the database password in plain text: what a CMK would add is a second
+# authorisation surface in front of objects the same two principals — one
+# operator, one deploy role — already reach through S3, in an account where
+# whoever holds that S3 access would hold the KMS grant too. What keeps this
+# bucket is the public access block below, versioning, and the account boundary
+# (ADR-0001).
+#trivy:ignore:AVD-AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
 

@@ -192,11 +192,13 @@ classify "history" $? 1 "the credential detector failed"
 # ---------------------------------------------------------------------------
 # Infrastructure misconfiguration, over the Terraform and the Dockerfiles.
 #
-# Findings here are the input to triage rather than the output of it: some of
-# what Trivy reports about this repository's Terraform is a deliberate cost
-# decision — a single-AZ database, no cross-region replication — and writing
-# the suppressions that say so is a separate piece of work. Severity is not
-# filtered for the same reason: the point is to see the list.
+# Wider than the CI job, on purpose. `security.yml` scans the Terraform, whose
+# findings are triaged: each one that survived is answered by a
+# `#trivy:ignore:` comment on the resource naming the decision that bought it,
+# so a run here should report nothing from `infra/terraform`. What remains is
+# the Dockerfiles and the compose files, which no gate reads and which are the
+# reason this tier is still worth running by hand. Severity is unfiltered for
+# the same reason: the point is to see the list.
 #
 # ---------------------------------------------------------------------------
 heading "Infrastructure: misconfiguration in the Terraform and the Dockerfiles"

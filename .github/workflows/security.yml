@@ -71,6 +71,7 @@ jobs:
       # reads this is gated on `pull_request`, which is the one event where
       # the step is not skipped, so a fallback would be unreachable.
       deps: ${{ steps.deps.outputs.deps }}
+      terraform: ${{ steps.terraform.outputs.terraform || 'true' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -121,6 +122,23 @@ jobs:
               - 'apps/api/pom.xml'
               - 'apps/judge/go.mod'
               - 'apps/judge/go.sum'
+
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
+        id: terraform
+        if: github.event_name != 'schedule'
+        with:
+          # A third step for the same reason there is a second one: this output
+          # is neither the language matrix nor the dependency gate.
+          #
+          # By extension rather than by directory, on the argument the language
+          # filters make above and one of its own — the scan below reads every
+          # `.tf` in the repository, so a filter naming `infra/terraform` would
+          # be narrower than the thing it gates and would skip the job for a
+          # change the job would have had something to say about.
+          filters: |
+            terraform:
+              - '.github/workflows/security.yml'
+              - '**/*.tf'
 
   codeql:
     needs: changes
@@ -178,6 +196,60 @@ jobs:
           # been fixed.
           category: /language:${{ matrix.language }}
 
+  # ADR-0013's third scanning tier: misconfiguration in the infrastructure,
+  # where CodeQL reads the code. Same contract as the jobs above — report,
+  # upload, exit zero — and here that contract is the entire design rather than
+  # a detail of it. This repository has seven Terraform findings that are
+  # deliberate decisions, each answered in a comment on the resource it
+  # concerns; a scanner exiting non-zero on them would fail this job before
+  # code scanning was ever asked which findings the pull request introduced,
+  # which is the whole-repository gate the ADR refuses.
+  terraform:
+    needs: changes
+    if: needs.changes.outputs.terraform == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          # The repository root, not `infra/terraform`, and this is the
+          # non-obvious part: Trivy writes SARIF paths relative to what it was
+          # pointed at, so scanning the directory reports `alarms.tf` and code
+          # scanning then attaches every alert to a file that does not exist at
+          # that path. Measured, not reasoned about. Scope comes from the
+          # scanner list below instead, which is a truer reading of "the
+          # Terraform" anyway — it follows the files rather than the layout.
+          scan-ref: .
+          # Six of them in this workspace, none containing Terraform, all of
+          # them slow to walk.
+          skip-dirs: "**/node_modules"
+          format: sarif
+          output: trivy.sarif
+          # Explicit, and load-bearing: see above.
+          exit-code: "0"
+          # Pinned to the version `scripts/security-sweep.sh` runs, so the
+          # sweep a person runs locally reports what this job reports. The two
+          # move together or the local run stops being evidence about CI.
+          version: v0.72.0
+        env:
+          # Terraform only — the Dockerfiles and compose files are application
+          # surface and not this job's business. There is no action input for
+          # it; Trivy takes every flag from a `TRIVY_`-prefixed variable.
+          TRIVY_MISCONFIG_SCANNERS: terraform
+
+      - uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          sarif_file: trivy.sarif
+          # Its own set, for the reason the CodeQL categories exist: a run that
+          # uploaded only Terraform results must not read as every CodeQL alert
+          # having been fixed.
+          category: /scanner:trivy
+
   # The one gate that does not go through SARIF: it reads the pull request's
   # dependency changes directly and fails when the diff *adds* a package with
   # a known vulnerability. It only functions on a pull request event, which is
@@ -212,7 +284,7 @@ jobs:
   # a filter job that fails skips everything downstream, and everything
   # downstream skipping is how this job reports success.
   security:
-    needs: [changes, codeql, dependency-review]
+    needs: [changes, codeql, terraform, dependency-review]
     if: always()
     runs-on: ubuntu-latest
     steps:

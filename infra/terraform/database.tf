@@ -42,6 +42,27 @@ resource "aws_db_parameter_group" "main" {
   }
 }
 
+# Performance Insights is not available on `db.t4g.micro` — AWS excludes the
+# micro and small burstable classes — so enabling it would fail the apply
+# rather than buy anything. The instance class is the ADR-0001 decision and
+# this finding is downstream of it. PostgreSQL's own logs go to CloudWatch
+# below, and the rest of the signal lives in Grafana (ADR-0008).
+#
+# IAM authentication is a second way in rather than a replacement for the
+# first: the flag alone leaves the password working, so setting it would change
+# nothing about how this database is actually reached while reading as though
+# it had. The credential path is the 32-character password generated above,
+# never seen by a human, held in Parameter Store and carried over TLS that
+# `rds.force_ssl` enforces. Making IAM authentication real means the
+# application fetching and refreshing fifteen-minute tokens, which is an
+# application change and not a Terraform argument.
+#
+# Both directives sit on the line above the resource with nothing between
+# them: Trivy reads upward from the block and stops at the first comment line
+# that is not one, so a suppression separated from it by prose is silently
+# ignored.
+#trivy:ignore:AVD-AWS-0133
+#trivy:ignore:AVD-AWS-0176
 resource "aws_db_instance" "main" {
   identifier     = "gmc-${var.environment}"
   engine         = "postgres"

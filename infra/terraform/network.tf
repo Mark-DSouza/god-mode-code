@@ -12,6 +12,15 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+# Flow logs are declined, and the reason is the same one that put the rest of
+# the telemetry outside AWS (ADR-0008): CloudWatch Logs charges per GB ingested
+# and a VPC whose instances talk continuously to a registry, a tunnel and
+# Systems Manager produces that continuously, for a record nobody is watching.
+# What flow logs would be read to confirm after the fact is asserted up front
+# instead, on every pull request that touches this directory — no inbound rules
+# on the application, no route out of the private subnet
+# (tests/security.tftest.hcl).
+#trivy:ignore:AVD-AWS-0178
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
@@ -34,6 +43,16 @@ resource "aws_internet_gateway" "main" {
 # Public tier: the application instance.
 # ---------------------------------------------------------------------------
 
+# Trivy reads `map_public_ip_on_launch` as exposure. Here it is the opposite:
+# with no NAT gateway (~$32/month, ADR-0001) a routable address is the only way
+# the application instance reaches the registry, Cloudflare and Systems
+# Manager, and every one of those connections is outbound. Nothing can dial in
+# — the application security group has no ingress rules at all, which
+# tests/security.tftest.hcl asserts on every pull request. Moving the
+# assignment onto the instance would satisfy this rule and change neither the
+# address nor the exposure, which is why the finding is answered rather than
+# engineered around.
+#trivy:ignore:AVD-AWS-0164
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = cidrsubnet(var.vpc_cidr, 8, 0)

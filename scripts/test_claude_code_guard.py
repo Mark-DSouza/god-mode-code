@@ -340,8 +340,11 @@ class TouchingAControlAsks(GuardTest):
         # moment a second hook lands this is a real file. Excluding only the
         # hyphen left it, and any other `commit` inside a path, able to argue
         # the guard out of looking at the command that names it.
+        #
+        # The vehicles here all write, because a reader naming a control is
+        # deliberately silent now — see `ReadingAControlDoesNotAsk`.
         self.assertAsked(bash("sort -m .githooks/commit-msg other"))
-        self.assertAsked(bash("cat -m .github/workflows/commit.yml"))
+        self.assertAsked(bash("sed -i -m .github/workflows/commit.yml"))
 
     def test_a_stray_commit_word_does_not_license_the_strip(self) -> None:
         # Asking whether the segment *mentions* a commit was the same mistake
@@ -349,8 +352,8 @@ class TouchingAControlAsks(GuardTest):
         # bare word did. The strip now starts at the subcommand, so a `-m` in
         # front of it — or with no `git commit` at all — is somebody else's.
         self.assertAsked(bash("sort -m .githooks/pre-commit commit"))
-        self.assertAsked(bash("git show commit -m .github/workflows/ci.yml"))
-        self.assertAsked(bash("git log --format=%s commit -m .githooks/pre-commit"))
+        self.assertAsked(bash("git checkout commit -m .github/workflows/ci.yml"))
+        self.assertAsked(bash("git checkout --format=%s commit -m .githooks/pre-commit"))
 
     def test_gits_own_options_may_precede_the_subcommand(self) -> None:
         # `commit` has to be the subcommand, but git's own options come first
@@ -395,6 +398,58 @@ class TouchingAControlAsks(GuardTest):
         self.assertNoDecision(edit("scripts/test_credential_detector.py", "# a new fixture"))
 
 
+class ReadingAControlDoesNotAsk(GuardTest):
+    """Looking at a control is how every change to one starts.
+
+    The first session to run this guard produced ten prompts and nine of them
+    were a read — `cat scripts/claude_code_guard.py`, `git diff
+    .claude/settings.json`, `git log -- .claude/settings.json`. A prompt on
+    every look at a file is how a guard stops being read at all, and it buys
+    nothing: a read cannot weaken a control.
+    """
+
+    def test_reading_a_control_does_not_ask(self) -> None:
+        self.assertNoDecision(bash("cat scripts/claude_code_guard.py"))
+        self.assertNoDecision(bash("git diff .claude/settings.json"))
+        self.assertNoDecision(bash("git log --oneline -3 -- .claude/settings.json"))
+        self.assertNoDecision(bash("grep -n AKIA scripts/credential_detector.py"))
+        self.assertNoDecision(bash("head -20 .githooks/pre-commit"))
+        self.assertNoDecision(bash("git show HEAD:.github/workflows/ci.yml"))
+
+    def test_a_reader_pointed_at_a_control_still_asks(self) -> None:
+        # The redirection is the write, and it does not care that `cat` is on
+        # the readers list. This is the whole reason the list is paired with a
+        # `>` check rather than trusted on the command name alone.
+        self.assertAsked(bash("cat /dev/null > .githooks/pre-commit"))
+        self.assertAsked(bash("git log --oneline > .github/workflows/ci.yml"))
+        self.assertAsked(bash("cat x >> .claude/settings.json"))
+
+    def test_a_discarded_redirection_is_not_a_write(self) -> None:
+        # `2>/dev/null` on a `cat` of a file that may not exist is ordinary,
+        # and reading every `>` as a write put the prompt back on the read it
+        # was appended to.
+        self.assertNoDecision(bash("cat .claude/settings.local.json 2>/dev/null"))
+        self.assertNoDecision(bash("ls -la .githooks 2>&1"))
+        self.assertNoDecision(bash("grep -n x scripts/credential_detector.py >/dev/null 2>&1"))
+
+    def test_a_writing_git_subcommand_is_not_a_reader(self) -> None:
+        # `git` is on the list only for the subcommands that read. Naming the
+        # program is not enough, or `git checkout -- <path>` would be waved
+        # through by the same entry that lets `git diff` past.
+        self.assertAsked(bash("git checkout HEAD~5 -- .github/workflows/ci.yml"))
+        self.assertAsked(bash("git rm .githooks/pre-commit"))
+
+    def test_an_unrecognised_command_still_asks(self) -> None:
+        # The list can only ever be too short, so what is not on it asks.
+        self.assertAsked(bash("python3 -c \"open('.githooks/pre-commit','w')\""))
+        self.assertAsked(bash("catnip .githooks/pre-commit"))
+
+    def test_a_read_in_one_segment_does_not_cover_a_write_in_another(self) -> None:
+        # The check is per segment, so a reader cannot escort a write past it.
+        self.assertAsked(bash("cat README.md; rm .githooks/pre-commit"))
+        self.assertAsked(bash("git diff && sed -i 's/x//' .claude/settings.json"))
+
+
 class RoutingAroundTheCommitGuardAsks(GuardTest):
     """The other half of the second rule: satisfying the gate, not skipping it.
 
@@ -409,6 +464,16 @@ class RoutingAroundTheCommitGuardAsks(GuardTest):
     def test_the_short_form_of_no_verify_asks(self) -> None:
         self.assertAsked(bash('git commit -n -m "wip"'))
         self.assertAsked(bash('git commit -nm "wip"'))
+        self.assertAsked(bash('git -c core.quotePath=false commit -n -m "wip"'))
+
+    def test_a_short_flag_belonging_to_a_later_command_does_not_ask(self) -> None:
+        # Any word between the subcommand and the flag used to be allowed, so
+        # the first `-…n…` token anywhere later in the segment was read as the
+        # commit's. `find . -name` is the one that was actually measured; the
+        # rest are the same shape and just as ordinary.
+        self.assertNoDecision(bash("git commit -m x \"$(find . -name '*.py')\""))
+        self.assertNoDecision(bash('git commit -m "wip" README.md -no-such-flag'))
+        self.assertNoDecision(bash("git commit -m x && npx tsc --noEmit"))
 
     def test_a_force_push_asks(self) -> None:
         self.assertAsked(bash("git push --force origin main"))

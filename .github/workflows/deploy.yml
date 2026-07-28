@@ -15,19 +15,18 @@ concurrency:
   group: deploy-production
   cancel-in-progress: false
 
-# Declared per job rather than here, so this is only the floor a job inherits
-# when it says nothing: read-only, and never the OIDC token.
+# Declared per job rather than here, so this is only the default a job inherits
+# when it says nothing. A job that declares its own replaces this outright
+# rather than adding to it, which is what lets the deploy job below hold the
+# OIDC token without also holding this.
 permissions:
   contents: read
 
-# Every `uses:` below is pinned to a commit rather than a tag, and it matters
-# more here than in CI: this is the workflow that can reach AWS. A tag is a
-# pointer its owner can move, so `@v3` on any of the third-party actions in
-# the build job is a standing invitation to run code nobody here has seen, in
-# the one workflow where that code would be standing next to a credential. A
-# commit cannot be moved. The trailing comment names the version the commit
-# is; Dependabot rewrites the pin and the comment together
-# (.github/dependabot.yml), so the label cannot drift from what it labels.
+# Every `uses:` below is pinned to a commit rather than a tag, for the reasons
+# set out above `jobs:` in ci.yml. What is particular to this file is the
+# stakes: it is the one workflow that can reach AWS, so an action whose tag was
+# moved under it would be running unreviewed code beside a credential rather
+# than beside a test suite.
 
 env:
   # These are derived from `var.environment` and `var.region` in
@@ -49,9 +48,10 @@ jobs:
     # Enough to check out the repository and push images to ghcr, and nothing
     # else. Three third-party `docker/*` actions run here, and none of them has
     # any business holding an OIDC token: one that did could exchange it for
-    # the deploy role. ADR-0005 works through what a stolen IAM role costs —
-    # hundreds of GPU instances inside ten minutes — for a different host, but
-    # it is the same arithmetic arriving through a different door.
+    # the deploy role, and that role can tell the production host to pull and
+    # run an image. infra/terraform/deploy.tf calls the document it drives a
+    # remote code execution primitive wearing a deploy script's clothes, which
+    # is the thing these two lines keep on the other side of a job boundary.
     permissions:
       contents: read
       packages: write

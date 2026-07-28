@@ -1,17 +1,14 @@
 version: 2
 
-# What keeps the pinned actions in `.github/workflows` moving. A pin is only
-# half a policy: an action pinned to a commit and then forgotten is running
-# last year's code with this year's confidence, and nothing about a SHA makes
-# anyone notice. The bot is what turns pinning into something sustained rather
-# than a snapshot of one afternoon. It rewrites the pin and the `# vX.Y.Z`
+# What keeps the pinned actions in `.github/workflows` moving. An action pinned
+# to a commit and then forgotten is running last year's code, and nothing about
+# a SHA makes anyone notice. The bot rewrites the pin and its `# vX.Y.Z`
 # comment together, which is why those two cannot drift.
 #
 # Monthly, and grouped so each ecosystem opens one pull request per cycle
 # rather than one per dependency. This is a solo repository, and the failure
 # mode of an ungrouped bot is not noise — it is a maintainer who mutes it, at
-# which point the repository is worse off than before the bot existed, because
-# the alerts still arrive and nobody is reading them.
+# which point the alerts still arrive and nobody is reading them.
 updates:
   - package-ecosystem: github-actions
     directory: /
@@ -65,12 +62,9 @@ updates:
       terraform:
         patterns: ["*"]
 
-# Docker is deliberately absent, and this absence is the thing here most likely
-# to be helpfully "fixed" by someone who has not read this far. Every `FROM` in
-# this repository is a floating tag on purpose, and every image is rebuilt on
-# each deploy, so OS packages are already patched continuously. Adding Docker
-# here would pin those digests — freezing base images and manufacturing the
-# exact staleness problem a bot would then exist to solve. Rollback is
-# unaffected either way: built images are immutable in ghcr once pushed.
-# There is no ADR behind this one, which is why the comment argues the case
-# rather than pointing at one.
+# Docker is absent on purpose, and ADR-0013 is where that is argued: the tags
+# it would pin are floating so that each deploy rebuilds against a patched
+# base, and the one deployed image the ecosystem cannot see is named in a shell
+# variable rather than a `FROM`. Read it before adding the ecosystem here —
+# turning those tags into digests turns off automatic patching, which is not
+# what it looks like from the diff.

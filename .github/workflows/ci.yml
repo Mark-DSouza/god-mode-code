@@ -365,7 +365,7 @@ jobs:
     if: needs.changes.outputs.credentials == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Not through pnpm, and that is the point rather than an oversight. The
       # detector's premise is that it needs no ecosystem toolchain — which is
       # what lets the commit hook cost milliseconds and work for a contributor

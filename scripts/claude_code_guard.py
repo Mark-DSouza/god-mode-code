@@ -283,21 +283,24 @@ MESSAGE_VALUE = re.compile(
     r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|[^\s;|&<>]+)"
 )
 
-# What makes a segment one whose `-m` is a commit message rather than somebody
-# else's flag. Without it, `python3 -m http.server` loses `http.server` from
-# both scans — a strip that reaches past what its name claims.
+# Where a commit starts in a segment. Everything after it can have its `-m`
+# value taken out; everything before it cannot.
 #
-# Not `\bcommit\b`, which `.githooks/pre-commit` satisfies: the hyphen is a
-# word boundary, so the protected path talked the guard into treating any
-# command naming it as a commit and stripping the token after its `-m`.
-# `sort -m .githooks/pre-commit other` went silent on exactly that.
+# This has been wrong twice, both times by asking a weaker question. `\bcommit\b`
+# was satisfied by `.githooks/pre-commit`, because the hyphen is a word
+# boundary, so the protected path talked the guard out of reading the command
+# that named it. Excluding `-`, `/` and `.` on both sides fixed the paths and
+# left the same hole open to a bare word: `sort -m .githooks/pre-commit commit`
+# went silent, because *anywhere* in the segment was enough.
 #
-# The separators are excluded on both sides, and `/` and `.` for the same
-# reason the hyphen is: `.githooks/commit-msg` is the standard companion to
-# `pre-commit` and would otherwise walk straight back through the hole, as
-# would `.github/workflows/commit.yml`. A word here has to be the subcommand,
-# not a path that happens to contain it.
-A_COMMIT = re.compile(r"(?<![\w\-./])commit(?![\w\-./])")
+# So it is a position now rather than a test, and it wants `git` in front of
+# it. A `-m` before the subcommand is not a commit message and is left alone.
+#
+# `commit` has to be the subcommand, which is to say only git's own options
+# may stand between the two — `-c core.quotePath=false` and friends, hence the
+# optional value each may take. Allowing any word there let
+# `git log --format=%s commit -m .githooks/pre-commit` back through.
+A_COMMIT = re.compile(r"\bgit\b(?:\s+-\S+(?:\s+[^-\s]\S*)?)*\s+commit(?![\w\-./])")
 
 
 def readable_segments(command: str) -> list[str]:
@@ -314,19 +317,32 @@ def readable_segments(command: str) -> list[str]:
     The credential rule deliberately does not use this. A credential in a
     commit message is a credential in the repository.
 
-    Stripping runs inside a segment and only where that segment mentions a
-    commit, so it can neither reach across a separator nor take a `-m` that
-    belongs to some other program.
+    Stripping runs inside a segment, and only after the `git commit` in it, so
+    it can neither reach across a separator nor take a `-m` that belongs to
+    some other program — including one standing in front of the commit.
 
     What it gives up: `git commit -m "$(cat .githooks/pre-commit)"` no longer
     names a protected path. That is a read, and reads were already the
     generous half of `protected_in_command`.
     """
-    segments = SEGMENTS.split(CONTINUATION.sub(" ", command))
-    return [
-        MESSAGE_VALUE.sub(r" \g<keep> ", segment) if A_COMMIT.search(segment) else segment
-        for segment in segments
-    ]
+    readable = []
+    for segment in SEGMENTS.split(CONTINUATION.sub(" ", command)):
+        starts = A_COMMIT.search(segment)
+        if not starts:
+            readable.append(segment)
+            continue
+        # Split at the subcommand rather than substituting over the whole
+        # segment: what precedes a commit is another command's arguments.
+        #
+        # Precision rather than a closed hole, and said plainly because there
+        # is no test below defending it — mutating it back to a whole-segment
+        # substitution passes. None of git's pre-subcommand options (`-C`,
+        # `-c`, `--git-dir`, `--work-tree`, `-p`, `-P`, `--bare`, …) end in
+        # `m`, so nothing can put a `-m` in front of `commit` for the strip to
+        # find. Anchoring `A_COMMIT` on `git` is what actually closed the hole.
+        head, tail = segment[: starts.end()], segment[starts.end() :]
+        readable.append(head + MESSAGE_VALUE.sub(r" \g<keep> ", tail))
+    return readable
 
 
 def bypass_in_command(segments: Sequence[str]) -> Bypass | None:

@@ -343,6 +343,22 @@ class TouchingAControlAsks(GuardTest):
         self.assertAsked(bash("sort -m .githooks/commit-msg other"))
         self.assertAsked(bash("cat -m .github/workflows/commit.yml"))
 
+    def test_a_stray_commit_word_does_not_license_the_strip(self) -> None:
+        # Asking whether the segment *mentions* a commit was the same mistake
+        # twice over: once a path containing the word satisfied it, and once a
+        # bare word did. The strip now starts at the subcommand, so a `-m` in
+        # front of it — or with no `git commit` at all — is somebody else's.
+        self.assertAsked(bash("sort -m .githooks/pre-commit commit"))
+        self.assertAsked(bash("git show commit -m .github/workflows/ci.yml"))
+        self.assertAsked(bash("git log --format=%s commit -m .githooks/pre-commit"))
+
+    def test_gits_own_options_may_precede_the_subcommand(self) -> None:
+        # `commit` has to be the subcommand, but git's own options come first
+        # and some of them take a value. Reading those as "not a commit" would
+        # put the prompt back on ordinary work.
+        self.assertNoDecision(bash('git -c core.quotePath=false commit -m "ci: .github/workflows"'))
+        self.assertNoDecision(bash('git --no-pager commit -m "docs: explain -n usage"'))
+
     def test_a_redirection_after_a_message_is_still_seen(self) -> None:
         # `>` ends a word without being whitespace, so a value that ran to the
         # next space swallowed the redirect target — and the redirection is

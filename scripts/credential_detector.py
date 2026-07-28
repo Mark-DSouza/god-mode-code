@@ -54,11 +54,14 @@ from typing import Iterable, Iterator, NamedTuple, Sequence
 
 # `argparse` and `subprocess` are imported where they are used rather than
 # here, and that is the same latency decision as the NamedTuples below.
-# Between them they cost about fifteen milliseconds: median of thirty-one
-# fresh imports of this module, 20ms with them deferred against 37ms with them
-# at the top. The Claude Code write guard imports this module for `scan_text`
-# alone and runs on every mutating tool call, so it would pay that on every one
-# of them for two names it never touches.
+# Between them they cost about five milliseconds — measured as importing both
+# with `pathlib`, `re` and `os` already in memory, which is the situation this
+# module is actually in, over forty-one fresh interpreters. Whole-process
+# timings on this machine swing by more than the saving, so five is the
+# figure that reproduces and the larger ones quoted here previously were
+# reading noise. The Claude Code write guard imports this module for
+# `scan_text` alone and runs on every mutating tool call, so it would pay that
+# on every one of them for two names it never touches.
 #
 # `argparse` sits in `main`; `subprocess` sits in `_git_bytes`, which every git
 # call goes through. So the commit hook and both sweep modes still reach them —

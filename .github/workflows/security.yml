@@ -199,11 +199,11 @@ jobs:
   # ADR-0013's third scanning tier: misconfiguration in the infrastructure,
   # where CodeQL reads the code. Same contract as the jobs above — report,
   # upload, exit zero — and here that contract is the entire design rather than
-  # a detail of it. This repository has seven Terraform findings that are
-  # deliberate decisions, each answered in a comment on the resource it
-  # concerns; a scanner exiting non-zero on them would fail this job before
-  # code scanning was ever asked which findings the pull request introduced,
-  # which is the whole-repository gate the ADR refuses.
+  # a detail of it. The findings already here were triaged once, and every one
+  # that survived is answered by a `#trivy:ignore:` comment on the resource it
+  # concerns naming what bought it. A scanner exiting non-zero on those would
+  # fail this job before code scanning was ever asked which findings the pull
+  # request introduced, which is the whole-repository gate the ADR refuses.
   terraform:
     needs: changes
     if: needs.changes.outputs.terraform == 'true'

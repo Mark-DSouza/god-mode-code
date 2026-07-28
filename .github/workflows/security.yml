@@ -1,0 +1,210 @@
+name: Security
+
+# Separate from `ci.yml`, for three reasons that are each sufficient on their
+# own. A weekly schedule cannot express itself through `dorny/paths-filter`,
+# which has no base ref to diff against on a scheduled run. A security finding
+# arriving as "CI failed" conflates "the code works" with "the code is safe".
+# And CodeQL needs `security-events: write`, which should not be handed to
+# every job that builds a stylesheet.
+#
+# What gates a pull request here is code scanning's own reading of the diff,
+# not this workflow's exit status (ADR-0013). The analysis jobs upload SARIF
+# and exit successfully whatever they found; GitHub fingerprints the alerts,
+# decides which of them the pull request introduced, and fails its own "Code
+# scanning results" check. A scanner that exited non-zero on a pre-existing
+# finding would be the whole-repository gate the ADR refuses.
+#
+# So two things want requiring on the branch: the `security` job below, which
+# says the analysis ran and the dependency gate passed, and code scanning's
+# check, which says the diff introduced nothing new.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Weekly, and the reason is the alert tier rather than the gate: a check
+  # that only ever reads a diff never looks again at code nobody has touched
+  # since it was written. This run analyses everything, populates the Security
+  # tab, and fails nothing.
+  schedule:
+    - cron: "17 3 * * 1"
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Every `uses:` below is pinned to a commit rather than a tag, for the reasons
+# `ci.yml` sets out at length. Dependabot rewrites the pin and its `# vX.Y.Z`
+# comment together (.github/dependabot.yml).
+
+jobs:
+  # The same argument as `ci.yml`'s filter job, and the same accepted price: a
+  # duplicated job, because a workflow cannot read another workflow's outputs.
+  # A stylesheet change has not affected the Go service and should not spend
+  # minutes proving it.
+  #
+  # Both steps are skipped on a scheduled run, where there is no base ref to
+  # diff against, and each output falls back to "everything" — which is what
+  # the weekly run is for.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      # A JSON array of the filters that matched, fed straight into the matrix
+      # below, so the languages a change cannot have affected are never
+      # analysed rather than being analysed and discarded.
+      languages: ${{ steps.languages.outputs.changes || '["javascript-typescript","java-kotlin","go"]' }}
+      deps: ${{ steps.deps.outputs.deps || 'true' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
+        id: languages
+        if: github.event_name != 'schedule'
+        with:
+          # The keys are CodeQL's own language identifiers, not names chosen
+          # here, because `outputs.changes` becomes the matrix verbatim.
+          filters: |
+            shared: &shared
+              - '.github/workflows/security.yml'
+            # By extension rather than by directory: TypeScript lives in six
+            # places already and the analysis follows the files, not the
+            # layout. A directory list would go stale the first time a seventh
+            # appeared, and it would go stale silently.
+            javascript-typescript:
+              - *shared
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.js'
+              - '**/*.jsx'
+              - '**/*.mjs'
+              - '**/*.cjs'
+            java-kotlin:
+              - *shared
+              - 'apps/api/**'
+            go:
+              - *shared
+              - 'apps/judge/**'
+
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
+        id: deps
+        if: github.event_name == 'pull_request'
+        with:
+          # A second step rather than a second filter in the one above, because
+          # that one's `changes` output is the language matrix and anything
+          # else matching would arrive there as a language CodeQL has never
+          # heard of.
+          filters: |
+            deps:
+              - '.github/workflows/security.yml'
+              - '**/package.json'
+              - 'pnpm-lock.yaml'
+              - 'apps/api/pom.xml'
+              - 'apps/judge/go.mod'
+              - 'apps/judge/go.sum'
+
+  codeql:
+    needs: changes
+    # `fromJSON('[]')` is not an empty matrix, it is an error, so the case
+    # where nothing matched has to be caught before the matrix is built.
+    if: needs.changes.outputs.languages != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The reason this workflow is not in `ci.yml`. Scoped to the one job
+      # that uploads SARIF.
+      security-events: write
+    strategy:
+      # One language failing to analyse should not hide what the other two
+      # found.
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.changes.outputs.languages) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Only Go is built, so only Go needs a toolchain. The runner ships one,
+      # but not necessarily the version `apps/judge/go.mod` asks for, and a
+      # toolchain older than the module fails the build rather than the
+      # analysis — which reads as CodeQL being broken.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        if: matrix.language == 'go'
+        with:
+          go-version: "1.26"
+          # go.mod, not go.sum: the judge has no third-party dependencies yet,
+          # so no go.sum exists and pointing at one fails the setup step.
+          cache-dependency-path: apps/judge/go.mod
+
+      - uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: ${{ matrix.language }}
+          # Java is analysed without building it, which is most of the saving
+          # here — the alternative is a full Maven run, downloading the Spring
+          # dependency tree to extract types CodeQL can read from source
+          # instead. JavaScript has no build mode other than this one.
+          #
+          # Go does need its normal build: the extractor works off the
+          # compiler, so `manual` and the step below rather than `autobuild`,
+          # which would go looking for a `go.mod` that is not at the root.
+          build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
+
+      - if: matrix.language == 'go'
+        run: go build ./...
+        working-directory: apps/judge
+
+      - uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          # Keeps each language's results a separate set, so a run that
+          # analysed only Go does not read as every JavaScript alert having
+          # been fixed.
+          category: /language:${{ matrix.language }}
+
+  # The one gate that does not go through SARIF: it reads the pull request's
+  # dependency changes directly and fails when the diff *adds* a package with
+  # a known vulnerability. It only functions on a pull request event, which is
+  # why the scheduled run above has to exist.
+  dependency-review:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.deps == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # Set here rather than left to the action's default, because the
+          # number is a decision and a default is not. `low` is the strict end
+          # of the scale, and this gate can afford it where a
+          # whole-repository scan could not: it fires only on a package the
+          # diff is adding, at the one moment when the cheap fix — a different
+          # version, or a different package — is still on the table. Everything
+          # it leaves alone (packages already here, CVEs published later) is
+          # Dependabot's, per ADR-0013.
+          fail-on-severity: low
+
+  # One status to require on the branch, so a skipped job does not read as a
+  # missing check — a filtered-out language would otherwise leave its check
+  # pending forever, which is the sharp edge that makes naive path filtering
+  # wedge pull requests. `always()` is what lets this run when upstream jobs
+  # skip. Same shape as `ci.yml`'s aggregate; the name is fixed from here on.
+  #
+  # `changes` is in the list where `ci.yml` leaves its filter job out, because
+  # a filter job that fails skips everything downstream, and everything
+  # downstream skipping is how this job reports success.
+  security:
+    needs: [changes, codeql, dependency-review]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if anything that ran did not pass
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          echo "Upstream results: $results"
+          for result in $results; do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "A required job did not pass." >&2
+              exit 1
+            fi
+          done
+          echo "All jobs that ran passed."

@@ -2,12 +2,17 @@
 #
 # Refuse a commit that would put a credential into this repository.
 #
-# This is the control, rather than one of the layers on top of it. A hook in
-# `.claude/settings.json` covers Claude Code sessions in one checkout; this
-# covers commits made by every human and every agent, including agents that
-# have never heard of Claude Code.
+# This is the control, rather than one of the layers on top of it. The Claude
+# Code write guard planned alongside it would cover one agent in one checkout,
+# and does not exist yet; this covers commits made by every human and every
+# agent, including agents that have never heard of Claude Code. Which is the
+# order they were built in on purpose, not an accident of scheduling.
 #
-# What it sees and what it does not, each tested rather than assumed:
+# What it sees and what it does not. Each of these is a test in
+# `scripts/test_commit_guard.py`, which plants a credential past this hook with
+# `--no-verify` and then asks whether the operation below carries it or refuses
+# it — so if the coverage ever changes, a test fails and this comment has to
+# follow rather than quietly rotting:
 #
 #   - An ordinary commit, and the commit that finishes a conflicted merge: the
 #     hook runs, and reads what that commit adds.

@@ -113,6 +113,11 @@ jobs:
               # guards nothing.
               - 'scripts/install-git-hooks.sh'
               - '.githooks/**'
+              # `package.json` only for its `prepare` entry, which is what
+              # causes the installer to run at all. Deleting that line breaks
+              # the whole chain, and without this the job that says so would
+              # not even be triggered by the commit that did it.
+              - 'package.json'
               - '**/*.example'
               - 'compose.*.yaml'
 
@@ -360,15 +365,29 @@ jobs:
       # test it would quietly stop proving that.
       - run: python3 scripts/test_credential_detector.py --verbose
       # The other half of the guard. The fixtures prove the detector can tell a
-      # credential from a placeholder; this proves the thing ever gets
-      # installed, which is the half that fails silently — git ignores a
-      # `core.hooksPath` pointing nowhere without saying a word.
-      - name: The installer configures git, and the hook it points at exists
+      # credential from a placeholder; these build a throwaway repository, run
+      # the real installer in it and make real commits, which is the half that
+      # fails silently — git ignores a `core.hooksPath` pointing nowhere
+      # without saying a word.
+      - run: python3 scripts/test_commit_guard.py --verbose
+      # What those tests cannot see from inside a repository they built
+      # themselves: that anything in *this* one still runs the installer.
+      # `prepare` is the only thing that does, and it is one deletable line.
+      - name: The install lifecycle still runs the installer
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          prepare = json.load(open("package.json"))["scripts"].get("prepare", "")
+          if "install-git-hooks.sh" not in prepare:
+              sys.exit(f"package.json `prepare` no longer installs the hooks: {prepare!r}")
+          PY
+      # `--local`, so a runner that happened to carry a global `core.hooksPath`
+      # could not answer for the repository and make this pass vacuously.
+      - name: The installer configures git in this checkout
         run: |
           git config --unset core.hooksPath || true
           ./scripts/install-git-hooks.sh
-          test "$(git config --get core.hooksPath)" = ".githooks"
-          test -x .githooks/pre-commit
+          test "$(git config --local --get core.hooksPath)" = ".githooks"
 
   # One status to require on the branch, so a skipped job does not read as a
   # missing check. `always()` is what lets this run when upstream jobs skip.

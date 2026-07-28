@@ -43,7 +43,17 @@ hooks_path=".githooks"
 # It says so rather than exiting quietly. A control that skips itself in
 # silence is indistinguishable from one that ran, and this script has exactly
 # one job to be wrong about.
-if ! command -v git >/dev/null 2>&1 || ! git rev-parse --git-dir >/dev/null 2>&1; then
+#
+# The two reasons are reported separately because they are not the same
+# situation, and the image build hits the first one: saying "not a git
+# repository" on a machine that simply has no git installed sends whoever is
+# reading the build log looking in the wrong place.
+if ! command -v git >/dev/null 2>&1; then
+  echo "==> No git on PATH, so no git hooks to install"
+  exit 0
+fi
+
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "==> Not a git repository, so no git hooks to install"
   exit 0
 fi
@@ -52,6 +62,12 @@ fi
 # `core.hooksPath` pointing at a directory that is not there, without a word,
 # so announcing success without looking would just move the silence one step
 # along.
+#
+# Unlike the checks above, this one is fatal, and `prepare` failing fails the
+# whole `pnpm install`. That is deliberate and it is safe: the no-git cases
+# have already returned, so reaching this line means a real clone of this
+# repository that has lost a tracked, executable file. There is no reading of
+# that which should end in a working install.
 if [ ! -x "$hooks_path/pre-commit" ]; then
   echo "Cannot install git hooks: $hooks_path/pre-commit is missing or not executable." >&2
   exit 1

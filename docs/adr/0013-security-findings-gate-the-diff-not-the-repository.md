@@ -79,11 +79,11 @@ Docker is therefore deliberately absent from the Dependabot ecosystems.
 Everything that ecosystem can see here is either already patched by the rebuild
 — the application's tags and the proxy's — or never deployed:
 `apps/judge/Dockerfile` is local-only by its own opening comment, and the
-`postgres:17-alpine` in the compose files is development scaffolding, since
-production runs RDS. The one deployed image it cannot see is
-`python:3.13-alpine`, which is named in a shell variable rather than a `FROM`.
-Configured here, the bot would open pull requests about everything except the
-thing that matters.
+`postgres:17-alpine` in the compose files exists for local development and the
+end-to-end stack, since production runs RDS. The one deployed image it cannot
+see is `python:3.13-alpine`, which is named in a shell variable rather than a
+`FROM`. Configured here, the bot would open pull requests about everything
+except the thing that matters.
 
 The judge is the exception, and it is the one to watch. It runs as a host
 process from a machine image built out of band (ADR-0005,

@@ -25,6 +25,9 @@
     "name" : "Patterns",
     "description" : "The Code Discipline's catalogue"
   }, {
+    "name" : "Profile",
+    "description" : "Personal Bests and recent Runs, derived from a User's Runs"
+  }, {
     "name" : "Typing Runs",
     "description" : "Runs against a Passage, verified server-side"
   } ],
@@ -318,6 +321,37 @@
         }
       }
     },
+    "/api/profile" : {
+      "get" : {
+        "tags" : [ "Profile" ],
+        "summary" : "Read this browser's own profile",
+        "description" : "Personal Bests per Discipline, best Accuracy, recent average, and the most recent Runs of both kinds interleaved. Every figure is computed from the User's Runs at the moment of the request; none of it is stored.\n\nA User with no Runs is a 200 with empty lists, not a 404. They exist and have simply not played yet, and the screen has an inviting first-Run state to show for it.\n",
+        "operationId" : "mine",
+        "parameters" : [ {
+          "name" : "gmc_recognition",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "The profile of the User this browser is",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "This browser is nobody yet"
+          }
+        }
+      }
+    },
     "/api/patterns" : {
       "get" : {
         "tags" : [ "Patterns" ],
@@ -505,9 +539,19 @@
           "completedAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "personalBest" : {
+            "type" : "boolean",
+            "description" : "Whether this Run is a new Personal Best in its Discipline",
+            "example" : true
+          },
+          "previousBestWpm" : {
+            "type" : "number",
+            "description" : "The Personal Best this Run beat, when it beat one",
+            "example" : 112.0
           }
         },
-        "required" : [ "accuracy", "completedAt", "correctCharacters", "discipline", "elapsedMillis", "errors", "id", "keystrokes", "passageId", "wpm" ]
+        "required" : [ "accuracy", "completedAt", "correctCharacters", "discipline", "elapsedMillis", "errors", "id", "keystrokes", "passageId", "personalBest", "wpm" ]
       },
       "Rejection" : {
         "type" : "object",
@@ -611,9 +655,19 @@
           "completedAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "personalBest" : {
+            "type" : "boolean",
+            "description" : "Whether this Run is a new Personal Best in the Code Discipline",
+            "example" : true
+          },
+          "previousBestWpm" : {
+            "type" : "number",
+            "description" : "The Personal Best this Run beat, when it beat one",
+            "example" : 38.4
           }
         },
-        "required" : [ "completedAt", "elapsedMillis", "id", "keystrokes", "patternId", "patternSlug", "testsPassed", "testsTotal", "verdict", "wpm" ]
+        "required" : [ "completedAt", "elapsedMillis", "id", "keystrokes", "patternId", "patternSlug", "personalBest", "testsPassed", "testsTotal", "verdict", "wpm" ]
       },
       "Unjudged" : {
         "type" : "object",
@@ -794,6 +848,83 @@
           }
         },
         "required" : [ "attribution", "characterCount", "discipline", "id", "text" ]
+      },
+      "HistoryEntry" : {
+        "type" : "object",
+        "description" : "One Run in a User's history, of either kind",
+        "properties" : {
+          "runId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "discipline" : {
+            "type" : "string",
+            "description" : "One of the three ways to play",
+            "enum" : [ "QUOTES", "PROSE", "CODE" ]
+          },
+          "wpm" : {
+            "type" : "number",
+            "example" : 118.4
+          },
+          "verdict" : {
+            "type" : "string",
+            "description" : "The Verdict, for a Solve Run. Absent for a Typing Run.",
+            "enum" : [ "passed", "failed", "timeout", "error" ]
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "completedAt", "discipline", "runId", "wpm" ]
+      },
+      "PersonalBest" : {
+        "type" : "object",
+        "description" : "A User's highest WPM within one Discipline, derived from their Runs",
+        "properties" : {
+          "discipline" : {
+            "type" : "string",
+            "description" : "One of the three ways to play",
+            "enum" : [ "QUOTES", "PROSE", "CODE" ]
+          },
+          "wpm" : {
+            "type" : "number",
+            "example" : 148.0
+          }
+        },
+        "required" : [ "discipline", "wpm" ]
+      },
+      "Profile" : {
+        "type" : "object",
+        "description" : "A User's Personal Bests and recent Runs, derived at query time",
+        "properties" : {
+          "user" : {
+            "$ref" : "#/components/schemas/User"
+          },
+          "personalBests" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PersonalBest"
+            }
+          },
+          "bestAccuracy" : {
+            "type" : "number",
+            "description" : "Highest Accuracy across Typing Runs",
+            "example" : 99.2
+          },
+          "recentAverageWpm" : {
+            "type" : "number",
+            "description" : "Mean WPM across the Runs in history",
+            "example" : 126.4
+          },
+          "history" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/HistoryEntry"
+            }
+          }
+        },
+        "required" : [ "history", "personalBests", "user" ]
       },
       "HealthStatus" : {
         "type" : "object",

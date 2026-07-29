@@ -79,6 +79,14 @@ public final class Browser {
         return send("/api/typing-runs", submission, as);
     }
 
+    /** Reads a path as whoever this browser is, carrying its Recognition Key. */
+    public <T> ResponseEntity<T> reads(String path, Class<T> as) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.put(HttpHeaders.COOKIE, List.of(RecognitionCookie.NAME + "=" + recognitionKey));
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        return http.exchange(path, HttpMethod.GET, new HttpEntity<>(headers), as);
+    }
+
     /**
      * Submits a body the typed record cannot express.
      *

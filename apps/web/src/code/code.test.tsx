@@ -97,6 +97,10 @@ function backendServing(verdict: SolveRun["verdict"] = "passed", testsPassed = 6
           keystrokes: submission.keystrokes,
           wpm: 33.5,
           completedAt: submission.completedAt,
+          // The announcement has its own test on the Typing Run's result screen,
+          // which is the same component and the same claim. Here it stays off so
+          // these tests are about the Verdict.
+          personalBest: false,
         },
         { status: 201 },
       );

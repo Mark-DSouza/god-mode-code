@@ -1,5 +1,6 @@
 import type { SolveRun } from "@gmc/api-client";
 import { Badge, Button, Card, SolveResultPanel } from "../design-system/index.ts";
+import { PersonalBestCallout } from "../profile/PersonalBestCallout.tsx";
 
 /**
  * What the Solve Run was worth.
@@ -27,7 +28,9 @@ export function SolveResultScreen({
 }) {
   return (
     <section className="flex flex-col items-center gap-6" aria-label="Solve Run result">
-      <Badge tone="warning">Solve Run logged</Badge>
+      <Badge tone="warning" dot={run.personalBest}>
+        {run.personalBest ? "New Personal Best" : "Solve Run logged"}
+      </Badge>
 
       <SolveResultPanel
         className="w-full"
@@ -39,6 +42,16 @@ export function SolveResultScreen({
         time={Math.round(run.elapsedMillis / 1000)}
         wpm={Number(run.wpm)}
       />
+
+      {/* Only a Passed Solve Run ever gets here: a program that does not work is
+          not a best at anything, and the server is the one that decides it. */}
+      {run.personalBest && (
+        <PersonalBestCallout
+          wpm={run.wpm}
+          previousBestWpm={run.previousBestWpm}
+          discipline="CODE"
+        />
+      )}
 
       <div className="flex flex-wrap justify-center gap-4">
         <Button size="lg" disabled={pending} onClick={onSolveAgain}>

@@ -1,4 +1,5 @@
 import { useCurrentUser } from "../api/user.ts";
+import { initialsFor } from "./initials.ts";
 import { Avatar, Wordmark } from "../design-system/index.ts";
 
 /** Shown where a Handle would be when the backend never answered. */
@@ -27,7 +28,7 @@ const UNKNOWN = "—";
  * the mockup's mobile header drops it only because the mockup had no Handle to
  * show.
  */
-export function Header() {
+export function Header({ onOpenProfile }: { onOpenProfile: () => void }) {
   const user = useCurrentUser();
   const handle = user.data?.handle;
   // An empty header is indistinguishable from a rendering fault. A dash says
@@ -43,8 +44,18 @@ export function Header() {
         <Wordmark size={20} className="hidden min-[480px]:inline-flex" />
 
         {/* The tile keeps its space while the request is in flight, so nothing
-            jumps sideways when the Handle lands. */}
-        <div className="flex min-w-0 items-center gap-2">
+            jumps sideways when the Handle lands.
+
+            A real button, labelled for what it does rather than by the Handle
+            inside it: at 320px the Handle is truncated on screen, and an
+            accessible name that ends mid-word is worse than one that says where
+            the control goes. */}
+        <button
+          type="button"
+          onClick={onOpenProfile}
+          aria-label="Your profile"
+          className="flex min-w-0 cursor-pointer items-center gap-2 rounded-sm hover:opacity-80"
+        >
           <Avatar
             data-testid="user-avatar"
             // Decorative. The Handle beside it is the accessible answer to "who
@@ -60,24 +71,8 @@ export function Header() {
           >
             {shown}
           </span>
-        </div>
+        </button>
       </div>
     </header>
   );
-}
-
-/**
- * The two letters an avatar tile shows for a Handle: the initial of each word.
- *
- * `PERCOLATING_FERRET` gives PF, and `SPIRALING_MANTIS_2` still gives SM — the
- * collision suffix is bookkeeping, not part of who someone is.
- */
-function initialsFor(handle: string): string {
-  return handle
-    .split("_")
-    .map((word) => word.charAt(0))
-    .filter((letter) => /[A-Za-z]/.test(letter))
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
 }

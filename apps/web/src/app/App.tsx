@@ -14,6 +14,7 @@ import { PatternBrowser } from "../code/PatternBrowser.tsx";
 import { SolveResultScreen } from "../code/SolveResultScreen.tsx";
 import { SolveScreen } from "../code/SolveScreen.tsx";
 import { Badge } from "../design-system/index.ts";
+import { ProfileScreen } from "../profile/ProfileScreen.tsx";
 import { HomeScreen } from "../run/HomeScreen.tsx";
 import { ResultScreen } from "../run/ResultScreen.tsx";
 import { RunScreen } from "../run/RunScreen.tsx";
@@ -37,7 +38,10 @@ type Screen =
   // dealt it (ADR-0004).
   | { name: "browsing" }
   | { name: "solving"; challenge: SolveChallenge }
-  | { name: "solved"; run: SolveRun };
+  | { name: "solved"; run: SolveRun }
+  // The one screen that is about the player rather than about a Challenge, and
+  // the one that would be worth a URL if any of them were.
+  | { name: "profile" };
 
 /**
  * Choose a Discipline, transcribe the Passage or solve the Pattern, and see what
@@ -79,7 +83,7 @@ export function App() {
       <RainBackdrop />
 
       <div className="relative flex min-h-dvh flex-col" style={{ zIndex: "var(--z-content)" }}>
-        <Header />
+        <Header onOpenProfile={() => setScreen({ name: "profile" })} />
 
         <main className="mx-auto flex w-full max-w-[var(--container-app)] flex-1 flex-col justify-center gap-6 px-5 py-9">
           {screen.name === "choosing" && (
@@ -131,6 +135,18 @@ export function App() {
               challenge={screen.challenge}
               onJudged={(run) => setScreen({ name: "solved", run })}
               onLeave={() => setScreen({ name: "browsing" })}
+            />
+          )}
+
+          {screen.name === "profile" && (
+            <ProfileScreen
+              // The empty state's single action deals a Passage rather than
+              // sending anybody back to the tiles to say what they came here
+              // having already decided.
+              onStart={() => start(lastPlayed)}
+              onLeave={() => setScreen({ name: "choosing" })}
+              pending={request.isPending}
+              failed={request.isError}
             />
           )}
 

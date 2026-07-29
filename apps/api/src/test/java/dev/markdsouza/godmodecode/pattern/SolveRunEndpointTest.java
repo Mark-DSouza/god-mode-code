@@ -233,6 +233,40 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     }
 
     @Test
+    @DisplayName("only a Passed Solve Run can be a Personal Best, and it says what it beat")
+    void onlyAPassedSolveRunCanBeAPersonalBest() {
+        Browser browser = Browser.arrivingAt(http);
+
+        SolveRun first = solvesIn(browser, Duration.ofSeconds(50));
+        assertThat(first.personalBest()).isTrue();
+        assertThat(first.previousBestWpm()).as("there was nothing to beat").isNull();
+
+        // Written faster than the best, and it does not work. Only Passed Solve
+        // Runs are ranked (CONTEXT.md), so this sets nothing however quick it
+        // was — the alternative is a best held by a program that fails.
+        StubJudge.answers(HASH_MAP, "failed", 2, TESTS);
+        SolveRun quickAndWrong = solvesIn(browser, Duration.ofSeconds(10));
+        assertThat(quickAndWrong.wpm()).isGreaterThan(first.wpm());
+        assertThat(quickAndWrong.personalBest()).isFalse();
+
+        StubJudge.answers(HASH_MAP, "passed", TESTS, TESTS);
+        SolveRun quickAndRight = solvesIn(browser, Duration.ofSeconds(20));
+        assertThat(quickAndRight.personalBest()).isTrue();
+        // The best it beat, not the faster failure in between.
+        assertThat(quickAndRight.previousBestWpm()).isEqualByComparingTo(first.wpm());
+    }
+
+    /** Writes the same working solution over the given time, against a fresh Challenge. */
+    private SolveRun solvesIn(Browser browser, Duration took) {
+        SolveChallenge challenge = browser.isHanded(HASH_MAP);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(2));
+        SolveRun run = browser.submits(Browser.wrote(challenge, SOLUTION, took), SolveRun.class)
+                .getBody();
+        assertThat(run).as("the Solve Run was not recorded").isNotNull();
+        return run;
+    }
+
+    @Test
     @DisplayName("a Passage Challenge cannot be answered with source")
     void aPassageChallengeCannotBeAnsweredWithSource() {
         Browser browser = Browser.arrivingAt(http);

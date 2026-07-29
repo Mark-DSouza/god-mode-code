@@ -372,6 +372,55 @@ class TypingRunEndpointTest extends AbstractIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    @DisplayName("a Run that beats every earlier one in its Discipline says so, and says what it beat")
+    void aRunThatBeatsEveryEarlierOneSaysSo() {
+        Browser browser = Browser.arrivingAt(http);
+
+        TypingRun first = perfectRunTaking(browser, Discipline.QUOTES, Duration.ofSeconds(50));
+        // A first Run is a Personal Best however slow it was — there was nothing
+        // to beat, which is why there is no delta to show for it.
+        assertThat(first.personalBest()).isTrue();
+        assertThat(first.previousBestWpm()).isNull();
+
+        TypingRun faster = perfectRunTaking(browser, Discipline.QUOTES, Duration.ofSeconds(20));
+        assertThat(faster.wpm()).isGreaterThan(first.wpm());
+        assertThat(faster.personalBest()).isTrue();
+        // What the result screen subtracts from to announce the improvement.
+        assertThat(faster.previousBestWpm()).isEqualByComparingTo(first.wpm());
+
+        TypingRun offDay = perfectRunTaking(browser, Discipline.QUOTES, Duration.ofSeconds(50));
+        assertThat(offDay.personalBest()).isFalse();
+        // A Run that fell short has no business quoting the best it did not
+        // reach: there is nothing to announce, so there is nothing here.
+        assertThat(offDay.previousBestWpm()).isNull();
+    }
+
+    @Test
+    @DisplayName("a Personal Best is per Discipline, so a first Prose Run is one however fast Quotes was")
+    void aPersonalBestIsPerDiscipline() {
+        Browser browser = Browser.arrivingAt(http);
+
+        perfectRunTaking(browser, Discipline.QUOTES, Duration.ofSeconds(15));
+        TypingRun prose = perfectRunTaking(browser, Discipline.PROSE, Duration.ofSeconds(55));
+
+        // Slower than the Quotes Run before it, and still a best: a Personal
+        // Best is the highest WPM *within* a Discipline (CONTEXT.md), and
+        // nothing was ever typed in this one.
+        assertThat(prose.personalBest()).isTrue();
+        assertThat(prose.previousBestWpm()).isNull();
+    }
+
+    /** Transcribes a Passage in this Discipline perfectly, over the given time. */
+    private TypingRun perfectRunTaking(Browser browser, Discipline discipline, Duration took) {
+        Challenge challenge = browser.isHanded(discipline);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(2));
+        TypingRun run = browser.submits(Browser.perfectRun(challenge, took), TypingRun.class)
+                .getBody();
+        assertThat(run).as("the Run was not recorded").isNotNull();
+        return run;
+    }
+
     private static void assertRefused(ResponseEntity<Rejection> response, RejectionReason expected) {
         // 422 rather than 400: the request was well formed and understood, and
         // it is the Run that did not survive.

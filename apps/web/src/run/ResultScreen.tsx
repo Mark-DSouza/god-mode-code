@@ -1,5 +1,6 @@
 import type { TypingRun } from "@gmc/api-client";
 import { Badge, Button, Card, ResultPanel } from "../design-system/index.ts";
+import { PersonalBestCallout } from "../profile/PersonalBestCallout.tsx";
 import { DISCIPLINES } from "./disciplines.ts";
 
 /**
@@ -26,10 +27,13 @@ export function ResultScreen({
 }) {
   return (
     <section className="flex flex-col items-center gap-6" aria-label="Run result">
-      <Badge tone="warning">Run logged</Badge>
+      <Badge tone="warning" dot={run.personalBest}>
+        {run.personalBest ? "New Personal Best" : "Run logged"}
+      </Badge>
 
       <ResultPanel
         className="w-full"
+        isBest={run.personalBest}
         wpm={Math.round(run.wpm)}
         accuracy={run.accuracy}
         // Whole seconds. A tenth of a second is below the resolution of the
@@ -38,6 +42,19 @@ export function ResultScreen({
         time={Math.round(run.elapsedMillis / 1000)}
         errors={run.errors}
       />
+
+      {/* Announced only when the server says so. The browser could compare two
+          numbers itself and would be wrong the moment another tab records a
+          faster Run — whether this beat everything before it is a question about
+          every Run the User has, and only the request that recorded it was in a
+          position to ask. */}
+      {run.personalBest && (
+        <PersonalBestCallout
+          wpm={run.wpm}
+          previousBestWpm={run.previousBestWpm}
+          discipline={run.discipline}
+        />
+      )}
 
       <div className="flex flex-wrap justify-center gap-4">
         <Button size="lg" disabled={pending} onClick={onRunAgain}>

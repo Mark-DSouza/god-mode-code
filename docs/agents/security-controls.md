@@ -94,6 +94,16 @@ the prompt. Do not add the command to the allowlist to silence it unless it
 passes the rule — and check the tool's own `--help` for an output-file flag
 before deciding that it does.
 
+**Naming a control in prose is not touching it.** A commit message or a pull
+request body that quotes a protected path goes through untouched, whether it is
+written as `-m`, as `git commit -F -` with a heredoc, or as `gh pr create
+--body "$(cat <<'EOF' … EOF)"`. That matters most on a branch whose whole
+subject is a control, where otherwise every commit and every pull request
+prompts on its own description. The licence belongs to the message flag alone:
+a heredoc that is program text — `python3 <<'EOF' … EOF` — is read as a write
+exactly as before, and a credential in a message is still refused, since the
+credential check reads the raw command and never sees any of this stripping.
+
 If the approved change is to a workflow, keep every `uses:` pinned to a commit
 SHA with its `# vX.Y.Z` comment beside it. Dependabot rewrites the pair
 together; a tag in there is a moving target nobody reviews again.

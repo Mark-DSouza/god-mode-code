@@ -371,6 +371,40 @@ MESSAGE_VALUE = re.compile(
     r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|[^\s;|&<>]+)"
 )
 
+# The same rule as `MESSAGE_VALUE`, for the flag people write prose with.
+#
+# A message worth paragraphs is not passed as `-m`; it is `git commit -F -`
+# with a heredoc, or `gh pr create --body "$(cat <<'EOF' … EOF)"`. Both went
+# straight past the `-m` strip, because `SEGMENTS` splits on `\n`: every line
+# of the message became its own segment, and any line naming a control asked.
+# The branch that added this prompted on its own commit message and again on
+# its own pull request body, which is the failure `readable_segments` already
+# exists to prevent, reached through a different flag.
+#
+# Scoped to a heredoc introduced on a line that carries a message flag, and
+# emphatically not applied to heredocs at large. A heredoc body is ordinarily
+# *program text* — `bash -c 'cat > file <<EOF'` is named in this file's
+# docstring as where an agent goes when refused a `Write` — so blanking every
+# body would take `python3 <<'EOF'\nopen('.githooks/pre-commit','w')\nEOF`
+# silent, which is a write this catches today. The tests pin both directions.
+#
+# Separators are excluded between the flag and the `<<`, or `gh pr create
+# --body x && python3 <<'EOF'` would hand the message flag's licence to the
+# heredoc after the `&&`. What remains: a message flag and an unrelated
+# heredoc on one line with no separator between them, which is a shape nobody
+# writes by accident, and the pull request diff is what covers it.
+#
+# The credential rule cannot be reached by any of this — it scans the raw
+# command before segments exist. A credential in a commit message is a
+# credential in the repository, and there is a test saying so.
+MESSAGE_HEREDOC = re.compile(
+    r"(?P<head>[^\n]*"
+    r"(?:-F[=\s]+-|--file[=\s]+-|--body-file[=\s]+-|--body\b|--title\b|-m[=\s]|--message\b)"
+    r"[^\n;|&]*<<-?\s*(?P<quote>['\"]?)(?P<tag>[A-Za-z_]\w*)(?P=quote)[^\n]*\n)"
+    r"(?:(?!\s*(?P=tag)\s*$)[^\n]*\n)*",
+    re.MULTILINE,
+)
+
 # The same position, compiled: everything after it can have its `-m` value
 # taken out, everything before it cannot. A `-m` in front of the subcommand is
 # not a commit message and is left alone. Excluding `-`, `/` and `.` after the
@@ -401,9 +435,16 @@ def readable_segments(command: str) -> list[str]:
     What it gives up: `git commit -m "$(cat .githooks/pre-commit)"` no longer
     names a protected path. That is a read, and reads were already the
     generous half of `protected_in_command`.
+
+    `MESSAGE_HEREDOC` is the same rule for the flag prose is actually written
+    with, and runs first because the body it removes is what the split would
+    otherwise turn into one segment per line.
     """
     readable = []
-    for segment in SEGMENTS.split(CONTINUATION.sub(" ", command)):
+    # Before the split, since the body this removes is what the split would
+    # otherwise turn into one segment per line of prose.
+    without_message_bodies = MESSAGE_HEREDOC.sub(r"\g<head>", command)
+    for segment in SEGMENTS.split(CONTINUATION.sub(" ", without_message_bodies)):
         starts = A_COMMIT.search(segment)
         if not starts:
             readable.append(segment)

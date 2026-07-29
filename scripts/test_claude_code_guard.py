@@ -507,6 +507,85 @@ class ReadingAControlDoesNotAsk(GuardTest):
         self.assertAsked(bash("git diff && sed -i 's/x//' .claude/settings.json"))
 
 
+class MessageTextInAHeredocIsStillAMessage(GuardTest):
+    """The `-m` rule, reached through the flag people actually use for prose.
+
+    `readable_segments` already takes `-m` values out before looking for a
+    protected path, because a commit message naming a control is describing
+    the work rather than doing it. A message long enough to want paragraphs is
+    written with `-F -` and a heredoc instead, and that went the other way: the
+    segment splitter treats `\\n` as a separator, so every line of the message
+    became its own command, and any line naming a control asked.
+
+    Measured on the branch that added this — its own commit message and its own
+    pull request body both prompted, which is the exact failure the `-m` rule
+    exists to prevent.
+    """
+
+    def test_a_commit_message_from_stdin_does_not_ask(self) -> None:
+        self.assertNoDecision(
+            bash(
+                "git commit -q -F - <<'EOF'\n"
+                "Close the lookahead hole\n"
+                "\n"
+                "`stat/collect.sh .githooks/pre-commit` is silent on main, and\n"
+                "scripts/claude_code_guard.py is where the lookahead lives.\n"
+                "EOF"
+            )
+        )
+
+    def test_a_pull_request_body_does_not_ask(self) -> None:
+        # `--body "$(cat <<'EOF' … EOF)"` is how a body with paragraphs is
+        # passed to `gh`, and the heredoc is introduced on the `--body` line.
+        self.assertNoDecision(
+            bash(
+                "gh pr create --draft --title x --body \"$(cat <<'EOF'\n"
+                "Extends the allowlist in scripts/claude_code_guard.py.\n"
+                "Does not touch .githooks/pre-commit.\n"
+                "EOF\n"
+                ')"'
+            )
+        )
+
+    def test_a_heredoc_that_is_not_a_message_still_asks(self) -> None:
+        # The whole reason the strip is scoped to a message flag rather than
+        # applied to every heredoc. A heredoc body is ordinarily *program
+        # text*, and program text naming a control is the write this guard is
+        # for — `bash -c 'cat > file <<EOF'` is named in this file's own
+        # docstring as the route an agent takes when refused a `Write`.
+        self.assertAsked(
+            bash("python3 <<'EOF'\nopen('.githooks/pre-commit','w').write('')\nEOF")
+        )
+        self.assertAsked(bash("cat > .githooks/pre-commit <<'EOF'\nx\nEOF"))
+        self.assertAsked(
+            bash("bash <<'EOF'\nrm .githooks/pre-commit\nEOF")
+        )
+        # The message flag licenses one heredoc, not everything after it: the
+        # `&&` is what stops `--body` handing its licence to the next command.
+        self.assertAsked(
+            bash(
+                "gh pr create --body x && python3 <<'EOF'\n"
+                "open('.githooks/pre-commit','w').write('')\n"
+                "EOF"
+            )
+        )
+
+    def test_the_strip_stops_at_the_delimiter(self) -> None:
+        # A message body is removed up to its terminator and no further, or a
+        # write parked after `EOF` would ride out on the message's licence.
+        self.assertAsked(
+            bash("git commit -F - <<'EOF'\nan ordinary message\nEOF\nrm .githooks/pre-commit")
+        )
+
+    def test_a_credential_in_a_message_heredoc_is_still_denied(self) -> None:
+        # The credential rule deliberately does not read segments, so none of
+        # the stripping above can reach it. A credential in a commit message is
+        # a credential in the repository.
+        self.assertDenied(
+            bash(f"git commit -F - <<'EOF'\nrotate {AWS_KEY_ID}\nEOF")
+        )
+
+
 class RoutingAroundTheCommitGuardAsks(GuardTest):
     """The other half of the second rule: satisfying the gate, not skipping it.
 

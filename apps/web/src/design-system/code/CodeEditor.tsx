@@ -7,8 +7,6 @@ export interface CodeEditorProps {
   /** What the player has written below it. */
   value: string;
   onChange: (value: string) => void;
-  /** Every character key pressed, so the caller can count them. */
-  onKeystroke?: () => void;
   disabled?: boolean;
   inputRef?: Ref<HTMLTextAreaElement>;
   className?: string;
@@ -51,7 +49,6 @@ export function CodeEditor({
   scaffold,
   value,
   onChange,
-  onKeystroke,
   disabled = false,
   inputRef,
   className,
@@ -113,13 +110,12 @@ export function CodeEditor({
           value={value}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
-          onKeyDown={(event) => {
-            indentOnTab(event);
-            // One character key, one keystroke. Modifiers, arrows and
-            // backspace are not: the count is what was produced, and charging
-            // for the correction as well as the mistake would double-count it.
-            if (event.key.length === 1 && !event.metaKey && !event.ctrlKey) onKeystroke?.();
-          }}
+          onKeyDown={indentOnTab}
+          // A four-line answer is trivially pasteable (ADR-0004), and the Typing
+          // Run's surface refuses a paste for the same reason. Detectable only
+          // because this is a real form control: a focusable div has no paste
+          // event to prevent.
+          onPaste={(event) => event.preventDefault()}
           aria-label="Write your solution"
           aria-describedby={scaffoldId}
           spellCheck={false}

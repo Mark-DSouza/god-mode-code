@@ -10,8 +10,8 @@ export interface CompletedSolveRun {
 
 export interface SolveRunEngine {
   source: string;
+  /** Takes the field's whole value, not a key. */
   write: (value: string) => void;
-  countKeystroke: () => void;
   keystrokes: number;
   elapsedMillis: number;
   /** The raw data as it stands now, for handing to the server. */
@@ -61,21 +61,38 @@ export function useSolveRun(scaffold: string): SolveRunEngine {
     return () => clearInterval(ticker);
   }, []);
 
+  /**
+   * Counts what actually landed in the field, rather than counting key events.
+   *
+   * A keydown handler undercounts every way of producing text that is not a
+   * plain key: Enter, the four spaces a Tab inserts, an IME commit, an Android
+   * soft keyboard. Undercounting is not cosmetic — the server refuses a
+   * submission reporting fewer keystrokes than it wrote characters, so a
+   * six-line answer would be refused for the five newlines in it.
+   *
+   * Deletions are not counted, in either direction: a backspace is not a
+   * character produced, and the correction of a mistake is not a second
+   * mistake.
+   */
+  function write(next: string) {
+    const added = next.length - source.length;
+    if (added > 0) setKeystrokes((count) => count + added);
+    setSource(next);
+  }
+
   return {
     source,
-    write: setSource,
-    countKeystroke: () => setKeystrokes((count) => count + 1),
+    write,
     keystrokes,
     elapsedMillis,
     completed: () => ({
       source,
-      // Never fewer than the characters that exist: the server refuses a
-      // submission claiming fewer keystrokes than it wrote characters, and a
-      // browser that missed a key event — an IME commit, a paste, a soft
-      // keyboard that reports nothing — would otherwise turn an honest Solve
-      // Run into a refusal. Under-reporting is corrected upwards rather than
-      // guessed at, and detecting the paste it papers over is its own defence.
-      keystrokes: Math.max(keystrokes, source.length),
+      // Reported as counted, never corrected upwards. A four-line answer is
+      // trivially pasteable, so the count is stored beside the source it
+      // produced precisely so the two can be compared (ADR-0004) — and a client
+      // that quietly raised the number to whatever the server would believe
+      // would destroy that signal at its source.
+      keystrokes,
       startedAt: new Date(startedAt.current).toISOString(),
       completedAt: new Date().toISOString(),
     }),

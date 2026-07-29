@@ -33,20 +33,12 @@ export const DISCIPLINES: Record<Discipline, DisciplineDetails> = {
 };
 
 /**
- * The Disciplines that hand out a Passage to transcribe.
+ * Every Discipline that can be played, in the order the home screen offers them.
  *
- * Code is not one of them and never will be: it is a Pattern, judged by running
- * submitted source against Hidden Tests (ADR-0004), so asking for a Passage in
- * it answers "there is nothing here". Picking it on the home screen leads to the
- * catalogue rather than straight into a Run, which is the other thing that makes
- * it different — you choose your Pattern, and nobody chooses their Passage.
+ * Code is on the list but is not dealt out like the other two: picking it opens
+ * the Pattern catalogue, because a Pattern is chosen rather than handed over and
+ * there is no Passage in it to ask for (ADR-0004).
  */
-export const TRANSCRIPTION_DISCIPLINES = [
-  "QUOTES",
-  "PROSE",
-] as const satisfies readonly Discipline[];
-
-/** Every Discipline that can be played, in the order the home screen offers them. */
 export const PLAYABLE_DISCIPLINES = [
   "QUOTES",
   "PROSE",

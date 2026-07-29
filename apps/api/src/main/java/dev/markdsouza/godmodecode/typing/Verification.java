@@ -96,7 +96,10 @@ sealed interface Verification {
         }
 
         int correctCharacters = correctCharacters(passage.text(), submission.typedText());
-        BigDecimal wpm = wpm(correctCharacters, elapsedMillis);
+        // Correct characters only, because a Typing Run is transcription:
+        // characters that do not match the Passage were not progress through it,
+        // and counting them would make hammering the keyboard a strategy.
+        BigDecimal wpm = Wpm.over(correctCharacters, elapsedMillis);
         if (Wpm.isImplausible(wpm)) {
             return new Rejected(RejectionReason.IMPLAUSIBLE_SPEED);
         }
@@ -123,17 +126,6 @@ sealed interface Verification {
             }
         }
         return correct;
-    }
-
-    /**
-     * Correct characters only, over elapsed minutes.
-     *
-     * Correct only, because a Typing Run is transcription: characters that do
-     * not match the Passage were not progress through it, and counting them
-     * would make hammering the keyboard a strategy.
-     */
-    private static BigDecimal wpm(int correctCharacters, long elapsedMillis) {
-        return Wpm.over(correctCharacters, elapsedMillis);
     }
 
     /** Correct keystrokes over total keystrokes, as a percentage. */

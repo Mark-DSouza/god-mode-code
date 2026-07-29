@@ -221,6 +221,39 @@ describe("solving a Pattern", () => {
     ]);
   });
 
+  it("says on a phone that this Discipline wants a keyboard", async () => {
+    backendServing();
+    const user = userEvent.setup();
+
+    await browseThePatterns(user);
+
+    // Rendered, not hidden behind a width the component measured — the note is
+    // in the markup and CSS decides who sees it, which is correct on the first
+    // paint rather than after an effect has run.
+    expect(await screen.findByText(/suits a desktop/i)).toBeInTheDocument();
+  });
+
+  it("reports the keystrokes it counted, without rounding them up to the source", async () => {
+    const backend = backendServing();
+    const user = userEvent.setup();
+
+    await startSolving(user);
+    await user.click(editor());
+    // Written, half of it deleted, then written again — the ordinary shape of
+    // getting it wrong once.
+    await user.keyboard("    return Nope{Backspace}{Backspace}{Backspace}one");
+    await user.click(screen.getByRole("button", { name: /^submit$/i }));
+    await screen.findByRole("region", { name: /solve run result/i });
+
+    const submitted = backend.submissions[0];
+    expect(submitted?.source).toBe("    return None");
+    // Every character produced, deletions excluded and corrections counted
+    // again: eighteen presses for fifteen characters. A count the client had
+    // quietly raised to match the source would be the paste signal ADR-0004
+    // wants kept, thrown away before it left the browser.
+    expect(submitted?.keystrokes).toBe(18);
+  });
+
   it("indents on Tab, because Python is not writable without it", async () => {
     backendServing();
     const user = userEvent.setup();

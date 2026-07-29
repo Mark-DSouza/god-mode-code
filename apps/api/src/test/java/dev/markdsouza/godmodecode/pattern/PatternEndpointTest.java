@@ -2,6 +2,7 @@ package dev.markdsouza.godmodecode.pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.markdsouza.godmodecode.Browser;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
@@ -129,9 +130,9 @@ class PatternEndpointTest extends JudgedIntegrationTest {
     @DisplayName("being handed a Pattern records an Issue with a window for thinking in")
     void beingHandedAPatternRecordsAnIssue() {
         activateTheShippedCatalogue();
-        Player player = Player.arrivingAt(http);
+        Browser browser = Browser.arrivingAt(http);
 
-        ResponseEntity<SolveChallenge> response = player.asksFor(HASH_MAP, SolveChallenge.class);
+        ResponseEntity<SolveChallenge> response = browser.asksFor(HASH_MAP, SolveChallenge.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         SolveChallenge challenge = response.getBody();
@@ -156,10 +157,10 @@ class PatternEndpointTest extends JudgedIntegrationTest {
     @DisplayName("an unactivated Pattern cannot be asked for, and neither can one that does not exist")
     void anUnactivatedPatternCannotBeAskedFor() {
         invent("test-unproven", 2);
-        Player player = Player.arrivingAt(http);
+        Browser browser = Browser.arrivingAt(http);
 
-        assertThat(player.asksFor("test-unproven", String.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(player.asksFor("no-such-pattern", String.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(browser.asksFor("test-unproven", String.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(browser.asksFor("no-such-pattern", String.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     // ---------------------------------------------------------------- setup ----

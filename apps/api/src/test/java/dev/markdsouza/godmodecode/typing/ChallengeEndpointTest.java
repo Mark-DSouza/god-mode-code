@@ -3,6 +3,7 @@ package dev.markdsouza.godmodecode.typing;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.markdsouza.godmodecode.AbstractIntegrationTest;
+import dev.markdsouza.godmodecode.Browser;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;

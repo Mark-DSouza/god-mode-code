@@ -2,9 +2,9 @@ import type { SolveChallenge, SolveRun } from "@gmc/api-client";
 import { useEffect, useState } from "react";
 import { JudgeUnavailable, useSubmitSolveRun } from "../api/patterns.ts";
 import { RunRefused } from "../api/typing.ts";
-import { Badge, Button, Card, CodeEditor, IconButton, Stat } from "../design-system/index.ts";
+import { Button, Card, CodeEditor, IconButton, Stat } from "../design-system/index.ts";
 import { DesktopSuitsThisBetter } from "./DesktopSuitsThisBetter.tsx";
-import { FAMILIES, SENIORITIES, SENIORITY_TONE } from "./families.ts";
+import { PatternTags } from "./PatternTags.tsx";
 import { useSolveRun } from "./use-solve-run.ts";
 
 /**
@@ -81,8 +81,7 @@ export function SolveScreen({
       <Card className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="font-display text-lg tracking-wide text-heading">{pattern.name}</h1>
-          <Badge tone="neutral">{FAMILIES[pattern.family]}</Badge>
-          <Badge tone={SENIORITY_TONE[pattern.seniority]}>{SENIORITIES[pattern.seniority]}</Badge>
+          <PatternTags pattern={pattern} />
         </div>
         {/* Paragraph by paragraph, because the prompt is written as prose and a
             single block of it is a wall nobody reads before the clock starts. */}
@@ -117,7 +116,6 @@ export function SolveScreen({
         scaffold={pattern.scaffold}
         value={run.source}
         onChange={run.write}
-        onKeystroke={run.countKeystroke}
         disabled={submit.isPending}
       />
 

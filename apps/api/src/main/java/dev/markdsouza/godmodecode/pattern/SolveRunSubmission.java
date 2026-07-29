@@ -46,7 +46,7 @@ public record SolveRunSubmission(
                 @Size(max = 16_384)
                 String source,
         @Schema(
-                        description = "Total character keystrokes, deletions of them excluded",
+                        description = "Every character key pressed, including ones later deleted",
                         example = "180",
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 @Positive int keystrokes,

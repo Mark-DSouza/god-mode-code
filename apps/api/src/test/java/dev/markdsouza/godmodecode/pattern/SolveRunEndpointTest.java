@@ -2,10 +2,12 @@ package dev.markdsouza.godmodecode.pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.markdsouza.godmodecode.Browser;
 import dev.markdsouza.godmodecode.integrity.Rejection;
 import dev.markdsouza.godmodecode.integrity.RejectionReason;
 import dev.markdsouza.godmodecode.judge.Verdict;
 import dev.markdsouza.godmodecode.typing.Challenge;
+import dev.markdsouza.godmodecode.typing.Discipline;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -72,13 +74,13 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     @Test
     @DisplayName("a judged Solve Run is recorded, attributed, and spends its Issue")
     void aJudgedSolveRunIsRecorded() {
-        Player player = Player.arrivingAt(http);
-        SolveChallenge challenge = player.isHanded(HASH_MAP);
-        Player.rewind(jdbc, challenge, Duration.ofMinutes(2));
+        Browser browser = Browser.arrivingAt(http);
+        SolveChallenge challenge = browser.isHanded(HASH_MAP);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(2));
         StubJudge.answers(HASH_MAP, "passed", TESTS, TESTS);
 
         ResponseEntity<SolveRun> response =
-                player.submits(Player.wrote(challenge, SOLUTION, A_MINUTE), SolveRun.class);
+                browser.submits(Browser.wrote(challenge, SOLUTION, A_MINUTE), SolveRun.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         SolveRun run = response.getBody();
@@ -95,7 +97,7 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
                                 .setScale(1, java.math.RoundingMode.HALF_UP));
 
         assertThat(jdbc.queryForObject("SELECT user_id FROM solve_runs WHERE id = ?", UUID.class, run.id()))
-                .isEqualTo(player.user().id());
+                .isEqualTo(browser.user().id());
         // The Scaffold is not stored on the Run: it belongs to the Pattern and
         // is the same on every Run of it.
         assertThat(jdbc.queryForObject("SELECT source FROM solve_runs WHERE id = ?", String.class, run.id()))
@@ -111,12 +113,12 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     @Test
     @DisplayName("the judge is sent the Scaffold and the written lines assembled into one program")
     void theJudgeIsSentTheAssembledProgram() {
-        Player player = Player.arrivingAt(http);
-        SolveChallenge challenge = player.isHanded(HASH_MAP);
-        Player.rewind(jdbc, challenge, Duration.ofMinutes(2));
+        Browser browser = Browser.arrivingAt(http);
+        SolveChallenge challenge = browser.isHanded(HASH_MAP);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(2));
         StubJudge.answers(HASH_MAP, "passed", TESTS, TESTS);
 
-        player.submits(Player.wrote(challenge, SOLUTION, A_MINUTE), SolveRun.class);
+        browser.submits(Browser.wrote(challenge, SOLUTION, A_MINUTE), SolveRun.class);
 
         // The browser never sends the Scaffold back, so the server puts it
         // there — and puts it there exactly once, above lines whose indentation
@@ -127,13 +129,13 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     @Test
     @DisplayName("a Failed Verdict is a recorded Solve Run, not a refusal")
     void aFailedVerdictIsStillARun() {
-        Player player = Player.arrivingAt(http);
-        SolveChallenge challenge = player.isHanded(HASH_MAP);
-        Player.rewind(jdbc, challenge, Duration.ofMinutes(2));
+        Browser browser = Browser.arrivingAt(http);
+        SolveChallenge challenge = browser.isHanded(HASH_MAP);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(2));
         StubJudge.answers(HASH_MAP, "failed", 2, TESTS);
 
         ResponseEntity<SolveRun> response =
-                player.submits(Player.wrote(challenge, SOLUTION, A_MINUTE), SolveRun.class);
+                browser.submits(Browser.wrote(challenge, SOLUTION, A_MINUTE), SolveRun.class);
 
         // A Solve Run can fail, and a failure belongs to the player exactly as
         // much as a pass does (ADR-0006). Two of six is what they were told,
@@ -150,14 +152,14 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     @Test
     @DisplayName("a judge that cannot answer leaves the Challenge live and records nothing")
     void anUnreachableJudgeLeavesTheChallengeLive() {
-        Player player = Player.arrivingAt(http);
-        SolveChallenge challenge = player.isHanded(HASH_MAP);
-        Player.rewind(jdbc, challenge, Duration.ofMinutes(2));
+        Browser browser = Browser.arrivingAt(http);
+        SolveChallenge challenge = browser.isHanded(HASH_MAP);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(2));
         StubJudge.reset();
         StubJudge.otherwise(StubJudge.Behaviour.UNAVAILABLE);
 
         ResponseEntity<Unjudged> response =
-                player.submits(Player.wrote(challenge, SOLUTION, A_MINUTE), Unjudged.class);
+                browser.submits(Browser.wrote(challenge, SOLUTION, A_MINUTE), Unjudged.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(response.getBody()).isNotNull();
@@ -177,14 +179,14 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     @Test
     @DisplayName("a replayed submission finds the Issue already spent")
     void aReplayedSubmissionIsRefused() {
-        Player player = Player.arrivingAt(http);
-        SolveChallenge challenge = player.isHanded(HASH_MAP);
-        Player.rewind(jdbc, challenge, Duration.ofMinutes(2));
+        Browser browser = Browser.arrivingAt(http);
+        SolveChallenge challenge = browser.isHanded(HASH_MAP);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(2));
         StubJudge.answers(HASH_MAP, "passed", TESTS, TESTS);
-        SolveRunSubmission submission = Player.wrote(challenge, SOLUTION, A_MINUTE);
+        SolveRunSubmission submission = Browser.wrote(challenge, SOLUTION, A_MINUTE);
 
-        player.submits(submission, SolveRun.class);
-        ResponseEntity<Rejection> replay = player.submits(submission, Rejection.class);
+        browser.submits(submission, SolveRun.class);
+        ResponseEntity<Rejection> replay = browser.submits(submission, Rejection.class);
 
         assertThat(replay.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
         assertThat(replay.getBody()).isNotNull();
@@ -194,15 +196,15 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     @Test
     @DisplayName("a Challenge answered too long after it went out is refused")
     void anExpiredChallengeIsRefused() {
-        Player player = Player.arrivingAt(http);
-        SolveChallenge challenge = player.isHanded(HASH_MAP);
+        Browser browser = Browser.arrivingAt(http);
+        SolveChallenge challenge = browser.isHanded(HASH_MAP);
         // Past the twenty-minute window, which the client is expected to have
         // noticed first — this is the server refusing to be the last line.
-        Player.rewind(jdbc, challenge, Duration.ofMinutes(25));
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(25));
         StubJudge.answers(HASH_MAP, "passed", TESTS, TESTS);
 
         ResponseEntity<Rejection> response =
-                player.submits(Player.wrote(challenge, SOLUTION, A_MINUTE), Rejection.class);
+                browser.submits(Browser.wrote(challenge, SOLUTION, A_MINUTE), Rejection.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
         assertThat(response.getBody()).isNotNull();
@@ -214,13 +216,13 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     @Test
     @DisplayName("fewer keystrokes than characters written is refused")
     void fewerKeystrokesThanCharactersIsRefused() {
-        Player player = Player.arrivingAt(http);
-        SolveChallenge challenge = player.isHanded(HASH_MAP);
-        Player.rewind(jdbc, challenge, Duration.ofMinutes(2));
+        Browser browser = Browser.arrivingAt(http);
+        SolveChallenge challenge = browser.isHanded(HASH_MAP);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(2));
         StubJudge.answers(HASH_MAP, "passed", TESTS, TESTS);
 
         Instant completedAt = Instant.now();
-        ResponseEntity<Rejection> response = player.submits(
+        ResponseEntity<Rejection> response = browser.submits(
                 new SolveRunSubmission(
                         challenge.issueId(), SOLUTION, SOLUTION.length() - 1, completedAt.minus(A_MINUTE), completedAt),
                 Rejection.class);
@@ -233,10 +235,10 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     @Test
     @DisplayName("a Passage Challenge cannot be answered with source")
     void aPassageChallengeCannotBeAnsweredWithSource() {
-        Player player = Player.arrivingAt(http);
-        Challenge passage = player.isHandedAPassage();
+        Browser browser = Browser.arrivingAt(http);
+        Challenge passage = browser.isHanded(Discipline.QUOTES);
 
-        ResponseEntity<Rejection> response = player.submits(
+        ResponseEntity<Rejection> response = browser.submits(
                 new SolveRunSubmission(
                         passage.issueId(),
                         SOLUTION,

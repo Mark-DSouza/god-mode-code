@@ -171,7 +171,7 @@ export interface paths {
         };
         /**
          * Browse the Patterns that can be played
-         * @description Every activated Pattern, newest Family order, optionally narrowed to one Family and one Seniority. Each carries its prompt and its Example Tests, so a player can read the contract they will be judged against before starting.
+         * @description Every activated Pattern — by Family, then by Seniority, then by name — optionally narrowed to one Family and one Seniority. Each carries its prompt and its Example Tests, so a player can read the contract they will be judged against before starting.
          *
          *     Inactive Patterns are absent rather than listed as unavailable. A Pattern is inactive because nobody has yet proved its tests are correct, and offering one would be offering a Challenge that might be unwinnable.
          *
@@ -330,7 +330,7 @@ export interface components {
             source: string;
             /**
              * Format: int32
-             * @description Total character keystrokes, deletions of them excluded
+             * @description Every character key pressed, including ones later deleted
              * @example 180
              */
             keystrokes: number;

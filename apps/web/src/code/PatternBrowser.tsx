@@ -1,9 +1,10 @@
 import type { Family, Pattern, Seniority } from "@gmc/api-client";
 import { useMemo, useState } from "react";
 import { usePatterns } from "../api/patterns.ts";
-import { Badge, Button, Card, Select, Tabs } from "../design-system/index.ts";
+import { Button, Card, Select, Tabs } from "../design-system/index.ts";
 import { DesktopSuitsThisBetter } from "./DesktopSuitsThisBetter.tsx";
-import { FAMILIES, SENIORITIES, SENIORITY_ORDER, SENIORITY_TONE } from "./families.ts";
+import { FAMILIES, SENIORITIES, SENIORITY_ORDER } from "./families.ts";
+import { PatternTags } from "./PatternTags.tsx";
 
 const EVERY_SENIORITY = "ALL";
 
@@ -43,6 +44,10 @@ export function PatternBrowser({
   // Before the first response there is nothing to select; after it, the first
   // Family is what you are looking at.
   const selectedFamily = family ?? families[0] ?? null;
+  // Narrowed by the server, then again here — not belt and braces. Until a tab
+  // has actually been clicked there is no Family in the request, so the second
+  // filter is what makes the first tab show its own Patterns rather than the
+  // whole catalogue.
   const patterns = (narrowed.data ?? []).filter(
     (pattern) => selectedFamily === null || pattern.family === selectedFamily,
   );
@@ -153,8 +158,7 @@ function PatternSummary({
         <div className="flex flex-col gap-2">
           <h2 className="font-display text-md tracking-wide text-heading">{pattern.name}</h2>
           <div className="flex flex-wrap gap-2">
-            <Badge tone="neutral">{FAMILIES[pattern.family]}</Badge>
-            <Badge tone={SENIORITY_TONE[pattern.seniority]}>{SENIORITIES[pattern.seniority]}</Badge>
+            <PatternTags pattern={pattern} />
           </div>
         </div>
         <Button disabled={pending} onClick={onStart}>

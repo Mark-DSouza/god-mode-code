@@ -98,8 +98,16 @@ public class SolveRunService {
     public Submitted submit(UUID userId, SolveRunSubmission submission) {
         Prepared prepared = transactions.execute(status -> prepare(userId, submission));
 
-        if (!(prepared instanceof Prepared.Ready ready)) {
-            return new Submitted.Refused(((Prepared.Refused) prepared).reason());
+        Prepared.Ready ready;
+        switch (prepared) {
+            case Prepared.Refused refused -> {
+                return new Submitted.Refused(refused.reason());
+            }
+            case Prepared.Ready readied -> ready = readied;
+            // `execute` is declared nullable because a callback may return
+            // nothing; this one always returns. Saying so out loud beats a cast
+            // that would meet a null as a ClassCastException three lines later.
+            case null -> throw new IllegalStateException("the preparing transaction returned nothing");
         }
 
         Judging judged;

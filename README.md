@@ -165,3 +165,5 @@ Two are implemented here:
 The other two — the visually hidden focused input behind the typing surface, and
 the non-colour indicator on wrong glyphs — belong to the Run screen and land
 with it.
+
+<!-- Verification for issue #40: a change matching no path filter. -->

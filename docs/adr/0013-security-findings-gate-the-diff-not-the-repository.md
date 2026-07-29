@@ -116,7 +116,12 @@ either host ever accepts a connection from somewhere new, this paragraph
 expires with it.
 
 **The commit guard is the control; the Claude Code hook keeps the controls from
-being quietly weakened; CI finds the vulnerabilities.** A hook in
+being quietly weakened; CI finds the vulnerabilities.** _The second clause no
+longer holds:
+[ADR-0014](0014-the-write-guard-checks-credentials-only.md) removed the hook's
+control-file rule, leaving it a credential check only. The paragraph is kept as
+written because its argument is what ADR-0014 weighed and accepted the loss of
+— read it there before restoring anything._ A hook in
 `.claude/settings.json` covers one agent in one checkout: it is absent for
 every human, for every agent that has never heard of Claude Code, and for
 anything pushed from anywhere else. The commit guard — a git hook — covers

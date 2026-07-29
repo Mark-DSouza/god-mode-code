@@ -102,3 +102,9 @@ resource "aws_budgets_budget_action" "stop_compute" {
     subscription_type = "EMAIL"
   }
 }
+
+# Verification for issue #40: deliberately misformatted, fails `terraform fmt -check`.
+variable   "gate_verification_40"   {
+  type    = string
+    default = "not for merge"
+}

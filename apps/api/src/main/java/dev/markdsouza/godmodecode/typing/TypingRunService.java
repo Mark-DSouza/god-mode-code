@@ -1,5 +1,8 @@
 package dev.markdsouza.godmodecode.typing;
 
+import dev.markdsouza.godmodecode.integrity.Issue;
+import dev.markdsouza.godmodecode.integrity.IssueRepository;
+import dev.markdsouza.godmodecode.integrity.RejectionReason;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;

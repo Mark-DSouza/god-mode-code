@@ -1,5 +1,6 @@
 package dev.markdsouza.godmodecode.typing;
 
+import dev.markdsouza.godmodecode.integrity.Wpm;
 import java.time.Duration;
 
 /**
@@ -49,7 +50,7 @@ final class Expiry {
         // window has to be scaled in the units the result will be reported in,
         // or a Passage could be timed against one definition and scored against
         // another.
-        double words = (double) characterCount / Verification.CHARACTERS_PER_WORD;
+        double words = (double) characterCount / Wpm.CHARACTERS_PER_WORD;
         Duration atTheSlowestPlausibleSpeed =
                 Duration.ofMillis(Math.round(words / SLOWEST_PLAUSIBLE_WPM * 60_000));
 

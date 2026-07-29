@@ -1,7 +1,13 @@
-package dev.markdsouza.godmodecode.typing;
+package dev.markdsouza.godmodecode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.markdsouza.godmodecode.pattern.SolveChallenge;
+import dev.markdsouza.godmodecode.pattern.SolveRunSubmission;
+import dev.markdsouza.godmodecode.typing.Challenge;
+import dev.markdsouza.godmodecode.typing.ChallengeRequest;
+import dev.markdsouza.godmodecode.typing.Discipline;
+import dev.markdsouza.godmodecode.typing.TypingRunSubmission;
 import dev.markdsouza.godmodecode.user.RecognitionCookie;
 import dev.markdsouza.godmodecode.user.User;
 import java.time.Duration;
@@ -11,18 +17,26 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * A browser that has already become someone, and the two requests it can make.
+ * A browser that has already become someone, and the requests it can make.
  *
  * TestRestTemplate keeps no cookie jar, so every request has to carry the
  * Recognition Key explicitly. Wrapping that here keeps the tests reading as
- * what a player did rather than as which header went where.
+ * what somebody did rather than as which header went where.
+ *
+ * One of these rather than one per Discipline, because there is one of these in
+ * reality: the same browser, holding the same Recognition Key, can be handed a
+ * Passage or a Pattern, and it holds exactly one Challenge across both
+ * (ADR-0003). A second helper for the Code Discipline would have been the same
+ * cookie plumbing written twice — and the only test that can prove the
+ * one-live-Issue rule spans both kinds needs one object that can ask for both.
  */
-final class Browser {
+public final class Browser {
 
     private final TestRestTemplate http;
     private final String recognitionKey;
@@ -35,7 +49,7 @@ final class Browser {
     }
 
     /** Arrives, becomes an Unclaimed User, and holds on to the cookie it was given. */
-    static Browser arrivingAt(TestRestTemplate http) {
+    public static Browser arrivingAt(TestRestTemplate http) {
         ResponseEntity<User> created = http.postForEntity("/api/users", null, User.class);
         String setCookie = created.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
         assertThat(setCookie).as("arriving did not set a Recognition Key").isNotNull();
@@ -46,22 +60,22 @@ final class Browser {
                 created.getBody());
     }
 
-    User user() {
+    public User user() {
         return user;
     }
 
-    ResponseEntity<Challenge> asksFor(Discipline discipline) {
+    public ResponseEntity<Challenge> asksFor(Discipline discipline) {
         return send("/api/challenges", new ChallengeRequest(discipline), Challenge.class);
     }
 
     /** Asks for a Challenge and insists on getting one. */
-    Challenge isHanded(Discipline discipline) {
+    public Challenge isHanded(Discipline discipline) {
         ResponseEntity<Challenge> response = asksFor(discipline);
         assertThat(response.getBody()).as("no Challenge was issued").isNotNull();
         return response.getBody();
     }
 
-    <T> ResponseEntity<T> submits(TypingRunSubmission submission, Class<T> as) {
+    public <T> ResponseEntity<T> submits(TypingRunSubmission submission, Class<T> as) {
         return send("/api/typing-runs", submission, as);
     }
 
@@ -73,7 +87,42 @@ final class Browser {
      * nowhere to put such a field, which is the design — so the only way to send
      * one is to write the JSON by hand.
      */
-    <T> ResponseEntity<T> submitsRaw(String json, Class<T> as) {
+    /** Asks to be handed one named Pattern. */
+    public <T> ResponseEntity<T> asksFor(String slug, Class<T> as) {
+        return send("/api/patterns/" + slug + "/challenges", null, as);
+    }
+
+    /** Asks for a Pattern and insists on being handed it. */
+    public SolveChallenge isHanded(String slug) {
+        ResponseEntity<SolveChallenge> response = asksFor(slug, SolveChallenge.class);
+        // The status, not just the body: an error document deserialises into a
+        // record of nulls perfectly happily, and a test that accepted one would
+        // fail three assertions later somewhere unrelated.
+        assertThat(response.getStatusCode())
+                .as("no Challenge was issued for " + slug)
+                .isEqualTo(HttpStatus.CREATED);
+        return response.getBody();
+    }
+
+    public <T> ResponseEntity<T> submits(SolveRunSubmission submission, Class<T> as) {
+        return send("/api/solve-runs", submission, as);
+    }
+
+    /**
+     * A submission that wrote this source over this long, without ever deleting
+     * anything.
+     *
+     * The counterpart to {@link #perfectRun}: there is no perfect source, only
+     * source, because a Solve Run is judged by executing it rather than compared
+     * against a target.
+     */
+    public static SolveRunSubmission wrote(SolveChallenge challenge, String source, Duration took) {
+        Instant completedAt = Instant.now();
+        return new SolveRunSubmission(
+                challenge.issueId(), source, source.length(), completedAt.minus(took), completedAt);
+    }
+
+    public <T> ResponseEntity<T> submitsRaw(String json, Class<T> as) {
         return send("/api/typing-runs", json, as);
     }
 
@@ -98,7 +147,16 @@ final class Browser {
      * defined relative to the issue time, and dragging only one of them would
      * make the row describe a state the application cannot produce.
      */
-    static void rewind(JdbcTemplate jdbc, Challenge challenge, Duration held) {
+    public static void rewind(JdbcTemplate jdbc, Challenge challenge, Duration held) {
+        rewindIssue(jdbc, challenge.issueId(), held);
+    }
+
+    /** The same rewind, against a Pattern Challenge. */
+    public static void rewind(JdbcTemplate jdbc, SolveChallenge challenge, Duration held) {
+        rewindIssue(jdbc, challenge.issueId(), held);
+    }
+
+    private static void rewindIssue(JdbcTemplate jdbc, java.util.UUID issueId, Duration held) {
         jdbc.update(
                 """
                 UPDATE issues
@@ -108,7 +166,7 @@ final class Browser {
                 """,
                 (double) held.toMillis(),
                 (double) held.toMillis(),
-                challenge.issueId());
+                issueId);
     }
 
     /**
@@ -118,7 +176,7 @@ final class Browser {
      * The timestamps are the client's own clock, which is the only thing a
      * browser has. Only the gap between them is meaningful to the server.
      */
-    static TypingRunSubmission perfectRun(Challenge challenge, Duration took) {
+    public static TypingRunSubmission perfectRun(Challenge challenge, Duration took) {
         Instant completedAt = Instant.now();
         return new TypingRunSubmission(
                 challenge.issueId(),

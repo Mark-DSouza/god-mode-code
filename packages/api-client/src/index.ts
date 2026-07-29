@@ -25,6 +25,15 @@ export type TypingRunSubmission = components["schemas"]["TypingRunSubmission"];
 export type Rejection = components["schemas"]["Rejection"];
 export type RejectionReason = Rejection["reason"];
 
+export type Pattern = components["schemas"]["Pattern"];
+export type Family = Pattern["family"];
+export type Seniority = Pattern["seniority"];
+export type ExampleTest = components["schemas"]["ExampleTest"];
+export type SolveChallenge = components["schemas"]["SolveChallenge"];
+export type SolveRun = components["schemas"]["SolveRun"];
+export type SolveRunSubmission = components["schemas"]["SolveRunSubmission"];
+export type Verdict = SolveRun["verdict"];
+
 /**
  * The origin the application is being served from.
  *

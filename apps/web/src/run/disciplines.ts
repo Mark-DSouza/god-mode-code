@@ -33,15 +33,14 @@ export const DISCIPLINES: Record<Discipline, DisciplineDetails> = {
 };
 
 /**
- * The Disciplines that can be played today.
+ * Every Discipline that can be played, in the order the home screen offers them.
  *
- * Code is deliberately absent rather than present and disabled. It is not a
- * Passage to transcribe at all — it is a Pattern, judged by running submitted
- * source against hidden tests (ADR-0004) — so it needs its own screen rather
- * than a greyed-out tile on this one. A tile that does nothing reads as a broken
- * site; an absent tile reads as an unfinished one, which is the truth.
+ * Code is on the list but is not dealt out like the other two: picking it opens
+ * the Pattern catalogue, because a Pattern is chosen rather than handed over and
+ * there is no Passage in it to ask for (ADR-0004).
  */
-export const TRANSCRIPTION_DISCIPLINES = [
+export const PLAYABLE_DISCIPLINES = [
   "QUOTES",
   "PROSE",
+  "CODE",
 ] as const satisfies readonly Discipline[];

@@ -1,7 +1,18 @@
-import type { Challenge, Discipline, Health, TypingRun } from "@gmc/api-client";
+import type {
+  Challenge,
+  Discipline,
+  Health,
+  SolveChallenge,
+  SolveRun,
+  TypingRun,
+} from "@gmc/api-client";
 import { useState } from "react";
+import { useRequestSolveChallenge } from "../api/patterns.ts";
 import { useHealth } from "../api/health.ts";
 import { useRequestChallenge } from "../api/typing.ts";
+import { PatternBrowser } from "../code/PatternBrowser.tsx";
+import { SolveResultScreen } from "../code/SolveResultScreen.tsx";
+import { SolveScreen } from "../code/SolveScreen.tsx";
 import { Badge } from "../design-system/index.ts";
 import { HomeScreen } from "../run/HomeScreen.tsx";
 import { ResultScreen } from "../run/ResultScreen.tsx";
@@ -20,10 +31,17 @@ import { RainBackdrop } from "./RainBackdrop.tsx";
 type Screen =
   | { name: "choosing" }
   | { name: "running"; challenge: Challenge }
-  | { name: "result"; run: TypingRun };
+  | { name: "result"; run: TypingRun }
+  // The Code Discipline has one screen more than the other two, because it is
+  // the only one where the player chooses their Challenge rather than being
+  // dealt it (ADR-0004).
+  | { name: "browsing" }
+  | { name: "solving"; challenge: SolveChallenge }
+  | { name: "solved"; run: SolveRun };
 
 /**
- * Choose a Discipline, type the Passage, see what the server made of it.
+ * Choose a Discipline, transcribe the Passage or solve the Pattern, and see what
+ * the server made of it.
  */
 export function App() {
   const [screen, setScreen] = useState<Screen>({ name: "choosing" });
@@ -31,11 +49,28 @@ export function App() {
   // the player back to the tiles to say the same thing twice.
   const [lastPlayed, setLastPlayed] = useState<Discipline>("QUOTES");
   const request = useRequestChallenge();
+  const requestPattern = useRequestSolveChallenge();
+  // Remembered for the same reason `lastPlayed` is: "Try this Pattern again"
+  // should not send the player back through the catalogue to say the same thing.
+  const [lastSolved, setLastSolved] = useState<string | null>(null);
 
   function start(discipline: Discipline) {
+    // Code is not dealt out. Picking it opens the catalogue, and asking for a
+    // Passage in it would answer "there is nothing here" (ADR-0004).
+    if (discipline === "CODE") {
+      setScreen({ name: "browsing" });
+      return;
+    }
     setLastPlayed(discipline);
     request.mutate(discipline, {
       onSuccess: (challenge) => setScreen({ name: "running", challenge }),
+    });
+  }
+
+  function solve(slug: string) {
+    setLastSolved(slug);
+    requestPattern.mutate(slug, {
+      onSuccess: (challenge) => setScreen({ name: "solving", challenge }),
     });
   }
 
@@ -76,6 +111,36 @@ export function App() {
               onChangeDiscipline={() => setScreen({ name: "choosing" })}
               pending={request.isPending}
               failed={request.isError}
+            />
+          )}
+
+          {screen.name === "browsing" && (
+            <PatternBrowser
+              onStart={solve}
+              onLeave={() => setScreen({ name: "choosing" })}
+              pending={requestPattern.isPending}
+            />
+          )}
+
+          {screen.name === "solving" && (
+            <SolveScreen
+              // Keyed by the Issue, so asking for the same Pattern again is a
+              // genuinely new Solve Run: an empty editor and a clock that starts
+              // now, rather than the finished Run's state carried forward.
+              key={screen.challenge.issueId}
+              challenge={screen.challenge}
+              onJudged={(run) => setScreen({ name: "solved", run })}
+              onLeave={() => setScreen({ name: "browsing" })}
+            />
+          )}
+
+          {screen.name === "solved" && (
+            <SolveResultScreen
+              run={screen.run}
+              onSolveAgain={() => lastSolved && solve(lastSolved)}
+              onPickAnother={() => setScreen({ name: "browsing" })}
+              pending={requestPattern.isPending}
+              failed={requestPattern.isError}
             />
           )}
         </main>

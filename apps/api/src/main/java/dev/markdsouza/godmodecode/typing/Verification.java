@@ -1,7 +1,9 @@
 package dev.markdsouza.godmodecode.typing;
 
+import dev.markdsouza.godmodecode.integrity.Issue;
+import dev.markdsouza.godmodecode.integrity.RejectionReason;
+import dev.markdsouza.godmodecode.integrity.Wpm;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -27,27 +29,6 @@ sealed interface Verification {
 
     /** A Run that did not, and the one reason that stopped it first. */
     record Rejected(RejectionReason reason) implements Verification {}
-
-    /**
-     * A word is five characters, everywhere in this codebase.
-     *
-     * Declared here because this is where WPM is defined; {@link Expiry} reads
-     * it rather than restating it, so the window a Passage is given and the
-     * speed it is scored at can never drift apart.
-     */
-    int CHARACTERS_PER_WORD = 5;
-
-    /**
-     * The speed past which we stop believing anybody.
-     *
-     * Competitive typists sustain a little over 200 WPM on prepared text and
-     * the recognised records sit around 216. Three hundred is not a threshold
-     * anyone honest will ever approach; it is the point at which the number has
-     * to have been manufactured. Set generously on purpose — the cost of
-     * refusing a real Run is a player who was beaten by their own talent, and
-     * the cost of admitting a fake one is one bad Leaderboard row.
-     */
-    int PLAUSIBLE_WPM_CEILING = 300;
 
     /**
      * Slack on the "the Run cannot be longer than the window it happened in"
@@ -115,8 +96,11 @@ sealed interface Verification {
         }
 
         int correctCharacters = correctCharacters(passage.text(), submission.typedText());
-        BigDecimal wpm = wpm(correctCharacters, elapsedMillis);
-        if (wpm.compareTo(BigDecimal.valueOf(PLAUSIBLE_WPM_CEILING)) > 0) {
+        // Correct characters only, because a Typing Run is transcription:
+        // characters that do not match the Passage were not progress through it,
+        // and counting them would make hammering the keyboard a strategy.
+        BigDecimal wpm = Wpm.over(correctCharacters, elapsedMillis);
+        if (Wpm.isImplausible(wpm)) {
             return new Rejected(RejectionReason.IMPLAUSIBLE_SPEED);
         }
 
@@ -144,32 +128,8 @@ sealed interface Verification {
         return correct;
     }
 
-    /**
-     * Correct characters only, over elapsed minutes.
-     *
-     * Correct only, because a Typing Run is transcription: characters that do
-     * not match the Passage were not progress through it, and counting them
-     * would make hammering the keyboard a strategy.
-     */
-    private static BigDecimal wpm(int correctCharacters, long elapsedMillis) {
-        double minutes = elapsedMillis / 60_000.0;
-        return oneDecimal((correctCharacters / (double) CHARACTERS_PER_WORD) / minutes);
-    }
-
     /** Correct keystrokes over total keystrokes, as a percentage. */
     private static BigDecimal accuracy(int correctCharacters, int keystrokes) {
-        return oneDecimal(correctCharacters * 100.0 / keystrokes);
-    }
-
-    /**
-     * Both metrics settle at one decimal place, which is what the result screen
-     * shows and what the columns hold.
-     *
-     * BigDecimal rather than double all the way out, so the number in the JSON
-     * body is the number in the database — a double serialises as 99.10000000000001
-     * often enough to matter on a screen whose whole purpose is the figure.
-     */
-    private static BigDecimal oneDecimal(double value) {
-        return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP);
+        return Wpm.oneDecimal(correctCharacters * 100.0 / keystrokes);
     }
 }

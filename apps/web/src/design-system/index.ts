@@ -20,6 +20,13 @@ export { Stat, type StatProps } from "./core/Stat.tsx";
 export { Switch, type SwitchProps } from "./core/Switch.tsx";
 export { Tabs, type TabItem, type TabsProps } from "./core/Tabs.tsx";
 
+export { CodeEditor, type CodeEditorProps } from "./code/CodeEditor.tsx";
+export {
+  SolveResultPanel,
+  type SolveResultPanelProps,
+  type SolveVerdict,
+} from "./code/SolveResultPanel.tsx";
+
 export { ChallengeCard, type ChallengeCardProps } from "./typing/ChallengeCard.tsx";
 export { Countdown, type CountdownProps } from "./typing/Countdown.tsx";
 export { ResultPanel, type ResultPanelProps } from "./typing/ResultPanel.tsx";

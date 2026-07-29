@@ -48,6 +48,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/solve-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a finished Solve Run to be judged
+         * @description Takes the lines that were written, assembles them with the Pattern's Scaffold, and has the judge execute the result against every one of the Pattern's tests. The Verdict comes back from that execution; the duration and the WPM are recomputed from the raw submission (ADR-0003).
+         *
+         *     A Failed Verdict is a 201. The Solve Run happened, it is recorded, and it belongs to the player — a Solve Run can fail, which is the difference between it and a Typing Run (ADR-0006).
+         *
+         *     422 is a submission that was not recorded at all, with the reason. 503 is the judge being unreachable: no Verdict exists, nothing about the submitted source can be concluded, and the Issue is left unspent so the same lines can be sent again.
+         */
+        post: operations["submit_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/patterns/{slug}/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Be handed this Pattern to solve
+         * @description Records an Issue against the User — who got what, when, and until when — and returns the Pattern with its Scaffold and Example Tests.
+         *
+         *     Unlike a Passage, the player names which one. There is nothing to shop for: a Pattern is a technique to practise, not a score to farm.
+         *
+         *     Asking again abandons whatever Challenge the User was holding, in either Discipline, so nobody can hold several at once and submit whichever went best (ADR-0003). The window is flat rather than scaled by length: a Pattern is answered by thinking, and there is nothing about it to time by the character.
+         */
+        post: operations["request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/patterns/activations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the activation gate over every Pattern awaiting it
+         * @description Assembles each inactive Pattern's reference solution with its Scaffold exactly as a player's submission would be, has the judge execute it, and activates the Pattern only if the Verdict is Passed and the judge ran as many tests as the Pattern has.
+         *
+         *     That second condition is not a formality. The judge compiles its catalogue into its binary and is deployed separately from the database, so the two can skew — and a judge running an older copy of a Pattern would answer Passed against fewer tests than the curator wrote, which is true and useless.
+         *
+         *     Answers 200 whatever happened. A Pattern that did not pass is not an error in this request; it is the gate doing its job, and the body says so per Pattern. Already-activated Patterns are not re-judged and are absent from the answer.
+         */
+        post: operations["activate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/challenges": {
         parameters: {
             query?: never;
@@ -63,7 +135,7 @@ export interface paths {
          *
          *     Asking again abandons the Challenge the User was holding, so a player can skip a Passage they do not fancy, and nobody can hold several at once and submit whichever went best (ADR-0003).
          */
-        post: operations["request"];
+        post: operations["request_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -82,6 +154,30 @@ export interface paths {
          * @description Returns the User the request's cookie identifies. 404 means this browser has never been here, or was here longer ago than the cookie lasts — the caller's cue to create one.
          */
         get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/patterns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Browse the Patterns that can be played
+         * @description Every activated Pattern — by Family, then by Seniority, then by name — optionally narrowed to one Family and one Seniority. Each carries its prompt and its Example Tests, so a player can read the contract they will be judged against before starting.
+         *
+         *     Inactive Patterns are absent rather than listed as unavailable. A Pattern is inactive because nobody has yet proved its tests are correct, and offering one would be offering a Challenge that might be unwinnable.
+         *
+         *     Hidden Tests are not here, and there is no endpoint that serves them. They live in the judge's own binary (ADR-0005), and their failure is only ever reported to a player as a count.
+         */
+        get: operations["browse"];
         put?: never;
         post?: never;
         delete?: never;
@@ -217,6 +313,156 @@ export interface components {
             /**
              * @description Human-readable restatement of the reason
              * @example The typed text does not correspond to the Passage that was issued.
+             */
+            explanation: string;
+        };
+        /** @description The raw data a finished Solve Run is judged and verified from */
+        SolveRunSubmission: {
+            /**
+             * Format: uuid
+             * @description The Issue this Solve Run answers
+             */
+            issueId: string;
+            /**
+             * @description The lines written below the Scaffold, exactly as typed
+             * @example return []
+             */
+            source: string;
+            /**
+             * Format: int32
+             * @description Every character key pressed, including ones later deleted
+             * @example 180
+             */
+            keystrokes: number;
+            /**
+             * Format: date-time
+             * @description The client's clock at the first keystroke
+             */
+            startedAt: string;
+            /**
+             * Format: date-time
+             * @description The client's clock when the Solve Run was submitted
+             */
+            completedAt: string;
+        };
+        /** @description A completed and judged Run against a Pattern */
+        SolveRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            patternId: string;
+            /** @example hash-map-seen-lookup */
+            patternSlug: string;
+            /** @enum {string} */
+            verdict: "passed" | "failed" | "timeout" | "error";
+            /**
+             * Format: int32
+             * @example 6
+             */
+            testsPassed: number;
+            /**
+             * Format: int32
+             * @example 6
+             */
+            testsTotal: number;
+            /**
+             * Format: int32
+             * @description How long the Solve Run took, as verified
+             * @example 48210
+             */
+            elapsedMillis: number;
+            /**
+             * Format: int32
+             * @description Total character keystrokes
+             * @example 180
+             */
+            keystrokes: number;
+            /**
+             * @description Every submitted character over five, per minute — a secondary reading
+             * @example 41.2
+             */
+            wpm: number;
+            /** Format: date-time */
+            completedAt: string;
+        };
+        /** @description A Solve Run that could not be judged. No Run was recorded and the Challenge is still live */
+        Unjudged: {
+            /** @example The judge could not be reached. Your Challenge is still yours. */
+            explanation: string;
+        };
+        /** @description A test case shown to the player before they start */
+        ExampleTest: {
+            /**
+             * @description What the case is about
+             * @example the pair is the first two numbers
+             */
+            name: string;
+            /**
+             * @description The call the submitted source must satisfy
+             * @example pair_sum([2, 7, 11, 15], 9)
+             */
+            call: string;
+            /**
+             * @description The answer the call has to produce
+             * @example [
+             *       0,
+             *       1
+             *     ]
+             */
+            expected: string;
+        };
+        /** @description A Pattern to solve, as the player is shown it */
+        Pattern: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Stable identifier, also what the judge knows this Pattern by
+             * @example hash-map-seen-lookup
+             */
+            slug: string;
+            /** @example Store what you've seen, look up what you need */
+            name: string;
+            /**
+             * @description The grouping a Pattern belongs to
+             * @enum {string}
+             */
+            family: "HASH_MAP" | "TWO_POINTERS" | "SLIDING_WINDOW" | "STACK" | "HEAP" | "BINARY_SEARCH" | "GRAPH" | "DYNAMIC_PROGRAMMING";
+            /**
+             * @description The difficulty band of a Challenge
+             * @enum {string}
+             */
+            seniority: "JUNIOR" | "SENIOR" | "PRINCIPAL";
+            /** @description The technique and what to do with it, in the player's words */
+            prompt: string;
+            /**
+             * @description The read-only lines above the editable region
+             * @example def pair_sum(numbers, target):
+             */
+            scaffold: string;
+            exampleTests: components["schemas"]["ExampleTest"][];
+        };
+        /** @description A Pattern to solve, and the Issue that recorded it going out */
+        SolveChallenge: {
+            /**
+             * Format: uuid
+             * @description What the client hands back when the Solve Run is submitted
+             */
+            issueId: string;
+            pattern: components["schemas"]["Pattern"];
+            /**
+             * Format: date-time
+             * @description After this moment the Challenge can no longer be answered
+             */
+            expiresAt: string;
+        };
+        /** @description What the activation gate made of one Pattern */
+        PatternActivation: {
+            /** @example hash-map-seen-lookup */
+            slug: string;
+            activated: boolean;
+            /**
+             * @description What happened, in a sentence
+             * @example The reference solution passed all 6 tests.
              */
             explanation: string;
         };
@@ -373,7 +619,116 @@ export interface operations {
             };
         };
     };
+    submit_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gmc_recognition?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SolveRunSubmission"];
+            };
+        };
+        responses: {
+            /** @description The Solve Run as judged and recorded, whatever the Verdict */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SolveRun"];
+                };
+            };
+            /** @description This browser is nobody yet */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The Solve Run was not recorded, and why */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rejection"];
+                };
+            };
+            /** @description There is no Verdict to be had. Only the Code Discipline is affected */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unjudged"];
+                };
+            };
+        };
+    };
     request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: {
+                gmc_recognition?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Challenge, and when it stops being answerable */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SolveChallenge"];
+                };
+            };
+            /** @description This browser is nobody yet — create a User first */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No activated Pattern has that slug */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    activate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What the gate made of each Pattern that was awaiting it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatternActivation"][];
+                };
+            };
+        };
+    };
+    request_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -439,6 +794,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    browse: {
+        parameters: {
+            query?: {
+                /** @description Only this Family */
+                family?: "HASH_MAP" | "TWO_POINTERS" | "SLIDING_WINDOW" | "STACK" | "HEAP" | "BINARY_SEARCH" | "GRAPH" | "DYNAMIC_PROGRAMMING";
+                /** @description Only this Seniority */
+                seniority?: "JUNIOR" | "SENIOR" | "PRINCIPAL";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Patterns that match */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pattern"][];
+                };
             };
         };
     };

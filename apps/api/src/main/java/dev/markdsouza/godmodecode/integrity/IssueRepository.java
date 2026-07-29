@@ -1,4 +1,4 @@
-package dev.markdsouza.godmodecode.typing;
+package dev.markdsouza.godmodecode.integrity;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -10,19 +10,20 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 @Repository
-class IssueRepository {
+public class IssueRepository {
 
     private static final RowMapper<Issue> AS_ISSUE = (rs, rowNum) -> new Issue(
             rs.getObject("id", UUID.class),
             rs.getObject("user_id", UUID.class),
             rs.getObject("passage_id", UUID.class),
+            rs.getObject("pattern_id", UUID.class),
             instant(rs.getObject("issued_at", OffsetDateTime.class)),
             instant(rs.getObject("expires_at", OffsetDateTime.class)),
             instant(rs.getObject("consumed_at", OffsetDateTime.class)),
             instant(rs.getObject("superseded_at", OffsetDateTime.class)));
 
     private static final String COLUMNS =
-            "id, user_id, passage_id, issued_at, expires_at, consumed_at, superseded_at";
+            "id, user_id, passage_id, pattern_id, issued_at, expires_at, consumed_at, superseded_at";
 
     private final JdbcTemplate jdbc;
 
@@ -41,7 +42,7 @@ class IssueRepository {
      * did nothing to deserve. Taking the User's row first turns that race into a
      * queue of one.
      */
-    void takeIssuingLockOn(UUID userId) {
+    public void takeIssuingLockOn(UUID userId) {
         jdbc.queryForList("SELECT id FROM users WHERE id = ? FOR UPDATE", UUID.class, userId);
     }
 
@@ -52,7 +53,7 @@ class IssueRepository {
      * occupies the one-live-Issue slot, and clearing it here is what lets the
      * next request take that slot in the same transaction.
      */
-    void supersedeLiveFor(UUID userId) {
+    public void supersedeLiveFor(UUID userId) {
         jdbc.update(
                 """
                 UPDATE issues SET superseded_at = now()
@@ -70,17 +71,35 @@ class IssueRepository {
      * to serve the request. Because {@code now()} is fixed for the transaction,
      * {@code expires_at} lands exactly {@code window} after {@code issued_at}.
      */
-    Issue record(UUID userId, UUID passageId, Duration window) {
+    public Issue recordPassage(UUID userId, UUID passageId, Duration window) {
+        return record("passage_id", userId, passageId, window);
+    }
+
+    /**
+     * Records that this Pattern went to this User, now.
+     *
+     * The same act as {@link #recordPassage}, against the other kind of
+     * Challenge. Which column is set is the only difference, and the database
+     * insists exactly one of them is.
+     */
+    public Issue recordPattern(UUID userId, UUID patternId, Duration window) {
+        return record("pattern_id", userId, patternId, window);
+    }
+
+    private Issue record(String challengeColumn, UUID userId, UUID challengeId, Duration window) {
+        // The column name is interpolated and the values are not. It comes from
+        // the two callers above and never from a request, which is what keeps
+        // this from being the thing it looks like.
         return jdbc.queryForObject(
                 """
-                INSERT INTO issues (user_id, passage_id, expires_at)
+                INSERT INTO issues (user_id, %s, expires_at)
                 VALUES (?, ?, now() + (? * interval '1 millisecond'))
                 RETURNING %s
                 """
-                        .formatted(COLUMNS),
+                        .formatted(challengeColumn, COLUMNS),
                 AS_ISSUE,
                 userId,
-                passageId,
+                challengeId,
                 (double) window.toMillis());
     }
 
@@ -94,7 +113,7 @@ class IssueRepository {
      * Scoped to the User in the query rather than compared afterwards, so a
      * caller cannot forget to check whose Issue this was.
      */
-    Optional<Issue> findLockedFor(UUID issueId, UUID userId) {
+    public Optional<Issue> findLockedFor(UUID issueId, UUID userId) {
         return jdbc
                 .query(
                         "SELECT " + COLUMNS + " FROM issues WHERE id = ? AND user_id = ? FOR UPDATE",
@@ -106,7 +125,7 @@ class IssueRepository {
     }
 
     /** Spends the Issue. Single use is the whole reason it exists (ADR-0003). */
-    void markConsumed(UUID issueId) {
+    public void markConsumed(UUID issueId) {
         jdbc.update("UPDATE issues SET consumed_at = now() WHERE id = ?", issueId);
     }
 

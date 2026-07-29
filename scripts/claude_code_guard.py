@@ -238,11 +238,46 @@ PROTECTED_IN_COMMAND = tuple((entry, _path_regex(entry)) for entry in PROTECTED_
 # a command this has never heard of still asks. The git subcommands are named
 # one by one because `git log <path>` and `git checkout -- <path>` are the same
 # program, and only one of them is a read.
+#
+# What may join the list: a command whose *name* settles it. That is the whole
+# membership rule, and it is what makes matching on the name sound. `cat` reads
+# whatever flags it is given, and so do `shellcheck`, `yamllint` and
+# `actionlint`, which read a control in order to check it — checking one is not
+# a way of weakening it.
+#
+# `mypy` was on this list for a day and is the worked example of the rule
+# catching something its author did not know. It looks like the other three and
+# is not: `--junit-xml`, `--html-report`, `--cobertura-xml-report` and
+# `--linecount-report` all take a caller-chosen destination, so
+# `mypy --junit-xml .githooks/pre-commit x.py` truncates the commit guard while
+# looking like a type check. The rule found that; reading the list and thinking
+# "linters are safe" did not.
+#
+# What may not, however ordinary it is: anything that reads by default and
+# writes with a flag. `sed -i`, `sort -o`, `awk '{print > "f"}'`, `find
+# -delete`, `ruff --fix` and `mypy --junit-xml` are all absent for that one
+# reason, and `sed -i` is
+# the primary way a shell edits a file — putting it here would open the widest
+# hole in the guard to buy back one prompt. Keeping them off is also what lets
+# this stay a list of names rather than a flag parser: the three bugs recorded
+# against `MESSAGE_VALUE` and the bypass rules below are all the same mistake,
+# which is reading flags out of a shell string, and they are the reason this
+# file does not make that bet a fourth time. `scripts/test_claude_code_guard.py`
+# holds both halves — that the nine readers are silent and that the five are
+# not.
+#
+# The lookahead excludes `/` as well, and that is a fix rather than
+# housekeeping for the new names: a reader's name followed by a path separator
+# is a script in a directory that happens to be called `test/` or `stat/`, and
+# a script is not its directory. It was already wrong before this list grew —
+# `stat/collect.sh .githooks/pre-commit` goes through untouched on `main` — so
+# adding `test` only made an existing hole easier to fall into.
 READ_ONLY = re.compile(
     r"^\s*(?:cat|bat|head|tail|less|more|nl|wc|file|stat|ls|tree|"
-    r"grep|egrep|fgrep|rg|ag|ack|diff|cmp|md5sum|sha\d+sum|"
+    r"grep|egrep|fgrep|rg|ag|ack|diff|cmp|md5sum|sha\d+sum|jq|cut|"
+    r"shellcheck|yamllint|actionlint|test|realpath|basename|"
     r"git\s+(?:log|diff|show|status|blame|grep|ls-files|cat-file|rev-parse|describe))"
-    r"(?![\w.-])"
+    r"(?![\w./-])"
 )
 
 

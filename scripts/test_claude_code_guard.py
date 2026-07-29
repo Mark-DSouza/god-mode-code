@@ -416,6 +416,63 @@ class ReadingAControlDoesNotAsk(GuardTest):
         self.assertNoDecision(bash("head -20 .githooks/pre-commit"))
         self.assertNoDecision(bash("git show HEAD:.github/workflows/ci.yml"))
 
+    def test_a_reader_whose_name_settles_it_does_not_ask(self) -> None:
+        # The membership rule for the readers list: the command name alone says
+        # this cannot write. Each of these was measured prompting on a control
+        # before it was added — the linters in particular, since reading a
+        # control in order to check it is not a way of weakening it.
+        for command in (
+            "jq .hooks .claude/settings.json",
+            "cut -d: -f1 .githooks/pre-commit",
+            "shellcheck .githooks/pre-commit",
+            "yamllint .github/workflows/ci.yml",
+            "actionlint .github/workflows/ci.yml",
+            "test -f .githooks/pre-commit",
+            "realpath scripts/claude_code_guard.py",
+            "basename scripts/credential_detector.py",
+        ):
+            with self.subTest(command=command):
+                self.assertNoDecision(bash(command))
+
+    def test_a_reader_that_writes_with_a_flag_still_asks(self) -> None:
+        # The other half of the same rule, and the half that is a security
+        # property. Every one of these reads by default and writes with one
+        # flag, so the name does not settle it and the list cannot hold it
+        # without a flag parse — which is what `READ_ONLY`'s comment declines.
+        #
+        # `sed -i` has its own assertions elsewhere in this file; the rest are
+        # asserted only here.
+        #
+        # `mypy` is the one that matters. It was added to the readers list
+        # alongside the other three linters and taken back off when review
+        # found `--junit-xml`, which takes a destination and truncates whatever
+        # it is pointed at. Nothing about the name suggests it, which is the
+        # argument for the rule and the reason this case is pinned.
+        for command in (
+            "sed -i 's/x//' .githooks/pre-commit",
+            "sort -o .github/dependabot.yml .github/dependabot.yml",
+            "awk '{print > \".githooks/pre-commit\"}' /dev/null",
+            "find .github/workflows -name '*.yml' -delete",
+            "ruff check --fix scripts/claude_code_guard.py",
+            "mypy --junit-xml .githooks/pre-commit scripts/credential_detector.py",
+            "mypy --html-report .github/workflows scripts/credential_detector.py",
+        ):
+            with self.subTest(command=command):
+                self.assertAsked(bash(command))
+
+    def test_a_reader_is_the_whole_command_not_a_path_into_one(self) -> None:
+        # `test` and `stat` are also ordinary directory names, so a script run
+        # out of one starts with the letters of a reader. The lookahead after
+        # the list excludes `/` for exactly this: `test/run.sh` is a script,
+        # and what it does to the control it names is unknown.
+        #
+        # `stat` is here rather than a name this change added, because it shows
+        # the hole is older than the change: `stat` has been on the readers
+        # list all along, and `stat/collect.sh .githooks/pre-commit` was silent
+        # until the lookahead grew a `/`.
+        self.assertAsked(bash("test/run.sh .githooks/pre-commit"))
+        self.assertAsked(bash("stat/collect.sh .githooks/pre-commit"))
+
     def test_a_reader_pointed_at_a_control_still_asks(self) -> None:
         # The redirection is the write, and it does not care that `cat` is on
         # the readers list. This is the whole reason the list is paired with a

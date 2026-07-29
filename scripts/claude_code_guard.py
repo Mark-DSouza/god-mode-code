@@ -238,11 +238,46 @@ PROTECTED_IN_COMMAND = tuple((entry, _path_regex(entry)) for entry in PROTECTED_
 # a command this has never heard of still asks. The git subcommands are named
 # one by one because `git log <path>` and `git checkout -- <path>` are the same
 # program, and only one of them is a read.
+#
+# What may join the list: a command whose *name* settles it. That is the whole
+# membership rule, and it is what makes matching on the name sound. `cat` reads
+# whatever flags it is given, and so do `shellcheck`, `yamllint` and
+# `actionlint`, which read a control in order to check it — checking one is not
+# a way of weakening it.
+#
+# `mypy` was on this list for a day and is the worked example of the rule
+# catching something its author did not know. It looks like the other three and
+# is not: `--junit-xml`, `--html-report`, `--cobertura-xml-report` and
+# `--linecount-report` all take a caller-chosen destination, so
+# `mypy --junit-xml .githooks/pre-commit x.py` truncates the commit guard while
+# looking like a type check. The rule found that; reading the list and thinking
+# "linters are safe" did not.
+#
+# What may not, however ordinary it is: anything that reads by default and
+# writes with a flag. `sed -i`, `sort -o`, `awk '{print > "f"}'`, `find
+# -delete`, `ruff --fix` and `mypy --junit-xml` are all absent for that one
+# reason, and `sed -i` is
+# the primary way a shell edits a file — putting it here would open the widest
+# hole in the guard to buy back one prompt. Keeping them off is also what lets
+# this stay a list of names rather than a flag parser: the three bugs recorded
+# against `MESSAGE_VALUE` and the bypass rules below are all the same mistake,
+# which is reading flags out of a shell string, and they are the reason this
+# file does not make that bet a fourth time. `scripts/test_claude_code_guard.py`
+# holds both halves — that the nine readers are silent and that the five are
+# not.
+#
+# The lookahead excludes `/` as well, and that is a fix rather than
+# housekeeping for the new names: a reader's name followed by a path separator
+# is a script in a directory that happens to be called `test/` or `stat/`, and
+# a script is not its directory. It was already wrong before this list grew —
+# `stat/collect.sh .githooks/pre-commit` goes through untouched on `main` — so
+# adding `test` only made an existing hole easier to fall into.
 READ_ONLY = re.compile(
     r"^\s*(?:cat|bat|head|tail|less|more|nl|wc|file|stat|ls|tree|"
-    r"grep|egrep|fgrep|rg|ag|ack|diff|cmp|md5sum|sha\d+sum|"
+    r"grep|egrep|fgrep|rg|ag|ack|diff|cmp|md5sum|sha\d+sum|jq|cut|"
+    r"shellcheck|yamllint|actionlint|test|realpath|basename|"
     r"git\s+(?:log|diff|show|status|blame|grep|ls-files|cat-file|rev-parse|describe))"
-    r"(?![\w.-])"
+    r"(?![\w./-])"
 )
 
 
@@ -336,6 +371,40 @@ MESSAGE_VALUE = re.compile(
     r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|[^\s;|&<>]+)"
 )
 
+# The same rule as `MESSAGE_VALUE`, for the flag people write prose with.
+#
+# A message worth paragraphs is not passed as `-m`; it is `git commit -F -`
+# with a heredoc, or `gh pr create --body "$(cat <<'EOF' … EOF)"`. Both went
+# straight past the `-m` strip, because `SEGMENTS` splits on `\n`: every line
+# of the message became its own segment, and any line naming a control asked.
+# The branch that added this prompted on its own commit message and again on
+# its own pull request body, which is the failure `readable_segments` already
+# exists to prevent, reached through a different flag.
+#
+# Scoped to a heredoc introduced on a line that carries a message flag, and
+# emphatically not applied to heredocs at large. A heredoc body is ordinarily
+# *program text* — `bash -c 'cat > file <<EOF'` is named in this file's
+# docstring as where an agent goes when refused a `Write` — so blanking every
+# body would take `python3 <<'EOF'\nopen('.githooks/pre-commit','w')\nEOF`
+# silent, which is a write this catches today. The tests pin both directions.
+#
+# Separators are excluded between the flag and the `<<`, or `gh pr create
+# --body x && python3 <<'EOF'` would hand the message flag's licence to the
+# heredoc after the `&&`. What remains: a message flag and an unrelated
+# heredoc on one line with no separator between them, which is a shape nobody
+# writes by accident, and the pull request diff is what covers it.
+#
+# The credential rule cannot be reached by any of this — it scans the raw
+# command before segments exist. A credential in a commit message is a
+# credential in the repository, and there is a test saying so.
+MESSAGE_HEREDOC = re.compile(
+    r"(?P<head>[^\n]*"
+    r"(?:-F[=\s]+-|--file[=\s]+-|--body-file[=\s]+-|--body\b|--title\b|-m[=\s]|--message\b)"
+    r"[^\n;|&]*<<-?\s*(?P<quote>['\"]?)(?P<tag>[A-Za-z_]\w*)(?P=quote)[^\n]*\n)"
+    r"(?:(?!\s*(?P=tag)\s*$)[^\n]*\n)*",
+    re.MULTILINE,
+)
+
 # The same position, compiled: everything after it can have its `-m` value
 # taken out, everything before it cannot. A `-m` in front of the subcommand is
 # not a commit message and is left alone. Excluding `-`, `/` and `.` after the
@@ -366,9 +435,16 @@ def readable_segments(command: str) -> list[str]:
     What it gives up: `git commit -m "$(cat .githooks/pre-commit)"` no longer
     names a protected path. That is a read, and reads were already the
     generous half of `protected_in_command`.
+
+    `MESSAGE_HEREDOC` is the same rule for the flag prose is actually written
+    with, and runs first because the body it removes is what the split would
+    otherwise turn into one segment per line.
     """
     readable = []
-    for segment in SEGMENTS.split(CONTINUATION.sub(" ", command)):
+    # Before the split, since the body this removes is what the split would
+    # otherwise turn into one segment per line of prose.
+    without_message_bodies = MESSAGE_HEREDOC.sub(r"\g<head>", command)
+    for segment in SEGMENTS.split(CONTINUATION.sub(" ", without_message_bodies)):
         starts = A_COMMIT.search(segment)
         if not starts:
             readable.append(segment)

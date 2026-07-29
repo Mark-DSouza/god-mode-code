@@ -72,10 +72,37 @@ workflows, `dependabot.yml`, `infra/terraform/tests/security.tftest.hcl`,
 control, and let them approve it. Editing one of these to make a failing check
 go green is the exact move the prompt exists to catch.
 
-Reading is mostly free: a fixed allowlist of readers — `cat`, `grep`, `git
-diff`, `git log` and about twenty others — goes through untouched. Anything
-outside it prompts, and so does a reader carrying a redirect, since `cat x >
-.githooks/pre-commit` truncates the commit hook using nothing but a reader.
+Reading is mostly free: a fixed allowlist of readers — `cat`, `grep`, `jq`,
+`cut`, `git diff`, `git log`, `shellcheck`, `yamllint`, `actionlint` and the
+rest of `READ_ONLY` in `scripts/claude_code_guard.py` — goes through untouched.
+Anything outside it prompts, and so does a reader carrying a redirect, since
+`cat x > .githooks/pre-commit` truncates the commit hook using nothing but a
+reader.
+
+**A command joins that list only if its name settles it.** That is the entire
+membership rule. `sed`, `sort`, `awk`, `find`, `ruff` and `mypy` are absent and
+will keep prompting on a control, not by oversight but because each reads by
+default and writes with one flag — `sed -i`, `sort -o`, `find -delete`, `ruff
+--fix`, `mypy --junit-xml` — and the list is matched on the command name, so
+admitting them would wave the writing spelling through as well. `mypy` is the
+one to learn from: it sat on the readers list until review found that
+`--junit-xml` takes a destination, which makes a type check into a way of
+truncating the commit hook.
+
+If a read of yours prompts, that is the cost: use the `Read` tool, or approve
+the prompt. Do not add the command to the allowlist to silence it unless it
+passes the rule — and check the tool's own `--help` for an output-file flag
+before deciding that it does.
+
+**Naming a control in prose is not touching it.** A commit message or a pull
+request body that quotes a protected path goes through untouched, whether it is
+written as `-m`, as `git commit -F -` with a heredoc, or as `gh pr create
+--body "$(cat <<'EOF' … EOF)"`. That matters most on a branch whose whole
+subject is a control, where otherwise every commit and every pull request
+prompts on its own description. The licence belongs to the message flag alone:
+a heredoc that is program text — `python3 <<'EOF' … EOF` — is read as a write
+exactly as before, and a credential in a message is still refused, since the
+credential check reads the raw command and never sees any of this stripping.
 
 If the approved change is to a workflow, keep every `uses:` pinned to a commit
 SHA with its `# vX.Y.Z` comment beside it. Dependabot rewrites the pair

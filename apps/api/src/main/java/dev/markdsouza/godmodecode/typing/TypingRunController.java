@@ -1,5 +1,6 @@
 package dev.markdsouza.godmodecode.typing;
 
+import dev.markdsouza.godmodecode.integrity.Rejection;
 import dev.markdsouza.godmodecode.user.RecognitionCookie;
 import dev.markdsouza.godmodecode.user.User;
 import dev.markdsouza.godmodecode.user.UserService;

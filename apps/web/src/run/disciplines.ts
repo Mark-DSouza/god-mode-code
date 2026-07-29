@@ -33,15 +33,22 @@ export const DISCIPLINES: Record<Discipline, DisciplineDetails> = {
 };
 
 /**
- * The Disciplines that can be played today.
+ * The Disciplines that hand out a Passage to transcribe.
  *
- * Code is deliberately absent rather than present and disabled. It is not a
- * Passage to transcribe at all — it is a Pattern, judged by running submitted
- * source against hidden tests (ADR-0004) — so it needs its own screen rather
- * than a greyed-out tile on this one. A tile that does nothing reads as a broken
- * site; an absent tile reads as an unfinished one, which is the truth.
+ * Code is not one of them and never will be: it is a Pattern, judged by running
+ * submitted source against Hidden Tests (ADR-0004), so asking for a Passage in
+ * it answers "there is nothing here". Picking it on the home screen leads to the
+ * catalogue rather than straight into a Run, which is the other thing that makes
+ * it different — you choose your Pattern, and nobody chooses their Passage.
  */
 export const TRANSCRIPTION_DISCIPLINES = [
   "QUOTES",
   "PROSE",
+] as const satisfies readonly Discipline[];
+
+/** Every Discipline that can be played, in the order the home screen offers them. */
+export const PLAYABLE_DISCIPLINES = [
+  "QUOTES",
+  "PROSE",
+  "CODE",
 ] as const satisfies readonly Discipline[];

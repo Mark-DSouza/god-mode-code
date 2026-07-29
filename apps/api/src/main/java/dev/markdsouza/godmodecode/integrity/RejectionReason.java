@@ -1,9 +1,14 @@
-package dev.markdsouza.godmodecode.typing;
+package dev.markdsouza.godmodecode.integrity;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Why a submitted Run was not recorded.
+ *
+ * One vocabulary for both kinds of Run. The reasons about the Issue are the
+ * integrity model itself and apply to anything verified against one; the two
+ * below them are about a Passage in particular, and a Solve Run simply never
+ * produces them.
  *
  * Machine-readable and part of the contract, because the client's response
  * differs by reason: an expired Challenge means "here is a new one", a replay
@@ -56,7 +61,7 @@ public enum RejectionReason {
      * Nothing here reveals which bound was crossed by how much — that would be
      * a tuning guide for the next attempt.
      */
-    String explanation() {
+    public String explanation() {
         return explanation;
     }
 }

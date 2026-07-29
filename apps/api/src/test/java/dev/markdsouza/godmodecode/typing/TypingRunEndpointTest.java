@@ -1,5 +1,7 @@
 package dev.markdsouza.godmodecode.typing;
 
+import dev.markdsouza.godmodecode.integrity.Rejection;
+import dev.markdsouza.godmodecode.integrity.RejectionReason;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.markdsouza.godmodecode.AbstractIntegrationTest;

@@ -1,7 +1,7 @@
 import type { Discipline } from "@gmc/api-client";
 import { type ReactNode, useState } from "react";
 import { Button, Card, ChallengeCard } from "../design-system/index.ts";
-import { DISCIPLINES, TRANSCRIPTION_DISCIPLINES } from "./disciplines.ts";
+import { DISCIPLINES, PLAYABLE_DISCIPLINES } from "./disciplines.ts";
 
 /**
  * Choosing what to type.
@@ -37,8 +37,8 @@ export function HomeScreen({
         </p>
       </div>
 
-      <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
-        {TRANSCRIPTION_DISCIPLINES.map((discipline) => (
+      <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {PLAYABLE_DISCIPLINES.map((discipline) => (
           <ChallengeCard
             key={discipline}
             glyph={DISCIPLINES[discipline].glyph}
@@ -51,8 +51,11 @@ export function HomeScreen({
       </div>
 
       <div className="flex flex-col items-center gap-4">
+        {/* Code does not deal you anything: it takes you to the catalogue, and
+            you pick. Saying "Start Run" there would promise a Run that the next
+            screen does not begin. */}
         <Button size="lg" disabled={pending} onClick={() => onStart(chosen)}>
-          {pending ? "Dealing you a Passage" : "Start Run"}
+          {chosen === "CODE" ? "Browse Patterns" : pending ? "Dealing you a Passage" : "Start Run"}
         </Button>
 
         {failed && (

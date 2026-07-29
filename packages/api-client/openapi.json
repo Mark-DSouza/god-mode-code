@@ -16,8 +16,14 @@
     "name" : "Challenges",
     "description" : "Being handed something to type"
   }, {
+    "name" : "Solve Runs",
+    "description" : "Runs against a Pattern, judged by execution"
+  }, {
     "name" : "Health",
     "description" : "Liveness and dependency status"
+  }, {
+    "name" : "Patterns",
+    "description" : "The Code Discipline's catalogue"
   }, {
     "name" : "Typing Runs",
     "description" : "Runs against a Passage, verified server-side"
@@ -112,12 +118,137 @@
         }
       }
     },
+    "/api/solve-runs" : {
+      "post" : {
+        "tags" : [ "Solve Runs" ],
+        "summary" : "Submit a finished Solve Run to be judged",
+        "description" : "Takes the lines that were written, assembles them with the Pattern's Scaffold, and has the judge execute the result against every one of the Pattern's tests. The Verdict comes back from that execution; the duration and the WPM are recomputed from the raw submission (ADR-0003).\n\nA Failed Verdict is a 201. The Solve Run happened, it is recorded, and it belongs to the player — a Solve Run can fail, which is the difference between it and a Typing Run (ADR-0006).\n\n422 is a submission that was not recorded at all, with the reason. 503 is the judge being unreachable: no Verdict exists, nothing about the submitted source can be concluded, and the Issue is left unspent so the same lines can be sent again.\n",
+        "operationId" : "submit_1",
+        "parameters" : [ {
+          "name" : "gmc_recognition",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SolveRunSubmission"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "The Solve Run as judged and recorded, whatever the Verdict",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolveRun"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "This browser is nobody yet"
+          },
+          "422" : {
+            "description" : "The Solve Run was not recorded, and why",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Rejection"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "There is no Verdict to be had. Only the Code Discipline is affected",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Unjudged"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patterns/{slug}/challenges" : {
+      "post" : {
+        "tags" : [ "Patterns" ],
+        "summary" : "Be handed this Pattern to solve",
+        "description" : "Records an Issue against the User — who got what, when, and until when — and returns the Pattern with its Scaffold and Example Tests.\n\nUnlike a Passage, the player names which one. There is nothing to shop for: a Pattern is a technique to practise, not a score to farm.\n\nAsking again abandons whatever Challenge the User was holding, in either Discipline, so nobody can hold several at once and submit whichever went best (ADR-0003). The window is flat rather than scaled by length: a Pattern is answered by thinking, and there is nothing about it to time by the character.\n",
+        "operationId" : "request",
+        "parameters" : [ {
+          "name" : "gmc_recognition",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "slug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "201" : {
+            "description" : "The Challenge, and when it stops being answerable",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolveChallenge"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "This browser is nobody yet — create a User first"
+          },
+          "404" : {
+            "description" : "No activated Pattern has that slug"
+          }
+        }
+      }
+    },
+    "/api/patterns/activations" : {
+      "post" : {
+        "tags" : [ "Patterns" ],
+        "summary" : "Run the activation gate over every Pattern awaiting it",
+        "description" : "Assembles each inactive Pattern's reference solution with its Scaffold exactly as a player's submission would be, has the judge execute it, and activates the Pattern only if the Verdict is Passed and the judge ran as many tests as the Pattern has.\n\nThat second condition is not a formality. The judge compiles its catalogue into its binary and is deployed separately from the database, so the two can skew — and a judge running an older copy of a Pattern would answer Passed against fewer tests than the curator wrote, which is true and useless.\n\nAnswers 200 whatever happened. A Pattern that did not pass is not an error in this request; it is the gate doing its job, and the body says so per Pattern. Already-activated Patterns are not re-judged and are absent from the answer.\n",
+        "operationId" : "activate",
+        "responses" : {
+          "200" : {
+            "description" : "What the gate made of each Pattern that was awaiting it",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PatternActivation"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/challenges" : {
       "post" : {
         "tags" : [ "Challenges" ],
         "summary" : "Be handed a Passage to transcribe",
         "description" : "Records an Issue against the User — who got what, when, and until when — and returns the Passage. Which Passage arrives is the server's choice.\n\nAsking again abandons the Challenge the User was holding, so a player can skip a Passage they do not fancy, and nobody can hold several at once and submit whichever went best (ADR-0003).\n",
-        "operationId" : "request",
+        "operationId" : "request_1",
         "parameters" : [ {
           "name" : "gmc_recognition",
           "in" : "cookie",
@@ -183,6 +314,50 @@
           },
           "404" : {
             "description" : "This browser is nobody yet"
+          }
+        }
+      }
+    },
+    "/api/patterns" : {
+      "get" : {
+        "tags" : [ "Patterns" ],
+        "summary" : "Browse the Patterns that can be played",
+        "description" : "Every activated Pattern, newest Family order, optionally narrowed to one Family and one Seniority. Each carries its prompt and its Example Tests, so a player can read the contract they will be judged against before starting.\n\nInactive Patterns are absent rather than listed as unavailable. A Pattern is inactive because nobody has yet proved its tests are correct, and offering one would be offering a Challenge that might be unwinnable.\n\nHidden Tests are not here, and there is no endpoint that serves them. They live in the judge's own binary (ADR-0005), and their failure is only ever reported to a player as a count.\n",
+        "operationId" : "browse",
+        "parameters" : [ {
+          "name" : "family",
+          "in" : "query",
+          "description" : "Only this Family",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "description" : "The grouping a Pattern belongs to",
+            "enum" : [ "HASH_MAP", "TWO_POINTERS", "SLIDING_WINDOW", "STACK", "HEAP", "BINARY_SEARCH", "GRAPH", "DYNAMIC_PROGRAMMING" ]
+          }
+        }, {
+          "name" : "seniority",
+          "in" : "query",
+          "description" : "Only this Seniority",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "description" : "The difficulty band of a Challenge",
+            "enum" : [ "JUNIOR", "SENIOR", "PRINCIPAL" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "The Patterns that match",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Pattern"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -350,6 +525,212 @@
           }
         },
         "required" : [ "explanation", "reason" ]
+      },
+      "SolveRunSubmission" : {
+        "type" : "object",
+        "description" : "The raw data a finished Solve Run is judged and verified from",
+        "properties" : {
+          "issueId" : {
+            "type" : "string",
+            "format" : "uuid",
+            "description" : "The Issue this Solve Run answers"
+          },
+          "source" : {
+            "type" : "string",
+            "description" : "The lines written below the Scaffold, exactly as typed",
+            "example" : "    return []",
+            "maxLength" : 16384,
+            "minLength" : 0
+          },
+          "keystrokes" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Total character keystrokes, deletions of them excluded",
+            "example" : 180
+          },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "The client's clock at the first keystroke"
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "The client's clock when the Solve Run was submitted"
+          }
+        },
+        "required" : [ "completedAt", "issueId", "keystrokes", "source", "startedAt" ]
+      },
+      "SolveRun" : {
+        "type" : "object",
+        "description" : "A completed and judged Run against a Pattern",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "patternId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "patternSlug" : {
+            "type" : "string",
+            "example" : "hash-map-seen-lookup"
+          },
+          "verdict" : {
+            "type" : "string",
+            "enum" : [ "passed", "failed", "timeout", "error" ]
+          },
+          "testsPassed" : {
+            "type" : "integer",
+            "format" : "int32",
+            "example" : 6
+          },
+          "testsTotal" : {
+            "type" : "integer",
+            "format" : "int32",
+            "example" : 6
+          },
+          "elapsedMillis" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "How long the Solve Run took, as verified",
+            "example" : 48210
+          },
+          "keystrokes" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Total character keystrokes",
+            "example" : 180
+          },
+          "wpm" : {
+            "type" : "number",
+            "description" : "Every submitted character over five, per minute — a secondary reading",
+            "example" : 41.2
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "completedAt", "elapsedMillis", "id", "keystrokes", "patternId", "patternSlug", "testsPassed", "testsTotal", "verdict", "wpm" ]
+      },
+      "Unjudged" : {
+        "type" : "object",
+        "description" : "A Solve Run that could not be judged. No Run was recorded and the Challenge is still live",
+        "properties" : {
+          "explanation" : {
+            "type" : "string",
+            "example" : "The judge could not be reached. Your Challenge is still yours."
+          }
+        },
+        "required" : [ "explanation" ]
+      },
+      "ExampleTest" : {
+        "type" : "object",
+        "description" : "A test case shown to the player before they start",
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "description" : "What the case is about",
+            "example" : "the pair is the first two numbers"
+          },
+          "call" : {
+            "type" : "string",
+            "description" : "The call the submitted source must satisfy",
+            "example" : "pair_sum([2, 7, 11, 15], 9)"
+          },
+          "expected" : {
+            "type" : "string",
+            "description" : "The answer the call has to produce",
+            "example" : [ 0, 1 ]
+          }
+        },
+        "required" : [ "call", "expected", "name" ]
+      },
+      "Pattern" : {
+        "type" : "object",
+        "description" : "A Pattern to solve, as the player is shown it",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "slug" : {
+            "type" : "string",
+            "description" : "Stable identifier, also what the judge knows this Pattern by",
+            "example" : "hash-map-seen-lookup"
+          },
+          "name" : {
+            "type" : "string",
+            "example" : "Store what you've seen, look up what you need"
+          },
+          "family" : {
+            "type" : "string",
+            "description" : "The grouping a Pattern belongs to",
+            "enum" : [ "HASH_MAP", "TWO_POINTERS", "SLIDING_WINDOW", "STACK", "HEAP", "BINARY_SEARCH", "GRAPH", "DYNAMIC_PROGRAMMING" ]
+          },
+          "seniority" : {
+            "type" : "string",
+            "description" : "The difficulty band of a Challenge",
+            "enum" : [ "JUNIOR", "SENIOR", "PRINCIPAL" ]
+          },
+          "prompt" : {
+            "type" : "string",
+            "description" : "The technique and what to do with it, in the player's words"
+          },
+          "scaffold" : {
+            "type" : "string",
+            "description" : "The read-only lines above the editable region",
+            "example" : "def pair_sum(numbers, target):"
+          },
+          "exampleTests" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ExampleTest"
+            }
+          }
+        },
+        "required" : [ "exampleTests", "family", "id", "name", "prompt", "scaffold", "seniority", "slug" ]
+      },
+      "SolveChallenge" : {
+        "type" : "object",
+        "description" : "A Pattern to solve, and the Issue that recorded it going out",
+        "properties" : {
+          "issueId" : {
+            "type" : "string",
+            "format" : "uuid",
+            "description" : "What the client hands back when the Solve Run is submitted"
+          },
+          "pattern" : {
+            "$ref" : "#/components/schemas/Pattern"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "After this moment the Challenge can no longer be answered"
+          }
+        },
+        "required" : [ "expiresAt", "issueId", "pattern" ]
+      },
+      "PatternActivation" : {
+        "type" : "object",
+        "description" : "What the activation gate made of one Pattern",
+        "properties" : {
+          "slug" : {
+            "type" : "string",
+            "example" : "hash-map-seen-lookup"
+          },
+          "activated" : {
+            "type" : "boolean"
+          },
+          "explanation" : {
+            "type" : "string",
+            "description" : "What happened, in a sentence",
+            "example" : "The reference solution passed all 6 tests."
+          }
+        },
+        "required" : [ "activated", "explanation", "slug" ]
       },
       "ChallengeRequest" : {
         "type" : "object",

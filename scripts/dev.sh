@@ -64,10 +64,33 @@ if command -v go >/dev/null 2>&1; then
   echo "==> Starting the judge"
   (cd apps/judge && JUDGE_VERSION=dev go run ./cmd/judge) &
   pids+=($!)
+
+  # Patterns ship inactive and become playable only once their reference
+  # solution has been executed against their own tests. That needs a judge, so
+  # it cannot be a migration and must not be something the backend does at
+  # startup -- booting has to work when the judge is down (ADR-0005). Here is
+  # where both are true at once, so this is where a local clone gets a playable
+  # Code Discipline without anybody being told to run a curl.
+  #
+  # In the background and forgiving: it is a convenience, and a developer whose
+  # judge is unhappy should still get a working Quotes and Prose.
+  if command -v curl >/dev/null 2>&1; then
+  (
+    for _ in $(seq 1 60); do
+      if curl -fsS -X POST http://localhost:8080/api/patterns/activations >/dev/null 2>&1; then
+        echo "==> Patterns activated"
+        exit 0
+      fi
+      sleep 2
+    done
+    echo "==> Could not activate the Patterns; the Code Discipline will be empty"
+  ) &
+  pids+=($!)
+  fi
 else
-  # Not fatal: nothing in the product calls the judge yet, and the rest of the
-  # stack is perfectly usable without it.
-  echo "==> Skipping the judge (Go not installed)"
+  # Not fatal, and it costs exactly one Discipline: Quotes and Prose need no
+  # judge, and the Code Discipline needs one to activate a Pattern at all.
+  echo "==> Skipping the judge (Go not installed) -- the Code Discipline will be empty"
 fi
 
 echo "==> Starting the frontend"

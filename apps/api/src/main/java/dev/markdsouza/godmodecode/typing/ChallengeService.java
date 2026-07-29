@@ -1,5 +1,7 @@
 package dev.markdsouza.godmodecode.typing;
 
+import dev.markdsouza.godmodecode.integrity.Issue;
+import dev.markdsouza.godmodecode.integrity.IssueRepository;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
@@ -47,7 +49,7 @@ public class ChallengeService {
         issues.supersedeLiveFor(userId);
 
         Duration window = Expiry.forPassageOf(passage.get().characterCount());
-        Issue issue = issues.record(userId, passage.get().id(), window);
+        Issue issue = issues.recordPassage(userId, passage.get().id(), window);
 
         return Optional.of(new Challenge(issue.id(), passage.get(), issue.expiresAt()));
     }

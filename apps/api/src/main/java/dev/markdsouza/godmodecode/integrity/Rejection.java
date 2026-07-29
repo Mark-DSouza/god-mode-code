@@ -1,4 +1,4 @@
-package dev.markdsouza.godmodecode.typing;
+package dev.markdsouza.godmodecode.integrity;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -17,7 +17,7 @@ public record Rejection(
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 String explanation) {
 
-    static Rejection of(RejectionReason reason) {
+    public static Rejection of(RejectionReason reason) {
         return new Rejection(reason, reason.explanation());
     }
 }

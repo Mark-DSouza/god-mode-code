@@ -1,36 +1,40 @@
 #!/usr/bin/env python3
 """
-The Claude Code write guard: two rules, both firing before the tool runs.
+The Claude Code write guard: one rule, firing before the tool runs.
 
-This is not the control. The commit guard in `.githooks/pre-commit` is, and CI
-is what finds the vulnerabilities; this covers one agent in one checkout and is
-absent for every human and for every agent that has never heard of Claude Code
-(ADR-0013). It earns its place by being the only one of the three that runs
-*before* the bytes exist:
+**A credential shape is denied.** The same detector the commit guard uses,
+moved one step earlier — the difference between a secret that never touched
+disk and one that sits in the tree until a commit is attempted. It also covers
+what GitHub's push protection does not, since
+`secret_scanning_non_provider_patterns` is disabled on this repository and
+anything not matching a known provider format is invisible to it.
 
-  **A credential shape is denied.** The same detector the commit guard uses,
-  moved one step earlier — the difference between a secret that never touched
-  disk and one that sits in the tree until a commit is attempted. It also
-  covers what GitHub's push protection does not, since
-  `secret_scanning_non_provider_patterns` is disabled on this repository and
-  anything not matching a known provider format is invisible to it.
+That is the whole of it. This is not the control: the commit guard in
+`.githooks/pre-commit` is, and CI is what finds the vulnerabilities. This
+covers one agent in one checkout and is absent for every human and for every
+agent that has never heard of Claude Code (ADR-0013).
 
-  **Touching a control asks.** An agent told to make CI pass can, and will,
-  edit the thing that is failing. With a security gate required on the branch,
-  "weaken the gate until it goes green" is a plausible route to a green check
-  and one nobody plans for. This puts a human in front of it.
+There was a second rule, and its removal is the thing most likely to be
+mistaken for an oversight. Touching a protected control — the workflows,
+`.githooks/`, the detector, this file — used to ask, as did `--no-verify`, a
+force push, `core.hooksPath` and `gh pr merge --admin`. ADR-0014 removed it and
+is where the reasoning and the accepted exposures live; ADR-0013 still argues
+for the layer and carries a pointer to ADR-0014 beside the paragraph that no
+longer holds. Read ADR-0014 before restoring any of it.
 
-Deny for credentials and ask for controls, and the asymmetry is deliberate. A
-credential shape is always wrong, and Claude should be told so plainly enough
-that it writes a placeholder instead of trying the next tool. A hard deny on
-the control files would make them unmaintainable — including by the change that
-installed this guard — so ask puts a human in the loop without locking anyone
-out.
+What follows from having only one rule: nothing here reads the shell. The
+command is scanned as raw text and asked only whether a credential is in it,
+which is why there is no segment splitter, no reader allowlist and no
+commit-message stripping in this file — every one of those existed to stop the
+ask rule firing on ordinary work. The gap that leaves is stated plainly: a
+credential the command *generates* rather than spells (`python3 gen.py > .env`)
+is not visible to a text scan, and is caught by the commit guard on any commit
+that does not skip it, and by CI and `pnpm security:sweep` regardless.
 
 `Bash` is inspected alongside the file tools, and that is the difference
 between a guard and a speed bump: an agent refused a `Write` will reasonably
 reach for `bash -c 'cat > file <<EOF'`, which puts the same bytes down without
-touching either file tool. The protected paths go the same way.
+touching either file tool.
 
 Two things this file must keep doing:
 
@@ -43,7 +47,7 @@ Two things this file must keep doing:
   **It fails towards a human.** Malformed input, a missing detector, an
   unexpected exception: all of them ask. A guard that quietly stops inspecting
   looks exactly like a guard that inspected and found nothing, and that is the
-  failure this whole ticket exists to avoid.
+  failure this file exists to avoid.
 
 Configured in `.claude/settings.json`, which is committed rather than local —
 an untracked settings file would not exist inside the git worktrees this
@@ -59,10 +63,9 @@ people wait on is a guard that gets turned off.
 from __future__ import annotations
 
 import json
-import re
 import sys
-from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, NamedTuple, Sequence
+from pathlib import Path
+from typing import Any, Iterable, NamedTuple
 
 # The tools that can put bytes on disk. `scripts/test_claude_code_guard.py`
 # asserts that the matcher in `.claude/settings.json` names exactly these — a
@@ -73,132 +76,6 @@ from typing import Any, Iterable, NamedTuple, Sequence
 # Naming a tool that does not exist costs nothing; omitting one that does is
 # the hole.
 INSPECTED_TOOLS = ("Bash", "Edit", "MultiEdit", "NotebookEdit", "Write")
-
-
-class Protected(NamedTuple):
-    """One path whose weakening is worth a prompt, and why it is on the list."""
-
-    path: str
-    # A directory protects everything beneath it. A file protects only itself.
-    directory: bool
-    why: str
-
-
-# Kept short on purpose. Prompt fatigue is the failure mode of asking too
-# often, and a prompt nobody reads is worse than no prompt, so this is the set
-# that genuinely weakens the posture rather than everything security-adjacent.
-PROTECTED_PATHS: tuple[Protected, ...] = (
-    # The whole directory rather than the one security workflow, because a pull
-    # request's workflows run as that pull request defines them: CI cannot be
-    # relied on to object to being weakened by the change it is running from
-    # (ADR-0013). `ci.yml` is also where the credential job lives today.
-    Protected(
-        ".github/workflows",
-        True,
-        "the CI definition — the gate, as supplied by the change it is gating",
-    ),
-    Protected(".github/dependabot.yml", False, "the dependency update configuration"),
-    # The invariant that the application accepts no inbound traffic at all,
-    # which is what ADR-0013's argument about uncovered container packages
-    # rests on. Its sibling tests are not here; only this one is load-bearing.
-    Protected(
-        "infra/terraform/tests/security.tftest.hcl",
-        False,
-        "the infrastructure security invariants",
-    ),
-    Protected(".githooks", True, "the commit-time guard, which is the actual control"),
-    # The wrapper without the thing it calls is not a protected control:
-    # emptying the shape list disarms all three enforcement points at once.
-    Protected("scripts/credential_detector.py", False, "the shared credential detector"),
-    # A guard nobody installs guards nothing.
-    Protected("scripts/install-git-hooks.sh", False, "the commit guard's installer"),
-    Protected(".claude/settings.json", False, "the hook configuration itself"),
-    Protected("scripts/claude_code_guard.py", False, "this guard"),
-)
-
-# `package.json` is deliberately absent, though its `prepare` entry is what
-# runs the installer. It is edited by ordinary dependency work several times a
-# ticket, and CI already fails when that line goes missing — see the "install
-# lifecycle still runs the installer" step in `.github/workflows/ci.yml`.
-
-
-class Bypass(NamedTuple):
-    """One way to get past the commit guard rather than through it."""
-
-    name: str
-    regex: re.Pattern[str]
-
-
-def _bypass(name: str, regex: str) -> Bypass:
-    return Bypass(name, re.compile(regex))
-
-
-# Where a commit starts in a segment: `commit` as git's subcommand, with only
-# git's own options — `-c core.quotePath=false` and friends, hence the optional
-# value each may take — allowed to stand in front of it.
-#
-# Anchoring on `git` has been the fix to the same bug twice. `\bcommit\b` alone
-# was satisfied by `.githooks/pre-commit`, because the hyphen is a word
-# boundary, and then by a bare `commit` anywhere in the segment.
-GIT_COMMIT = r"\bgit\b(?:\s+-\S+(?:\s+[^-\s]\S*)?)*\s+commit(?![\w\-./])"
-
-
-# Read against one shell segment at a time, because `-n` means one thing to
-# `git commit` and something else entirely to `git push`, and that distinction
-# is lost the moment the whole command line is treated as a bag of words.
-#
-# None of this survives a determined shell. It reads the command as text, so
-# anything that assembles the flag rather than writing it — `git commit
-# "--no-$(echo verify)"` — goes through untouched; a substitution that still
-# contains the literal spelling, like `$(echo --no-verify)`, does not, which is
-# an accident of where the characters land rather than a parse. Not having to
-# survive that is the point: this is a prompt on the obvious spelling of a
-# thing nobody does by accident, and the commit guard covers the case where
-# somebody means it. `scripts/test_claude_code_guard.py` asserts both sides.
-BYPASSES: tuple[Bypass, ...] = (
-    _bypass("skipping the commit hooks", r"--no-verify\b"),
-    # Git accepts any unambiguous prefix of a long option, so `--no-veri` is
-    # `--no-verify`. It starts at `veri` rather than `ver` because `--no-ver`
-    # is where the abbreviation stops being unambiguous — `--no-verbose` is
-    # also a git option, and matching it would tell a human their command was
-    # skipping the commit hooks when it was doing nothing of the kind. Scoped
-    # to a segment mentioning git, because `--no-ver…` abbreviates something
-    # harmless elsewhere.
-    _bypass("skipping the commit hooks", r"\bgit\b(?:\s+\S+)*?\s+--no-veri[a-z]*\b"),
-    # The short form, and only for `commit`: `git push -n` is a dry run, which
-    # is the most harmless command in the set.
-    #
-    # Only flags may stand between the subcommand and the bundle. Accepting any
-    # word there (`(?:\s+\S+)*?`) meant the first `-…n…` token anywhere later in
-    # the segment was read as belonging to the commit: `git commit -m x` in a
-    # loop that also ran `find . -name '*.py'` was reported as skipping the
-    # commit hooks. The trailing `[A-Za-z]*(?![\w-])` is what keeps this to a
-    # whole short-flag bundle rather than a prefix of any longer word.
-    _bypass("skipping the commit hooks", GIT_COMMIT + r"(?:\s+-\S+)*?\s+-[A-Za-z]*n[A-Za-z]*(?![\w-])"),
-    # No abbreviation rule needed here, unlike `--no-verify` above: `--force`
-    # is the shortest unambiguous prefix git accepts — `git push --forc` is
-    # refused as ambiguous against `--force-with-lease` and
-    # `--force-if-includes`, which was checked rather than assumed — and
-    # `--force\b` already covers every longer spelling, since the `-` that
-    # follows is a word boundary.
-    _bypass("force-pushing", r"\bpush\b(?:\s+\S+)*?\s+(?:--force\b|-[A-Za-z]*f)"),
-    # A leading `+` on a refspec is a force push spelled without a flag, and
-    # the destination half is optional — `git push origin +main` forces just
-    # as hard as `+main:main`.
-    _bypass("force-pushing", r"\bpush\b(?:\s+\S+)*?\s+\+\S+"),
-    _bypass("repointing git's hooks directory", r"\bcore\.hooksPath\b"),
-    _bypass("merging past the required checks", r"\bmerge\b(?:\s+\S+)*?\s+--admin\b"),
-)
-
-# Shell separators, used only to keep the rules above from reading a flag in
-# one command as belonging to another.
-SEGMENTS = re.compile(r"(?:\|\||&&|[;|\n])")
-
-# A backslash-newline is a line continuation, not a separator. Folding it away
-# before splitting is what stops a command written across two lines from
-# putting `push` in one segment and `--force` in the next, where no rule
-# anchored on the subcommand could ever see them together.
-CONTINUATION = re.compile(r"\\\n\s*")
 
 
 def emit(decision: str, reason: str) -> None:
@@ -214,261 +91,6 @@ def emit(decision: str, reason: str) -> None:
             }
         )
     )
-
-
-def _path_regex(entry: Protected) -> re.Pattern[str]:
-    """The entry as it appears inside a shell command.
-
-    Bounded on both sides so `.githooks-notes/` is not `.githooks`, and so a
-    protected file's name is not matched inside a longer one. The left side
-    permits `/`, since an absolute path is the ordinary way to write these.
-    """
-    return re.compile(r"(?<![\w-])" + re.escape(entry.path) + r"(?![\w.-])")
-
-
-PROTECTED_IN_COMMAND = tuple((entry, _path_regex(entry)) for entry in PROTECTED_PATHS)
-
-# The commands that only read. Prompting on these was, by a distance, the
-# largest thing this guard did: of the ten prompts in the first session that
-# ran it, nine were a `cat`, a `git diff` or a `git log` of a control — reading
-# the guard in order to work on it, which is the one thing every change to
-# these files has to start with.
-#
-# An allowlist and not a test for writes, so the failure direction is a prompt:
-# a command this has never heard of still asks. The git subcommands are named
-# one by one because `git log <path>` and `git checkout -- <path>` are the same
-# program, and only one of them is a read.
-#
-# What may join the list: a command whose *name* settles it. That is the whole
-# membership rule, and it is what makes matching on the name sound. `cat` reads
-# whatever flags it is given, and so do `shellcheck`, `yamllint` and
-# `actionlint`, which read a control in order to check it — checking one is not
-# a way of weakening it.
-#
-# `mypy` was on this list for a day and is the worked example of the rule
-# catching something its author did not know. It looks like the other three and
-# is not: `--junit-xml`, `--html-report`, `--cobertura-xml-report` and
-# `--linecount-report` all take a caller-chosen destination, so
-# `mypy --junit-xml .githooks/pre-commit x.py` truncates the commit guard while
-# looking like a type check. The rule found that; reading the list and thinking
-# "linters are safe" did not.
-#
-# What may not, however ordinary it is: anything that reads by default and
-# writes with a flag. `sed -i`, `sort -o`, `awk '{print > "f"}'`, `find
-# -delete`, `ruff --fix` and `mypy --junit-xml` are all absent for that one
-# reason, and `sed -i` is
-# the primary way a shell edits a file — putting it here would open the widest
-# hole in the guard to buy back one prompt. Keeping them off is also what lets
-# this stay a list of names rather than a flag parser: the three bugs recorded
-# against `MESSAGE_VALUE` and the bypass rules below are all the same mistake,
-# which is reading flags out of a shell string, and they are the reason this
-# file does not make that bet a fourth time. `scripts/test_claude_code_guard.py`
-# holds both halves — that the nine readers are silent and that the five are
-# not.
-#
-# The lookahead excludes `/` as well, and that is a fix rather than
-# housekeeping for the new names: a reader's name followed by a path separator
-# is a script in a directory that happens to be called `test/` or `stat/`, and
-# a script is not its directory. It was already wrong before this list grew —
-# `stat/collect.sh .githooks/pre-commit` goes through untouched on `main` — so
-# adding `test` only made an existing hole easier to fall into.
-READ_ONLY = re.compile(
-    r"^\s*(?:cat|bat|head|tail|less|more|nl|wc|file|stat|ls|tree|"
-    r"grep|egrep|fgrep|rg|ag|ack|diff|cmp|md5sum|sha\d+sum|jq|cut|"
-    r"shellcheck|yamllint|actionlint|test|realpath|basename|"
-    r"git\s+(?:log|diff|show|status|blame|grep|ls-files|cat-file|rev-parse|describe))"
-    r"(?![\w./-])"
-)
-
-
-# The redirections that land nowhere: `2>/dev/null` discards, `2>&1` points one
-# stream at another. Neither can put bytes in a file, and `2>/dev/null` is
-# ordinary enough on a `cat` of a file that may not exist that treating it as a
-# write put the prompt straight back on a read.
-DISCARDED = re.compile(r"\d*>>?\s*/dev/null|\d*>&\d*")
-
-
-def only_reads(segment: str) -> bool:
-    """Whether this segment can be trusted to leave the path where it is.
-
-    The redirection check is not decoration: `cat x > .githooks/pre-commit`
-    truncates the commit guard using nothing but a reader. `<` is left out, as
-    reading a file into a reader is still a read.
-    """
-    return bool(READ_ONLY.match(segment)) and ">" not in DISCARDED.sub("", segment)
-
-
-def protected_by(path: str) -> Protected | None:
-    """Which control, if any, this path is part of.
-
-    Matched on trailing path segments rather than against one absolute root,
-    because a git worktree is a different project root holding the same
-    controls — and worktrees are where this project's agent work happens. The
-    cost of that choice is a prompt on an unrelated repository's `.githooks`,
-    which is a prompt rather than a refusal.
-    """
-    parts = tuple(part for part in PurePosixPath(path.replace("\\", "/")).parts if part != "/")
-    for entry in PROTECTED_PATHS:
-        wanted = tuple(PurePosixPath(entry.path).parts)
-        for start in range(len(parts) - len(wanted) + 1):
-            if parts[start : start + len(wanted)] != wanted:
-                continue
-            # A file entry has to be the path itself; a directory entry covers
-            # everything below it.
-            if entry.directory or start + len(wanted) == len(parts):
-                return entry
-    return None
-
-
-def protected_in_command(segments: Sequence[str]) -> Protected | None:
-    """The same set, read out of a shell command.
-
-    Deliberately not an attempt to work out whether the command writes. That
-    analysis is exactly what an agent routes around — `python3 -c "open(...)"`
-    is not a write to anything watching for redirections — so everything is
-    read as a write unless it is one of the plain readers in `only_reads`,
-    which is a list that can only ever be too short.
-
-    The limit, stated rather than papered over: this matches the path as
-    written. A glob (`.githook?/pre-commit`), a variable or a substitution
-    reaches the same file and is not seen, and nothing short of running the
-    command would see it. Unlike the credential rule, this has
-    no commit-time backstop: the commit guard reads content and not which
-    files a change touches, so what covers the residue is a human reading the
-    diff on the pull request, which is where a change to these files was
-    always going to be argued about.
-    """
-    for segment in segments:
-        if only_reads(segment):
-            continue
-        for entry, regex in PROTECTED_IN_COMMAND:
-            if regex.search(segment):
-                return entry
-    return None
-
-
-# A `-m`/`--message` flag and the value it takes.
-#
-# `keep` is whatever the flag was bundled with, and is put back: `git commit
-# -nm "wip"` is `-n` and `-m` written together, so swallowing the whole flag
-# would take the bypass out along with the message. That is how this was first
-# written, and the `-nm` test is what caught it.
-#
-# The unquoted value stops at the characters that end a word without being
-# whitespace, rather than running to the next space. Two of them were measured
-# escaping through `\S+`:
-#
-#   `curl -m 5&git commit --no-veri` was read as a message of `5&git`, which
-#   deleted the `git` the abbreviation rule is anchored on. `&` and not `;`,
-#   because `;`, `|` and `&&` already split the segment before any of this
-#   runs — they are in the class for symmetry, and cannot be reached.
-#
-#   `git commit -m wip>.githooks/pre-commit` was read as a message of
-#   `wip>.githooks/pre-commit`, which is the redirection that truncates the
-#   commit guard, deleted entire.
-MESSAGE_VALUE = re.compile(
-    r"(?:^|\s)(?P<keep>-[A-Za-z]*|--)m(?:essage)?(?:\s+|=)"
-    r"(?:\"(?:[^\"\\]|\\.)*\"|'[^']*'|[^\s;|&<>]+)"
-)
-
-# The same rule as `MESSAGE_VALUE`, for the flag people write prose with.
-#
-# A message worth paragraphs is not passed as `-m`; it is `git commit -F -`
-# with a heredoc, or `gh pr create --body "$(cat <<'EOF' … EOF)"`. Both went
-# straight past the `-m` strip, because `SEGMENTS` splits on `\n`: every line
-# of the message became its own segment, and any line naming a control asked.
-# The branch that added this prompted on its own commit message and again on
-# its own pull request body, which is the failure `readable_segments` already
-# exists to prevent, reached through a different flag.
-#
-# Scoped to a heredoc introduced on a line that carries a message flag, and
-# emphatically not applied to heredocs at large. A heredoc body is ordinarily
-# *program text* — `bash -c 'cat > file <<EOF'` is named in this file's
-# docstring as where an agent goes when refused a `Write` — so blanking every
-# body would take `python3 <<'EOF'\nopen('.githooks/pre-commit','w')\nEOF`
-# silent, which is a write this catches today. The tests pin both directions.
-#
-# Separators are excluded between the flag and the `<<`, or `gh pr create
-# --body x && python3 <<'EOF'` would hand the message flag's licence to the
-# heredoc after the `&&`. What remains: a message flag and an unrelated
-# heredoc on one line with no separator between them, which is a shape nobody
-# writes by accident, and the pull request diff is what covers it.
-#
-# The credential rule cannot be reached by any of this — it scans the raw
-# command before segments exist. A credential in a commit message is a
-# credential in the repository, and there is a test saying so.
-MESSAGE_HEREDOC = re.compile(
-    r"(?P<head>[^\n]*"
-    r"(?:-F[=\s]+-|--file[=\s]+-|--body-file[=\s]+-|--body\b|--title\b|-m[=\s]|--message\b)"
-    r"[^\n;|&]*<<-?\s*(?P<quote>['\"]?)(?P<tag>[A-Za-z_]\w*)(?P=quote)[^\n]*\n)"
-    r"(?:(?!\s*(?P=tag)\s*$)[^\n]*\n)*",
-    re.MULTILINE,
-)
-
-# The same position, compiled: everything after it can have its `-m` value
-# taken out, everything before it cannot. A `-m` in front of the subcommand is
-# not a commit message and is left alone. Excluding `-`, `/` and `.` after the
-# word is what stops `sort -m .githooks/pre-commit commit` licensing the strip,
-# and requiring git's own options rather than any word in front of it is what
-# stops `git log --format=%s commit -m .githooks/pre-commit`.
-A_COMMIT = re.compile(GIT_COMMIT)
-
-
-def readable_segments(command: str) -> list[str]:
-    """The command in shell segments, with commit-message text taken out.
-
-    Only for the two rules that ask what a command touches and what it does.
-    A message is text on its way to a commit, not to disk, so a message that
-    quotes a protected path or spells a bypass flag is describing the work
-    rather than doing it. Both were measured before this existed: `git commit
-    -m "ci: pin .github/workflows actions"` and `git commit -m "docs: explain
-    -n usage"` both prompted, on a branch whose own commits look exactly like
-    that. Prompts that fire on ordinary work are how a guard stops being read.
-
-    The credential rule deliberately does not use this. A credential in a
-    commit message is a credential in the repository.
-
-    Stripping runs inside a segment, and only after the `git commit` in it, so
-    it can neither reach across a separator nor take a `-m` that belongs to
-    some other program — including one standing in front of the commit.
-
-    What it gives up: `git commit -m "$(cat .githooks/pre-commit)"` no longer
-    names a protected path. That is a read, and reads were already the
-    generous half of `protected_in_command`.
-
-    `MESSAGE_HEREDOC` is the same rule for the flag prose is actually written
-    with, and runs first because the body it removes is what the split would
-    otherwise turn into one segment per line.
-    """
-    readable = []
-    # Before the split, since the body this removes is what the split would
-    # otherwise turn into one segment per line of prose.
-    without_message_bodies = MESSAGE_HEREDOC.sub(r"\g<head>", command)
-    for segment in SEGMENTS.split(CONTINUATION.sub(" ", without_message_bodies)):
-        starts = A_COMMIT.search(segment)
-        if not starts:
-            readable.append(segment)
-            continue
-        # Split at the subcommand rather than substituting over the whole
-        # segment: what precedes a commit is another command's arguments.
-        #
-        # Precision rather than a closed hole, and said plainly because there
-        # is no test below defending it — mutating it back to a whole-segment
-        # substitution passes. None of git's pre-subcommand options (`-C`,
-        # `-c`, `--git-dir`, `--work-tree`, `-p`, `-P`, `--bare`, …) end in
-        # `m`, so nothing can put a `-m` in front of `commit` for the strip to
-        # find. Anchoring `A_COMMIT` on `git` is what actually closed the hole.
-        head, tail = segment[: starts.end()], segment[starts.end() :]
-        readable.append(head + MESSAGE_VALUE.sub(r" \g<keep> ", tail))
-    return readable
-
-
-def bypass_in_command(segments: Sequence[str]) -> Bypass | None:
-    for segment in segments:
-        for candidate in BYPASSES:
-            if candidate.regex.search(segment):
-                return candidate
-    return None
 
 
 class Written(NamedTuple):
@@ -505,7 +127,9 @@ def written_by(tool: str, tool_input: dict[str, Any]) -> Iterable[Written]:
         yield Written(str(tool_input.get("new_source", "")), str(tool_input["notebook_path"]))
     elif tool == "Bash":
         # The whole command, content and destination at once. A credential in a
-        # command line is worth refusing wherever in it it appears.
+        # command line is worth refusing wherever in it it appears — including
+        # in a commit message, which goes into the repository like anything
+        # else.
         yield Written(str(tool_input.get("command", "")), is_command=True)
 
 
@@ -536,32 +160,12 @@ def decide(payload: dict[str, Any]) -> tuple[str, str] | None:
         raise RuntimeError(f"the shared credential_detector is not importable: {error}") from error
 
     cwd = str(payload.get("cwd", ""))
-    writes = list(written_by(tool, tool_input))
 
-    # Deny outranks ask, and is therefore decided first. Prompting a human to
-    # approve writing a credential into the commit guard is offering them a
-    # decision nobody should be asked to make.
-    for written in writes:
+    for written in written_by(tool, tool_input):
         where = "the command" if written.is_command else readable(written.path, cwd)
         findings = credential_detector.scan_text(where, written.content)
         if findings:
             return "deny", denial(findings, credential_detector.ALLOW_MARKER)
-
-    for written in writes:
-        if written.is_command:
-            # Read in segments, with commit-message values removed — neither
-            # of which the credential scan above does. See `readable_segments`.
-            segments = readable_segments(written.content)
-            bypass = bypass_in_command(segments)
-            if bypass:
-                return "ask", routing_around(bypass)
-            hit = protected_in_command(segments)
-            named = hit.path if hit else ""
-        else:
-            hit = protected_by(written.path)
-            named = readable(written.path, cwd)
-        if hit:
-            return "ask", weakening(named, hit)
     return None
 
 
@@ -583,22 +187,6 @@ def denial(findings: Iterable[Any], allow_marker: str) -> str:
     )
 
 
-def weakening(named: str, entry: Protected) -> str:
-    return (
-        f"`{named}` is {entry.why}. Changing it is a decision for a human rather "
-        "than a way to make a check pass. Say what the change is and why it does "
-        "not weaken the control, and let them approve it."
-    )
-
-
-def routing_around(bypass: Bypass) -> str:
-    return (
-        f"This command is {bypass.name}, which routes around the commit guard "
-        "rather than satisfying it. Fix what the guard is objecting to, or get a "
-        "human to approve the bypass."
-    )
-
-
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -611,7 +199,7 @@ def main() -> int:
             "ask",
             f"The repository's write guard could not run, so this call was not "
             f"inspected: {type(error).__name__}: {error}. Approving it skips the "
-            f"credential and control-file checks.",
+            f"credential check.",
         )
         return 0
 

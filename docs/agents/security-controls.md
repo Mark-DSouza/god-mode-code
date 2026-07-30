@@ -117,6 +117,13 @@ pull request defines. **So say what you changed and why it does not weaken the
 control, in the pull request body, unprompted.** Making a failing check pass by
 editing the thing that is failing is the move nobody is now watching for.
 
+Every check on `main` is a required one, and that is less protection than it
+sounds: a **skipped** required check counts as satisfied, so required means
+_must not fail_ rather than _must run_. Narrowing a path filter until your own
+change stops matching is therefore a way to a green branch on which nothing
+ran — see ADR-0014. If a check you expected skipped, that is the thing to
+explain, not to bank.
+
 If the change is to a workflow, keep every `uses:` pinned to a commit SHA with
 its `# vX.Y.Z` comment beside it. Dependabot rewrites the pair together; a tag
 in there is a moving target nobody reviews again.

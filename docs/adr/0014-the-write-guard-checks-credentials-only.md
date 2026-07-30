@@ -36,6 +36,17 @@ repository, so nothing _requires_ the reading, and auto-merge is enabled, so
 weakened a gate. Both were considered and left as they are; the practice of
 merging by hand is what stands in for the mechanism.
 
+Making every check a required one does not close this, and is worth stating
+because it looks as though it would. A **skipped** required check counts as
+satisfied — `security.yml`'s aggregate accepts `skipped` alongside `success` by
+design, since that is how path filtering reports "this diff could not have
+affected the Go service" — so required means _must not fail_ rather than _must
+run_. The job deciding what skips is the `changes` filter, which lives in the
+same workflow file a pull request can edit: filter your own change out and the
+scan skips, the aggregate is content, and the branch is green with nothing
+having run. Requiring the checks makes the honest cases legible and leaves this
+one exactly where it was.
+
 **`git commit --no-verify` is silent.** The commit guard remains the control
 and still runs on every commit that does not skip it, but skipping it is now
 one flag and no prompt.

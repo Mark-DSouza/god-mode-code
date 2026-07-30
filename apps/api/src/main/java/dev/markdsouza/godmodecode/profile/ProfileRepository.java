@@ -22,10 +22,16 @@ import org.springframework.stereotype.Repository;
  * business inserting Runs, or make one aggregate depend on the other — which is
  * the coupling ADR-0006 exists to avoid.
  *
- * Every query here is an index seek. `typing_runs_by_user` is (user_id, wpm
- * DESC) and `solve_runs_by_user` is (user_id, completed_at DESC), which is why
- * a Personal Best is derived on demand rather than kept in a table that could
- * fall out of step with the Runs it summarises.
+ * Every query here is bounded by one User's Runs, which is what makes deriving
+ * a Personal Best on demand cheaper than keeping a table that could fall out of
+ * step with the Runs it summarises. `typing_runs_by_user` is (user_id, wpm
+ * DESC) and `solve_runs_by_user` is (user_id, completed_at DESC), so the bests
+ * and the Solve Run history are index reads; the Typing Run history sorts the
+ * User's own rows by a column that index does not carry, which at a few hundred
+ * Runs each is a sort of a few hundred rows. An index on (user_id, completed_at
+ * DESC) is the fix if that stops being true, and adding one before it does
+ * would be paying for a write on every Run to save a millisecond on a screen
+ * nobody has opened yet.
  */
 @Repository
 class ProfileRepository {

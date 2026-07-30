@@ -6,10 +6,8 @@ import dev.markdsouza.godmodecode.Browser;
 import dev.markdsouza.godmodecode.judge.Verdict;
 import dev.markdsouza.godmodecode.pattern.JudgedIntegrationTest;
 import dev.markdsouza.godmodecode.pattern.PatternActivation;
-import dev.markdsouza.godmodecode.pattern.SolveChallenge;
 import dev.markdsouza.godmodecode.pattern.SolveRun;
 import dev.markdsouza.godmodecode.pattern.StubJudge;
-import dev.markdsouza.godmodecode.typing.Challenge;
 import dev.markdsouza.godmodecode.typing.Discipline;
 import dev.markdsouza.godmodecode.typing.TypingRun;
 import java.math.BigDecimal;
@@ -50,16 +48,6 @@ class ProfileEndpointTest extends JudgedIntegrationTest {
                 return []\
             """;
 
-    /**
-     * How far back every Challenge is rewound before it is answered.
-     *
-     * A Run cannot be longer than the window the server watched go past, and
-     * inside a test suite that window is a few milliseconds old. Two minutes is
-     * comfortably longer than any Run below and comfortably shorter than the ten
-     * minutes a Challenge is live for.
-     */
-    private static final Duration HELD = Duration.ofMinutes(2);
-
     @Autowired
     TestRestTemplate http;
 
@@ -78,9 +66,9 @@ class ProfileEndpointTest extends JudgedIntegrationTest {
     void aPersonalBestIsTheHighestWpmWithinEachDiscipline() {
         Browser browser = Browser.arrivingAt(http);
 
-        TypingRun slowQuote = types(browser, Discipline.QUOTES, Duration.ofSeconds(45));
-        TypingRun fastQuote = types(browser, Discipline.QUOTES, Duration.ofSeconds(20));
-        TypingRun prose = types(browser, Discipline.PROSE, Duration.ofSeconds(50));
+        TypingRun slowQuote = browser.types(jdbc, Discipline.QUOTES, Duration.ofSeconds(45));
+        TypingRun fastQuote = browser.types(jdbc, Discipline.QUOTES, Duration.ofSeconds(20));
+        TypingRun prose = browser.types(jdbc, Discipline.PROSE, Duration.ofSeconds(50));
         SolveRun solved = solves(browser, Duration.ofSeconds(40));
 
         Profile profile = profileOf(browser);
@@ -116,8 +104,8 @@ class ProfileEndpointTest extends JudgedIntegrationTest {
     void aSlowerRunDoesNotLowerThePersonalBest() {
         Browser browser = Browser.arrivingAt(http);
 
-        TypingRun best = types(browser, Discipline.QUOTES, Duration.ofSeconds(20));
-        TypingRun andThenAnOffDay = types(browser, Discipline.QUOTES, Duration.ofSeconds(50));
+        TypingRun best = browser.types(jdbc, Discipline.QUOTES, Duration.ofSeconds(20));
+        TypingRun andThenAnOffDay = browser.types(jdbc, Discipline.QUOTES, Duration.ofSeconds(50));
 
         assertThat(andThenAnOffDay.personalBest()).isFalse();
         assertThat(profileOf(browser).personalBests()).containsExactly(new PersonalBest(Discipline.QUOTES, best.wpm()));
@@ -154,9 +142,9 @@ class ProfileEndpointTest extends JudgedIntegrationTest {
 
         // Alternating, so an implementation that concatenated the two queries
         // instead of merging them would come out in an order this cannot miss.
-        UUID first = types(browser, Discipline.QUOTES, Duration.ofSeconds(30)).id();
+        UUID first = browser.types(jdbc, Discipline.QUOTES, Duration.ofSeconds(30)).id();
         UUID second = solves(browser, Duration.ofSeconds(30)).id();
-        UUID third = types(browser, Discipline.PROSE, Duration.ofSeconds(30)).id();
+        UUID third = browser.types(jdbc, Discipline.PROSE, Duration.ofSeconds(30)).id();
         UUID fourth = solves(browser, Duration.ofSeconds(25)).id();
 
         Profile profile = profileOf(browser);
@@ -202,7 +190,7 @@ class ProfileEndpointTest extends JudgedIntegrationTest {
     void bestAccuracyComesFromTypingRuns() {
         Browser browser = Browser.arrivingAt(http);
 
-        TypingRun clean = types(browser, Discipline.QUOTES, Duration.ofSeconds(30));
+        TypingRun clean = browser.types(jdbc, Discipline.QUOTES, Duration.ofSeconds(30));
         solves(browser, Duration.ofSeconds(30));
 
         assertThat(clean.accuracy()).isEqualByComparingTo("100.0");
@@ -215,24 +203,9 @@ class ProfileEndpointTest extends JudgedIntegrationTest {
         assertThat(http.getForEntity("/api/profile", Profile.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    /** Transcribes a Passage in this Discipline perfectly, over the given time. */
-    private TypingRun types(Browser browser, Discipline discipline, Duration took) {
-        Challenge challenge = browser.isHanded(discipline);
-        Browser.rewind(jdbc, challenge, HELD);
-        TypingRun run = browser.submits(Browser.perfectRun(challenge, took), TypingRun.class)
-                .getBody();
-        assertThat(run).as("the Run was not recorded").isNotNull();
-        return run;
-    }
-
-    /** Writes the same working solution, over the given time. */
+    /** Writes the one working solution this suite uses, over the given time. */
     private SolveRun solves(Browser browser, Duration took) {
-        SolveChallenge challenge = browser.isHanded(HASH_MAP);
-        Browser.rewind(jdbc, challenge, HELD);
-        SolveRun run = browser.submits(Browser.wrote(challenge, SOLUTION, took), SolveRun.class)
-                .getBody();
-        assertThat(run).as("the Solve Run was not recorded").isNotNull();
-        return run;
+        return browser.solves(jdbc, HASH_MAP, SOLUTION, took);
     }
 
     private Profile profileOf(Browser browser) {

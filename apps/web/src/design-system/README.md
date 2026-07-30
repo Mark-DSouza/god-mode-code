@@ -43,22 +43,24 @@ reference for how screens compose.
 
 Implemented — the primitives every screen sits on:
 
-| Group     | Components                                                                                                |
-| --------- | --------------------------------------------------------------------------------------------------------- |
-| `effects` | `DigitalRain`                                                                                             |
-| `brand`   | `Wordmark`                                                                                                |
-| `core`    | `Badge` `Button` `Card` `Dialog` `IconButton` `Input` `Kbd` `ProgressBar` `Select` `Stat` `Switch` `Tabs` |
-| `typing`  | `ChallengeCard` `Countdown` `ResultPanel` `TypingField`                                                   |
+| Group      | Components                                                                                                |
+| ---------- | --------------------------------------------------------------------------------------------------------- |
+| `effects`  | `DigitalRain`                                                                                             |
+| `brand`    | `Wordmark`                                                                                                |
+| `core`     | `Badge` `Button` `Card` `Dialog` `IconButton` `Input` `Kbd` `ProgressBar` `Select` `Stat` `Switch` `Tabs` |
+| `typing`   | `ChallengeCard` `Countdown` `ResultPanel` `TypingField`                                                   |
+| `data`     | `Avatar` `RunChart`                                                                                       |
+| `feedback` | `EmptyState`                                                                                              |
 
 Deliberately **not** implemented yet — each is domain furniture for a screen
 that does not exist, and lands with the ticket that introduces it:
 
-| Group        | Components                  | Lands with                 |
-| ------------ | --------------------------- | -------------------------- |
-| `typing`     | `CodeStub`                  | Solve Run                  |
-| `data`       | `Table` `Avatar` `RunChart` | Leaderboards / profile     |
-| `navigation` | `Breadcrumb` `SettingRow`   | Settings                   |
-| `feedback`   | `EmptyState` `FaultState`   | the screens that need them |
+| Group        | Components                | Lands with                 |
+| ------------ | ------------------------- | -------------------------- |
+| `typing`     | `CodeStub`                | Solve Run                  |
+| `data`       | `Table`                   | Leaderboards               |
+| `navigation` | `Breadcrumb` `SettingRow` | Settings                   |
+| `feedback`   | `FaultState`              | the screens that need them |
 
 Building them now would mean guessing at the states they need before any screen
 exists to need them.

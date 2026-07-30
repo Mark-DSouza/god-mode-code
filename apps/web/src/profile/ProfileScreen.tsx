@@ -128,7 +128,7 @@ function Progress({ profile }: { profile: Profile }) {
   // Oldest first, because a chart reads left to right and so does time. The
   // server sends the history newest first, which is the order a list wants.
   const chronological = [...profile.history].reverse();
-  const peak = Math.max(...chronological.map((entry) => entry.wpm));
+  const strongest = strongestRankedWpm(chronological);
 
   return (
     <>
@@ -169,18 +169,39 @@ function Progress({ profile }: { profile: Profile }) {
       <RunChart
         values={chronological.map((entry) => entry.wpm)}
         label={`Last ${chronological.length} Runs · WPM`}
-        peakLabel={`peak ${Math.round(peak)}`}
-        aria-label={summarise(chronological, peak)}
+        peakLabel={strongest === null ? undefined : `peak ${Math.round(strongest)}`}
+        emphasis={strongest}
+        aria-label={summarise(chronological, strongest)}
       />
     </>
   );
 }
 
 /** The chart, in a sentence, for anybody who is not looking at it. */
-function summarise(history: HistoryEntry[], peak: number): string {
-  return `The last ${history.length} Runs by WPM, oldest first, from ${Math.round(
-    Math.min(...history.map((entry) => entry.wpm)),
-  )} to ${Math.round(peak)}. The strongest Run is emphasised.`;
+function summarise(history: HistoryEntry[], strongest: number | null): string {
+  const range = `from ${Math.round(Math.min(...history.map((entry) => entry.wpm)))} to ${Math.round(
+    Math.max(...history.map((entry) => entry.wpm)),
+  )}`;
+  return `The last ${history.length} Runs by WPM, oldest first, ${range}.${
+    strongest === null
+      ? ""
+      : ` The strongest ranked Run, at ${Math.round(strongest)}, is emphasised.`
+  }`;
+}
+
+/**
+ * The highest WPM among the Runs here that count.
+ *
+ * A Solve Run that typed quickly and failed still belongs in the shape — it
+ * happened — but only Passed Solve Runs are ranked (CONTEXT.md), so lighting one
+ * up would put a "peak" on this chart higher than the Personal Best printed
+ * above it. Null when nothing in the window is ranked, which lights nothing.
+ */
+function strongestRankedWpm(history: HistoryEntry[]): number | null {
+  const ranked = history.filter(
+    (entry) => entry.discipline !== "CODE" || entry.verdict === "passed",
+  );
+  return ranked.length === 0 ? null : Math.max(...ranked.map((entry) => entry.wpm));
 }
 
 /**

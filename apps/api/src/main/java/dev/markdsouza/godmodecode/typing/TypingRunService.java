@@ -82,9 +82,10 @@ public class TypingRunService {
                 issues.markConsumed(issue.get().id());
 
                 // Read before the Run is written, which is what makes it the
-                // *previous* best rather than this one. Inside the same
-                // transaction, so a second Run finishing in the same instant
-                // cannot leave both of them believing they beat the other.
+                // *previous* best rather than this one. Nothing else of this
+                // User's can land in between: a User holds one live Issue at a
+                // time, enforced by a partial unique index, so there is no
+                // second Run of theirs in flight to race this one.
                 BigDecimal previousBest =
                         runs.bestWpmIn(userId, passage.discipline()).orElse(null);
                 boolean personalBest =

@@ -46,20 +46,20 @@ export function Header({ onOpenProfile }: { onOpenProfile: () => void }) {
         {/* The tile keeps its space while the request is in flight, so nothing
             jumps sideways when the Handle lands.
 
-            A real button, labelled for what it does rather than by the Handle
-            inside it: at 320px the Handle is truncated on screen, and an
-            accessible name that ends mid-word is worse than one that says where
-            the control goes. */}
+            A real button, and its accessible name starts with the Handle it
+            renders. WCAG 2.5.3 asks that a visible label be part of the name
+            somebody says out loud — a bare "Your profile" would leave a voice
+            user reading "PERCOLATING_FERRET" with nothing to say to reach it. */}
         <button
           type="button"
           onClick={onOpenProfile}
-          aria-label="Your profile"
+          aria-label={handle ? `${handle} — your profile` : "Your profile"}
           className="flex min-w-0 cursor-pointer items-center gap-2 rounded-sm hover:opacity-80"
         >
           <Avatar
             data-testid="user-avatar"
-            // Decorative. The Handle beside it is the accessible answer to "who
-            // am I", and announcing the initials first only says it twice.
+            // Decorative. The Handle is in the button's name already, and
+            // announcing the initials first only says it twice.
             aria-hidden="true"
             size={28}
             glow={Boolean(handle)}

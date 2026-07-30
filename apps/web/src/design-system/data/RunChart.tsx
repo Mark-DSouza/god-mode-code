@@ -10,11 +10,24 @@ export interface RunChartProps {
   peakLabel?: string;
   height?: number;
   /**
-   * What the chart says to somebody who cannot see it. Required, because a bar
-   * chart with no text alternative is a decorative rectangle to a screen reader
-   * and this one is the whole point of the screen.
+   * Which value to light up. Defaults to the tallest bar, which is what the
+   * shipped component does.
+   *
+   * Passed when the tallest bar is not the strongest Run: a Solve Run that
+   * typed quickly and failed is a real reading and belongs in the shape, but
+   * only Passed Solve Runs are ranked (CONTEXT.md), and emphasising one would
+   * disagree with the Personal Best printed beside it. `null` lights nothing,
+   * which is the honest answer when none of these Runs is one that counts.
    */
-  "aria-label": string;
+  emphasis?: number | null;
+  /**
+   * What the chart says to somebody who cannot see it.
+   *
+   * Optional, so the published prop contract still type-checks, but a caller
+   * with anything to say should say it: the fallback can only repeat the
+   * caption, and a caption is not a description of a shape.
+   */
+  "aria-label"?: string;
   className?: string;
   style?: CSSProperties;
 }
@@ -33,15 +46,16 @@ export interface RunChartProps {
  *
  * <h2>Ties glow together</h2>
  *
- * Emphasis is "equal to the peak", not "the first one that reaches it". Two
- * Runs at the same best are both the best, and picking one of them to light up
- * would be inventing a ranking between them.
+ * Emphasis is "equal to the emphasised value", not "the first bar that reaches
+ * it". Two Runs at the same best are both the best, and picking one of them to
+ * light up would be inventing a ranking between them.
  */
 export function RunChart({
   values,
   label,
   peakLabel,
   height = 120,
+  emphasis,
   "aria-label": ariaLabel,
   className,
   style,
@@ -49,14 +63,18 @@ export function RunChart({
   // Never zero: it is a divisor, and an empty series must not render bars of
   // infinite height on the way to the empty state that should have been shown
   // instead.
-  const peak = Math.max(1, ...values);
+  const tallest = Math.max(1, ...values);
+  // Scaling and emphasis are two different questions. The tallest bar always
+  // sets the scale — clipping a Run because it does not count would draw a
+  // shape that did not happen — and this is only which bar is lit.
+  const lit = emphasis === undefined ? tallest : emphasis;
 
   return (
     <div
       className={cn("rounded-md border border-line bg-surface-1 p-5", className)}
       style={style}
       role="img"
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? [label, peakLabel].filter(Boolean).join(" · ")}
     >
       {(label || peakLabel) && (
         <div className="mb-4 flex items-baseline justify-between gap-3">
@@ -71,7 +89,7 @@ export function RunChart({
 
       <div className="flex items-end gap-2" style={{ height }} aria-hidden="true">
         {values.map((value, index) => {
-          const isPeak = value === peak;
+          const isPeak = value === lit;
           return (
             <div
               // The series is a list of readings with no identity of their own —
@@ -85,7 +103,7 @@ export function RunChart({
                   ? "bg-rain-green shadow-[var(--glow-sm)]"
                   : "bg-[color-mix(in_srgb,var(--rain-green)_42%,var(--surface-3))]",
               )}
-              style={{ height: `${Math.round((value / peak) * 100)}%` }}
+              style={{ height: `${Math.round((value / tallest) * 100)}%` }}
             />
           );
         })}

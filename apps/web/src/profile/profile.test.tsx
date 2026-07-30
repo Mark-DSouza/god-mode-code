@@ -120,6 +120,40 @@ describe("the profile", () => {
     ).toBe(true);
   });
 
+  it("does not emphasise a Run that does not count, however fast it was typed", async () => {
+    backendServing({
+      ...PLAYED,
+      // The tallest bar in this window is a Solve Run that failed. It happened
+      // and belongs in the shape, but only Passed Solve Runs are ranked — and
+      // calling it the peak would put a bigger number on the chart than the
+      // all-time best printed above it.
+      history: [
+        {
+          runId: "00000000-0000-4000-8000-0000000000d4",
+          discipline: "CODE",
+          wpm: 200,
+          verdict: "failed",
+          completedAt: "2026-07-04T10:00:00Z",
+        },
+        ...HISTORY,
+      ],
+    });
+    const user = userEvent.setup();
+
+    await openProfile(user);
+
+    const chart = await screen.findByRole("img", { name: /last 4 runs by wpm/i });
+    const bars = [...chart.querySelectorAll("[title]")];
+    const failed = bars.find((bar) => bar.getAttribute("title") === "200");
+    const ranked = bars.find((bar) => bar.getAttribute("title") === "148");
+
+    expect(chart).toHaveAccessibleName(/strongest ranked run, at 148/i);
+    expect(failed?.className).not.toBe(ranked?.className);
+    // Every other bar is drawn the way the failed one is: dim. The emphasis is
+    // on 148, and there is exactly one of it.
+    expect(bars.filter((bar) => bar.className === ranked?.className)).toHaveLength(1);
+  });
+
   it("greets a User with no Runs as a beginning, with one thing to do about it", async () => {
     backendServing(NEVER_PLAYED);
     let challenges = 0;

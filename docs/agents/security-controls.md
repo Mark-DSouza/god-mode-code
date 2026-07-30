@@ -2,8 +2,10 @@
 
 What fires, what it means, and what to do about it. The reasoning behind the
 arrangement is
-[ADR-0013](../adr/0013-security-findings-gate-the-diff-not-the-repository.md)
-and is not repeated here.
+[ADR-0013](../adr/0013-security-findings-gate-the-diff-not-the-repository.md),
+narrowed by
+[ADR-0014](../adr/0014-the-write-guard-checks-credentials-only.md), and is not
+repeated here.
 
 ## The shape of it
 
@@ -18,18 +20,28 @@ and fails nothing. Which one you are looking at tells you what is expected of
 you: a gate says _this diff introduced something_, an alert says _this
 repository contains something_, and only the first is yours to fix right now.
 
-| Control                              | Fires when                              | Gate or alert        |
-| ------------------------------------ | --------------------------------------- | -------------------- |
-| Claude Code write guard              | before a mutating tool call             | gate (deny or ask)   |
-| Commit hook (`.githooks/pre-commit`) | `git commit`, on the added lines        | gate (refuses)       |
-| CodeQL, Trivy (`security.yml`)       | pull request, push to `main`, weekly    | gate on new only     |
-| Dependency review                    | a pull request that adds a dependency   | gate                 |
-| Dependabot alerts                    | a CVE lands, whenever that happens      | alert                |
-| Dependabot version updates           | monthly, one pull request per ecosystem | neither              |
-| `pnpm security:sweep`                | you run it                              | neither — it reports |
+| Control                              | Fires when                              | Gate or alert          |
+| ------------------------------------ | --------------------------------------- | ---------------------- |
+| Claude Code write guard              | before a mutating tool call             | gate (deny)            |
+| — the same guard, when it cannot run | it was handed something it cannot read  | asks, inspects nothing |
+| Commit hook (`.githooks/pre-commit`) | `git commit`, on the added lines        | gate (refuses)         |
+| CodeQL, Trivy (`security.yml`)       | pull request, push to `main`, weekly    | gate on new only       |
+| Dependency review                    | a pull request that adds a dependency   | gate                   |
+| Dependabot alerts                    | a CVE lands, whenever that happens      | alert                  |
+| Dependabot version updates           | monthly, one pull request per ecosystem | neither                |
+| `pnpm security:sweep`                | you run it                              | neither — it reports   |
 
 The write guard is wired to `Bash`, `Edit`, `MultiEdit`, `NotebookEdit` and
-`Write` — every tool that can put bytes on disk, the shell included.
+`Write` — every tool that can put bytes on disk, the shell included. It checks
+credentials and nothing else. It does not ask before you edit a workflow, the
+commit hook or the detector, and it does not ask about `--no-verify`, a force
+push, `core.hooksPath` or `gh pr merge --admin`; it used to ask about all of it,
+and ADR-0014 records why it stopped and what that costs. Do not add any of it
+back without reading it.
+
+The one prompt it can still raise is the second row above, and it is not a
+finding: it means the guard could not inspect the call at all. See
+["The write guard could not run"](#the-write-guard-could-not-run) below.
 
 CodeQL and Trivy upload SARIF and always exit successfully. What fails a pull
 request is code scanning's own **Code scanning results** check, which fires only
@@ -60,62 +72,19 @@ means the detector itself failed, and the traceback is printed underneath it.
 Both fail loudly on purpose — a guard that passes when it could not run is worse
 than none — and neither is answered by skipping the hook.
 
-### A prompt on a protected path
+### "The write guard could not run"
 
-The write guard asks — it never refuses — when a call touches something whose
-weakening would disarm a control. `PROTECTED_PATHS` in
-`scripts/claude_code_guard.py` is the list, and it currently holds the
-workflows, `dependabot.yml`, `infra/terraform/tests/security.tftest.hcl`,
-`.githooks/`, the detector, the hook installer, and the guard and its settings.
+The one prompt the write guard still raises, and it is not a finding. It means
+the guard was handed something it could not read — malformed input, a detector
+it could not import, an unexpected exception — and so **inspected nothing**. The
+message names the exception.
 
-**A human decides.** Say what the change is and why it does not weaken the
-control, and let them approve it. Editing one of these to make a failing check
-go green is the exact move the prompt exists to catch.
-
-Reading is mostly free: a fixed allowlist of readers — `cat`, `grep`, `jq`,
-`cut`, `git diff`, `git log`, `shellcheck`, `yamllint`, `actionlint` and the
-rest of `READ_ONLY` in `scripts/claude_code_guard.py` — goes through untouched.
-Anything outside it prompts, and so does a reader carrying a redirect, since
-`cat x > .githooks/pre-commit` truncates the commit hook using nothing but a
-reader.
-
-**A command joins that list only if its name settles it.** That is the entire
-membership rule. `sed`, `sort`, `awk`, `find`, `ruff` and `mypy` are absent and
-will keep prompting on a control, not by oversight but because each reads by
-default and writes with one flag — `sed -i`, `sort -o`, `find -delete`, `ruff
---fix`, `mypy --junit-xml` — and the list is matched on the command name, so
-admitting them would wave the writing spelling through as well. `mypy` is the
-one to learn from: it sat on the readers list until review found that
-`--junit-xml` takes a destination, which makes a type check into a way of
-truncating the commit hook.
-
-If a read of yours prompts, that is the cost: use the `Read` tool, or approve
-the prompt. Do not add the command to the allowlist to silence it unless it
-passes the rule — and check the tool's own `--help` for an output-file flag
-before deciding that it does.
-
-**Naming a control in prose is not touching it.** A commit message or a pull
-request body that quotes a protected path goes through untouched, whether it is
-written as `-m`, as `git commit -F -` with a heredoc, or as `gh pr create
---body "$(cat <<'EOF' … EOF)"`. That matters most on a branch whose whole
-subject is a control, where otherwise every commit and every pull request
-prompts on its own description. The licence belongs to the message flag alone:
-a heredoc that is program text — `python3 <<'EOF' … EOF` — is read as a write
-exactly as before, and a credential in a message is still refused, since the
-credential check reads the raw command and never sees any of this stripping.
-
-If the approved change is to a workflow, keep every `uses:` pinned to a commit
-SHA with its `# vX.Y.Z` comment beside it. Dependabot rewrites the pair
-together; a tag in there is a moving target nobody reviews again.
-
-### A prompt on a command that routes around the guard
-
-`--no-verify`, a force push, `core.hooksPath`, `gh pr merge --admin`. The guard
-asks rather than refuses, because a human may legitimately need one.
-
-**Fix what the guard objected to.** Do not ask for the bypass as a way of
-getting past a finding — see [False positives](#false-positives) for the
-supported way through.
+It asks rather than passing on purpose: a guard that goes quiet when it breaks
+looks exactly like a guard that ran and found nothing. Approving the prompt is
+the same as making the call with no credential check in front of it, which is
+usually fine and is worth knowing you are doing. If it fires repeatedly, the
+guard is broken — fix it rather than clicking through, and
+`python3 scripts/test_claude_code_guard.py` is what tells you whether it works.
 
 ### A security gate fails on a pull request
 
@@ -131,6 +100,39 @@ it names, fix the code. Two specific ones:
 
 A Dependabot alert is not one of these. It blocks nothing and is not something
 to fix inside an unrelated change.
+
+## Changing a control
+
+Nothing fires, which is the point to be careful at. Editing
+`.github/workflows/`, `.githooks/`, `scripts/credential_detector.py`,
+`scripts/install-git-hooks.sh`, `infra/terraform/tests/security.tftest.hcl` or
+the guard's own settings prompts nobody, and neither does `--no-verify`, a force
+push, `core.hooksPath` or `gh pr merge --admin`. The write guard used to ask
+about all of it; ADR-0014 removed that and records what it costs.
+
+What remains is the pull request. A change to any of these is argued about by a
+human reading the diff and merging it, and there is no mechanism behind that —
+no required review, and the workflows a pull request runs are the ones that
+pull request defines. **So say what you changed and why it does not weaken the
+control, in the pull request body, unprompted.** Making a failing check pass by
+editing the thing that is failing is the move nobody is now watching for.
+
+Every check on `main` is a required one, and that is less protection than it
+sounds: a **skipped** required check counts as satisfied, so required means
+_must not fail_ rather than _must run_. Narrowing a path filter until your own
+change stops matching is therefore a way to a green branch on which nothing
+ran — see ADR-0014. If a check you expected skipped, that is the thing to
+explain, not to bank.
+
+If the change is to a workflow, keep every `uses:` pinned to a commit SHA with
+its `# vX.Y.Z` comment beside it. Dependabot rewrites the pair together; a tag
+in there is a moving target nobody reviews again.
+
+`--no-verify` deserves its own line, since nothing objects to it any more.
+Skipping the commit hook skips the credential check on every line of that
+commit, not the one you were arguing with, and leaves nothing behind for a
+reviewer to disagree with. [False positives](#false-positives) is the supported
+way past a finding.
 
 ## The whole-repository scan
 

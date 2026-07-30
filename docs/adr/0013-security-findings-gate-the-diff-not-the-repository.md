@@ -134,3 +134,7 @@ that they were. An agent told to make a check pass can, and will, edit the
 thing that is failing — and since a pull request's workflows run as that pull
 request defines them, CI cannot be relied on to object to being weakened by the
 change it is running from.
+
+_Superseded in part by
+[ADR-0014](0014-the-write-guard-checks-credentials-only.md): the hook's asking
+half is gone, and the argument above is what was weighed and given up._

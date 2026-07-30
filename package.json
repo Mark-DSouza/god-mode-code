@@ -15,7 +15,7 @@
     "test": "pnpm -r --if-present test",
     "test:web": "pnpm --filter @gmc/web test",
     "test:e2e": "pnpm --filter @gmc/e2e test",
-    "test:credentials": "python3 scripts/test_credential_detector.py && python3 scripts/test_commit_guard.py && python3 scripts/test_repository_sweep.py",
+    "test:credentials": "python3 scripts/test_credential_detector.py && python3 scripts/test_commit_guard.py && python3 scripts/test_repository_sweep.py && python3 scripts/test_claude_code_guard.py",
     "visual": "./visual/run-in-ci-image.sh test",
     "visual:update": "./visual/run-in-ci-image.sh update",
     "visual:canary": "./visual/run-in-ci-image.sh canary",

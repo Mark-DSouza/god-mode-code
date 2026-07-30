@@ -141,7 +141,12 @@ jobs:
               - '.github/workflows/security.yml'
               - '**/*.tf'
 
-  codeql:
+  # Named for what it does, not for what branch protection requires. The
+  # required check is the `codeql` job below, and it is separate for a reason
+  # this job's own name gives away: a matrix job's check runs are named
+  # `codeql-analysis (java-kotlin)` and so on, one per leg, and there is no
+  # check run under the bare job name at all.
+  codeql-analysis:
     needs: changes
     # `fromJSON('[]')` is not an empty matrix, it is an error, so the case
     # where nothing matched has to be caught before the matrix is built.
@@ -196,6 +201,53 @@ jobs:
           # analysed only Go does not read as every JavaScript alert having
           # been fixed.
           category: /language:${{ matrix.language }}
+
+  # The check `main` is protected by, and the only job here whose name is a
+  # promise to something outside this file.
+  #
+  # <h2>Why the analysis cannot be the required check itself</h2>
+  #
+  # A required status check is matched by name, and a matrix job does not have
+  # one. GitHub names a matrix leg's check run after the job *and its matrix
+  # values*, so the analysis above reports `codeql-analysis (java-kotlin)`,
+  # `codeql-analysis (javascript-typescript)`, and nothing under the job name.
+  # The only time a bare job name is reported is when the job is skipped
+  # entirely — which for the analysis means no language changed.
+  #
+  # Under its old name that inverted the gate. A pull request touching nothing
+  # CodeQL reads skipped the job, reported `codeql` skipped, and satisfied the
+  # requirement; a pull request touching two languages ran the analysis, never
+  # reported a check called `codeql`, and left the requirement waiting for a
+  # status that could no longer arrive. The protected branch was strictest
+  # about the changes with the least code in them, and blocked outright on the
+  # ones it was there to inspect.
+  #
+  # `if: always()` is what makes this a gate rather than a fourth leg of the
+  # matrix: it runs whether the analysis passed, failed, was skipped, or was
+  # cancelled, so the check is always reported and the answer is always the
+  # analysis's own.
+  codeql:
+    needs: codeql-analysis
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      # Whether the analysis ran, not what it found. CodeQL uploads SARIF and
+      # exits zero on findings by design — the check that fails a pull request
+      # for an alert is code scanning's own, and it fires only on alerts the
+      # diff introduced (docs/agents/security-controls.md).
+      - name: Fail unless every language that was analysed passed
+        run: |
+          result="${{ needs.codeql-analysis.result }}"
+          echo "codeql-analysis: $result"
+          # `skipped` is a pass, and it is the one result that needs saying out
+          # loud: it means no file CodeQL reads was touched, which the filter
+          # in `changes` decided and this job is in no position to second-guess.
+          # `cancelled` is not a pass — an analysis that was stopped concluded
+          # nothing about the code.
+          if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+            echo "CodeQL did not pass." >&2
+            exit 1
+          fi
 
   # ADR-0013's third scanning tier: misconfiguration in the infrastructure,
   # where CodeQL reads the code. Same contract as the jobs above — report,

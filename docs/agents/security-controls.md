@@ -20,22 +20,28 @@ and fails nothing. Which one you are looking at tells you what is expected of
 you: a gate says _this diff introduced something_, an alert says _this
 repository contains something_, and only the first is yours to fix right now.
 
-| Control                              | Fires when                              | Gate or alert        |
-| ------------------------------------ | --------------------------------------- | -------------------- |
-| Claude Code write guard              | before a mutating tool call             | gate (deny)          |
-| Commit hook (`.githooks/pre-commit`) | `git commit`, on the added lines        | gate (refuses)       |
-| CodeQL, Trivy (`security.yml`)       | pull request, push to `main`, weekly    | gate on new only     |
-| Dependency review                    | a pull request that adds a dependency   | gate                 |
-| Dependabot alerts                    | a CVE lands, whenever that happens      | alert                |
-| Dependabot version updates           | monthly, one pull request per ecosystem | neither              |
-| `pnpm security:sweep`                | you run it                              | neither — it reports |
+| Control                              | Fires when                              | Gate or alert          |
+| ------------------------------------ | --------------------------------------- | ---------------------- |
+| Claude Code write guard              | before a mutating tool call             | gate (deny)            |
+| — the same guard, when it cannot run | it was handed something it cannot read  | asks, inspects nothing |
+| Commit hook (`.githooks/pre-commit`) | `git commit`, on the added lines        | gate (refuses)         |
+| CodeQL, Trivy (`security.yml`)       | pull request, push to `main`, weekly    | gate on new only       |
+| Dependency review                    | a pull request that adds a dependency   | gate                   |
+| Dependabot alerts                    | a CVE lands, whenever that happens      | alert                  |
+| Dependabot version updates           | monthly, one pull request per ecosystem | neither                |
+| `pnpm security:sweep`                | you run it                              | neither — it reports   |
 
 The write guard is wired to `Bash`, `Edit`, `MultiEdit`, `NotebookEdit` and
 `Write` — every tool that can put bytes on disk, the shell included. It checks
 credentials and nothing else. It does not ask before you edit a workflow, the
-commit hook or the detector, and it does not ask about `--no-verify` or a force
-push; it used to do both, and ADR-0014 records why it stopped and what that
-costs. Do not add either back without reading it.
+commit hook or the detector, and it does not ask about `--no-verify`, a force
+push, `core.hooksPath` or `gh pr merge --admin`; it used to ask about all of it,
+and ADR-0014 records why it stopped and what that costs. Do not add any of it
+back without reading it.
+
+The one prompt it can still raise is the second row above, and it is not a
+finding: it means the guard could not inspect the call at all. See
+["The write guard could not run"](#the-write-guard-could-not-run) below.
 
 CodeQL and Trivy upload SARIF and always exit successfully. What fails a pull
 request is code scanning's own **Code scanning results** check, which fires only
@@ -66,13 +72,43 @@ means the detector itself failed, and the traceback is printed underneath it.
 Both fail loudly on purpose — a guard that passes when it could not run is worse
 than none — and neither is answered by skipping the hook.
 
-### Changing a control: nothing stops you, which is the point to be careful at
+### "The write guard could not run"
 
-Editing `.github/workflows/`, `.githooks/`, `scripts/credential_detector.py`,
+The one prompt the write guard still raises, and it is not a finding. It means
+the guard was handed something it could not read — malformed input, a detector
+it could not import, an unexpected exception — and so **inspected nothing**. The
+message names the exception.
+
+It asks rather than passing on purpose: a guard that goes quiet when it breaks
+looks exactly like a guard that ran and found nothing. Approving the prompt is
+the same as making the call with no credential check in front of it, which is
+usually fine and is worth knowing you are doing. If it fires repeatedly, the
+guard is broken — fix it rather than clicking through, and
+`python3 scripts/test_claude_code_guard.py` is what tells you whether it works.
+
+### A security gate fails on a pull request
+
+The diff introduced it. Open the **Code scanning results** check, read the alert
+it names, fix the code. Two specific ones:
+
+- **Dependency review** fails when the diff _adds_ a package with a known
+  vulnerability, at severity `low` and above. The remedy is a different version
+  or a different package, decided now while it is cheap. It never fires on
+  packages already here.
+- **The `security` job** is an aggregate; it is red because something upstream
+  of it was. Read the job that actually failed.
+
+A Dependabot alert is not one of these. It blocks nothing and is not something
+to fix inside an unrelated change.
+
+## Changing a control
+
+Nothing fires, which is the point to be careful at. Editing
+`.github/workflows/`, `.githooks/`, `scripts/credential_detector.py`,
 `scripts/install-git-hooks.sh`, `infra/terraform/tests/security.tftest.hcl` or
-the guard's own settings prompts nobody. The write guard used to ask, and
-ADR-0014 removed it. So did the prompt on `--no-verify`, a force push,
-`core.hooksPath` and `gh pr merge --admin`.
+the guard's own settings prompts nobody, and neither does `--no-verify`, a force
+push, `core.hooksPath` or `gh pr merge --admin`. The write guard used to ask
+about all of it; ADR-0014 removed that and records what it costs.
 
 What remains is the pull request. A change to any of these is argued about by a
 human reading the diff and merging it, and there is no mechanism behind that —
@@ -90,21 +126,6 @@ Skipping the commit hook skips the credential check on every line of that
 commit, not the one you were arguing with, and leaves nothing behind for a
 reviewer to disagree with. [False positives](#false-positives) is the supported
 way past a finding.
-
-### A security gate fails on a pull request
-
-The diff introduced it. Open the **Code scanning results** check, read the alert
-it names, fix the code. Two specific ones:
-
-- **Dependency review** fails when the diff _adds_ a package with a known
-  vulnerability, at severity `low` and above. The remedy is a different version
-  or a different package, decided now while it is cheap. It never fires on
-  packages already here.
-- **The `security` job** is an aggregate; it is red because something upstream
-  of it was. Read the job that actually failed.
-
-A Dependabot alert is not one of these. It blocks nothing and is not something
-to fix inside an unrelated change.
 
 ## The whole-repository scan
 

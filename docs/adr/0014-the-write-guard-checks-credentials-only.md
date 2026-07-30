@@ -31,7 +31,7 @@ thing that is failing, and CI cannot object to being weakened by the change it
 is running from, since a pull request's workflows run as that pull request
 defines them. What covers it now is a human reading the diff before merging.
 That is weaker than it sounds: `required_approving_review_count` is `0` on this
-repository, so nothing *requires* the reading, and auto-merge is enabled, so
+repository, so nothing _requires_ the reading, and auto-merge is enabled, so
 `gh pr merge --auto` is an unattended path to `main` for a pull request that
 weakened a gate. Both were considered and left as they are; the practice of
 merging by hand is what stands in for the mechanism.
@@ -57,7 +57,7 @@ And it covers what GitHub's push protection does not, since
 `secret_scanning_non_provider_patterns` is disabled here and anything not
 matching a known provider format is invisible to it.
 
-`scripts/test_claude_code_guard.py` asserts the *silence* — that editing a
+`scripts/test_claude_code_guard.py` asserts the _silence_ — that editing a
 control, reading one with `sed`, and spelling `--no-verify` all produce no
 decision — rather than merely omitting the tests that used to assert the
 prompts. A deletion that nothing tests for is a deletion the next reader of

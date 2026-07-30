@@ -140,12 +140,6 @@ class GuardTest(unittest.TestCase):
         self.assertEqual(0, decision.exit_code, decision)
         return decision.reason
 
-    def assertAsked(self, call: tuple[str, dict[str, Any]]) -> str:
-        decision = decide(*call)
-        self.assertEqual("ask", decision.kind, f"expected an ask, got {decision}")
-        self.assertEqual(0, decision.exit_code, decision)
-        return decision.reason
-
     def assertNoDecision(self, call: tuple[str, dict[str, Any]]) -> None:
         decision = decide(*call)
         self.assertIsNone(decision.kind, f"expected no decision, got {decision}")
@@ -335,10 +329,17 @@ class WhatTheGuardDoesNotSee(GuardTest):
 
     def test_what_covers_the_residue_is_written_down(self) -> None:
         # The gap above is only tolerable because something else reads these
-        # changes. This asserts the guard still names what that something is,
-        # rather than leaving the gap unattributed.
+        # changes. Asserted on the specific claims rather than on the words
+        # "commit guard", which appear in this file for half a dozen reasons and
+        # would keep a deleted paragraph looking present.
         source = (REPO_ROOT / "scripts" / "claude_code_guard.py").read_text()
-        self.assertIn("commit guard", source)
+        self.assertIn("python3 gen.py > .env", source, "the gap is no longer named")
+        self.assertIn(
+            "does not skip it",
+            source,
+            "the backstop is named without the caveat that it is skippable",
+        )
+        self.assertIn("security:sweep", source, "the whole-repository backstop is unnamed")
 
 
 class WhenTheGuardCannotDecide(GuardTest):

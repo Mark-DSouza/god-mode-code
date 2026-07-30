@@ -17,12 +17,10 @@ agent that has never heard of Claude Code (ADR-0013).
 There was a second rule, and its removal is the thing most likely to be
 mistaken for an oversight. Touching a protected control — the workflows,
 `.githooks/`, the detector, this file — used to ask, as did `--no-verify`, a
-force push and `core.hooksPath`. It was removed deliberately in ADR-0014: the
-prompts cost more than the layer returned, and what is accepted in exchange is
-written down there rather than left to be rediscovered. ADR-0013 still argues
-for that layer and has a pointer to ADR-0014 saying it no longer exists.
-`scripts/test_claude_code_guard.py` asserts the silence, so restoring the rule
-by accident fails a test rather than passing quietly.
+force push, `core.hooksPath` and `gh pr merge --admin`. ADR-0014 removed it and
+is where the reasoning and the accepted exposures live; ADR-0013 still argues
+for the layer and carries a pointer to ADR-0014 beside the paragraph that no
+longer holds. Read ADR-0014 before restoring any of it.
 
 What follows from having only one rule: nothing here reads the shell. The
 command is scanned as raw text and asked only whether a credential is in it,

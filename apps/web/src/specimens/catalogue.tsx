@@ -8,11 +8,13 @@ import {
   Countdown,
   Dialog,
   DigitalRain,
+  EmptyState,
   IconButton,
   Input,
   Kbd,
   ProgressBar,
   ResultPanel,
+  RunChart,
   Select,
   Stat,
   Switch,
@@ -324,6 +326,33 @@ export const SPECIMENS: Record<SpecimenName, Specimen> = {
         {/* The header renders this before the Handle arrives. */}
         <Avatar initials="" size={28} glow={false} />
       </div>
+    ),
+  },
+
+  "run-chart": {
+    width: 700,
+    node: (
+      <RunChart
+        values={[96, 104, 88, 118, 110, 126, 121, 133, 119, 140, 131, 148, 129, 136]}
+        label="Last 14 runs · WPM"
+        peakLabel="peak 148"
+        // The card's own series and captions, so this can be held up against it
+        // side by side. `emphasis` is left off deliberately: the shipped
+        // component lights the tallest bar, and this is the specimen of that.
+        aria-label="Fourteen recent runs by WPM, from 88 to 148."
+      />
+    ),
+  },
+
+  "empty-state": {
+    width: 700,
+    node: (
+      <EmptyState
+        title="No runs logged yet"
+        description="Complete a run and the rain starts keeping score."
+      >
+        <Button size="lg">Start Your First Run</Button>
+      </EmptyState>
     ),
   },
 

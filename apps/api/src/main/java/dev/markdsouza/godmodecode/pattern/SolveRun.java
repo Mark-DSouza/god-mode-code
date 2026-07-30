@@ -16,10 +16,15 @@ import java.util.UUID;
  * Run has no target text to be accurate against, and a result screen that
  * rendered them as empty cells would be inventing a measurement (ADR-0006).
  *
- * @param testsPassed Example Tests and Hidden Tests that were satisfied, and
- *                    {@code testsTotal} counts both together. A Hidden Test's
- *                    failure is a count and never more than a count
- *                    (CONTEXT.md).
+ * @param testsPassed      Example Tests and Hidden Tests that were satisfied,
+ *                         and {@code testsTotal} counts both together. A Hidden
+ *                         Test's failure is a count and never more than a count
+ *                         (CONTEXT.md).
+ * @param personalBest     whether this Run beat every earlier Solve Run of this
+ *                         User's. Only a Passed Solve Run can: only Passed Solve
+ *                         Runs are ranked, so a fast Failed one sets nothing.
+ * @param previousBestWpm  what it beat, and null when there was nothing to beat
+ *                         or nothing was beaten.
  */
 @Schema(description = "A completed and judged Run against a Pattern")
 public record SolveRun(
@@ -44,4 +49,11 @@ public record SolveRun(
                         example = "41.2",
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 BigDecimal wpm,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant completedAt) {}
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant completedAt,
+        @Schema(
+                        description = "Whether this Run is a new Personal Best in the Code Discipline",
+                        example = "true",
+                        requiredMode = Schema.RequiredMode.REQUIRED)
+                boolean personalBest,
+        @Schema(description = "The Personal Best this Run beat, when it beat one", example = "38.4")
+                BigDecimal previousBestWpm) {}

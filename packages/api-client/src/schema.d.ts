@@ -162,6 +162,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read this browser's own profile
+         * @description Personal Bests per Discipline, best Accuracy, recent average, and the most recent Runs of both kinds interleaved. Every figure is computed from the User's Runs at the moment of the request; none of it is stored.
+         *
+         *     A User with no Runs is a 200 with empty lists, not a 404. They exist and have simply not played yet, and the screen has an inviting first-Run state to show for it.
+         */
+        get: operations["mine"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/patterns": {
         parameters: {
             query?: never;
@@ -302,6 +324,16 @@ export interface components {
             errors: number;
             /** Format: date-time */
             completedAt: string;
+            /**
+             * @description Whether this Run is a new Personal Best in its Discipline
+             * @example true
+             */
+            personalBest: boolean;
+            /**
+             * @description The Personal Best this Run beat, when it beat one
+             * @example 112
+             */
+            previousBestWpm?: number;
         };
         /** @description A submitted Run that was not recorded, and why */
         Rejection: {
@@ -384,6 +416,16 @@ export interface components {
             wpm: number;
             /** Format: date-time */
             completedAt: string;
+            /**
+             * @description Whether this Run is a new Personal Best in the Code Discipline
+             * @example true
+             */
+            personalBest: boolean;
+            /**
+             * @description The Personal Best this Run beat, when it beat one
+             * @example 38.4
+             */
+            previousBestWpm?: number;
         };
         /** @description A Solve Run that could not be judged. No Run was recorded and the Challenge is still live */
         Unjudged: {
@@ -510,6 +552,51 @@ export interface components {
              * @example 302
              */
             characterCount: number;
+        };
+        /** @description One Run in a User's history, of either kind */
+        HistoryEntry: {
+            /** Format: uuid */
+            runId: string;
+            /**
+             * @description One of the three ways to play
+             * @enum {string}
+             */
+            discipline: "QUOTES" | "PROSE" | "CODE";
+            /** @example 118.4 */
+            wpm: number;
+            /**
+             * @description The Verdict, for a Solve Run. Absent for a Typing Run.
+             * @enum {string}
+             */
+            verdict?: "passed" | "failed" | "timeout" | "error";
+            /** Format: date-time */
+            completedAt: string;
+        };
+        /** @description A User's highest WPM within one Discipline, derived from their Runs */
+        PersonalBest: {
+            /**
+             * @description One of the three ways to play
+             * @enum {string}
+             */
+            discipline: "QUOTES" | "PROSE" | "CODE";
+            /** @example 148 */
+            wpm: number;
+        };
+        /** @description A User's Personal Bests and recent Runs, derived at query time */
+        Profile: {
+            user: components["schemas"]["User"];
+            personalBests: components["schemas"]["PersonalBest"][];
+            /**
+             * @description Highest Accuracy across Typing Runs
+             * @example 99.2
+             */
+            bestAccuracy?: number;
+            /**
+             * @description Mean WPM across the Runs in history
+             * @example 126.4
+             */
+            recentAverageWpm?: number;
+            history: components["schemas"]["HistoryEntry"][];
         };
         /** @description The backend's own status and that of its dependencies */
         HealthStatus: {
@@ -786,6 +873,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description This browser is nobody yet */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gmc_recognition?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile of the User this browser is */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
                 };
             };
             /** @description This browser is nobody yet */

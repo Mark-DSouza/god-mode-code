@@ -8,6 +8,8 @@ import dev.markdsouza.godmodecode.judge.JudgeUnavailableException;
 import dev.markdsouza.godmodecode.judge.Judging;
 import dev.markdsouza.godmodecode.judge.SubmittedSource;
 import dev.markdsouza.godmodecode.judge.UnknownPatternException;
+import dev.markdsouza.godmodecode.judge.Verdict;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -127,8 +129,25 @@ public class SolveRunService {
         try {
             return transactions.execute(status -> {
                 issues.markConsumed(ready.issueId());
+
+                // Read before the Run is written, so it is the best this one had
+                // to beat rather than the best including it. Only a Passed Solve
+                // Run can beat anything — a Failed Run that was typed quickly is
+                // still a Run that does not work (CONTEXT.md).
+                BigDecimal previousBest = runs.bestWpm(userId).orElse(null);
+                boolean personalBest = judged.verdict() == Verdict.PASSED
+                        && (previousBest == null
+                                || ready.verified().wpm().compareTo(previousBest) > 0);
+
                 return new Submitted.Recorded(runs.insert(
-                        userId, ready.pattern(), ready.issueId(), judged, submission.source(), ready.verified()));
+                        userId,
+                        ready.pattern(),
+                        ready.issueId(),
+                        judged,
+                        submission.source(),
+                        ready.verified(),
+                        personalBest,
+                        personalBest ? previousBest : null));
             });
         } catch (DuplicateKeyException e) {
             // A replay that raced this one to the judge and got here first. The

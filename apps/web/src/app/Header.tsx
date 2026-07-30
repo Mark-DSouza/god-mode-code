@@ -1,4 +1,5 @@
 import { useCurrentUser } from "../api/user.ts";
+import { initialsFor } from "./initials.ts";
 import { Avatar, Wordmark } from "../design-system/index.ts";
 
 /** Shown where a Handle would be when the backend never answered. */
@@ -27,7 +28,7 @@ const UNKNOWN = "—";
  * the mockup's mobile header drops it only because the mockup had no Handle to
  * show.
  */
-export function Header() {
+export function Header({ onOpenProfile }: { onOpenProfile: () => void }) {
   const user = useCurrentUser();
   const handle = user.data?.handle;
   // An empty header is indistinguishable from a rendering fault. A dash says
@@ -43,12 +44,22 @@ export function Header() {
         <Wordmark size={20} className="hidden min-[480px]:inline-flex" />
 
         {/* The tile keeps its space while the request is in flight, so nothing
-            jumps sideways when the Handle lands. */}
-        <div className="flex min-w-0 items-center gap-2">
+            jumps sideways when the Handle lands.
+
+            A real button, and its accessible name starts with the Handle it
+            renders. WCAG 2.5.3 asks that a visible label be part of the name
+            somebody says out loud — a bare "Your profile" would leave a voice
+            user reading "PERCOLATING_FERRET" with nothing to say to reach it. */}
+        <button
+          type="button"
+          onClick={onOpenProfile}
+          aria-label={handle ? `${handle} — your profile` : "Your profile"}
+          className="flex min-w-0 cursor-pointer items-center gap-2 rounded-sm hover:opacity-80"
+        >
           <Avatar
             data-testid="user-avatar"
-            // Decorative. The Handle beside it is the accessible answer to "who
-            // am I", and announcing the initials first only says it twice.
+            // Decorative. The Handle is in the button's name already, and
+            // announcing the initials first only says it twice.
             aria-hidden="true"
             size={28}
             glow={Boolean(handle)}
@@ -60,24 +71,8 @@ export function Header() {
           >
             {shown}
           </span>
-        </div>
+        </button>
       </div>
     </header>
   );
-}
-
-/**
- * The two letters an avatar tile shows for a Handle: the initial of each word.
- *
- * `PERCOLATING_FERRET` gives PF, and `SPIRALING_MANTIS_2` still gives SM — the
- * collision suffix is bookkeeping, not part of who someone is.
- */
-function initialsFor(handle: string): string {
-  return handle
-    .split("_")
-    .map((word) => word.charAt(0))
-    .filter((letter) => /[A-Za-z]/.test(letter))
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
 }

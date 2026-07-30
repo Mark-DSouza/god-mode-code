@@ -233,6 +233,30 @@ class SolveRunEndpointTest extends JudgedIntegrationTest {
     }
 
     @Test
+    @DisplayName("only a Passed Solve Run can be a Personal Best, and it says what it beat")
+    void onlyAPassedSolveRunCanBeAPersonalBest() {
+        Browser browser = Browser.arrivingAt(http);
+
+        SolveRun first = browser.solves(jdbc, HASH_MAP, SOLUTION, Duration.ofSeconds(50));
+        assertThat(first.personalBest()).isTrue();
+        assertThat(first.previousBestWpm()).as("there was nothing to beat").isNull();
+
+        // Written faster than the best, and it does not work. Only Passed Solve
+        // Runs are ranked (CONTEXT.md), so this sets nothing however quick it
+        // was — the alternative is a best held by a program that fails.
+        StubJudge.answers(HASH_MAP, "failed", 2, TESTS);
+        SolveRun quickAndWrong = browser.solves(jdbc, HASH_MAP, SOLUTION, Duration.ofSeconds(10));
+        assertThat(quickAndWrong.wpm()).isGreaterThan(first.wpm());
+        assertThat(quickAndWrong.personalBest()).isFalse();
+
+        StubJudge.answers(HASH_MAP, "passed", TESTS, TESTS);
+        SolveRun quickAndRight = browser.solves(jdbc, HASH_MAP, SOLUTION, Duration.ofSeconds(20));
+        assertThat(quickAndRight.personalBest()).isTrue();
+        // The best it beat, not the faster failure in between.
+        assertThat(quickAndRight.previousBestWpm()).isEqualByComparingTo(first.wpm());
+    }
+
+    @Test
     @DisplayName("a Passage Challenge cannot be answered with source")
     void aPassageChallengeCannotBeAnsweredWithSource() {
         Browser browser = Browser.arrivingAt(http);

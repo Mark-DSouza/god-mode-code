@@ -25,8 +25,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@link JudgedIntegrationTest}. Behaviour is programmed per Pattern so a test
  * can have one Pattern's reference solution fail while the rest of the catalogue
  * passes, which is exactly what the activation gate has to be shown doing.
+ *
+ * Public because the profile suite needs a User with Runs of both kinds, and a
+ * Solve Run cannot be had without something answering as a judge. It records
+ * them through the same endpoint a player uses rather than writing rows by hand,
+ * which is the only way a profile test can prove the two aggregates really do
+ * interleave.
  */
-final class StubJudge {
+public final class StubJudge {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -49,12 +55,12 @@ final class StubJudge {
 
     private StubJudge() {}
 
-    static String baseUrl() {
+    public static String baseUrl() {
         return "http://127.0.0.1:" + SERVER.getAddress().getPort();
     }
 
     /** Programs the Verdict this Pattern's next judging comes back with. */
-    static void answers(String patternId, String verdict, int passed, int total) {
+    public static void answers(String patternId, String verdict, int passed, int total) {
         ANSWERS.put(
                 patternId,
                 """

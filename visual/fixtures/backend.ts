@@ -88,6 +88,11 @@ const RECORDED_RUN: TypingRun = {
   correctCharacters: 83,
   errors: 3,
   completedAt: new Date(FIXED_TIME.getTime() + 21_000).toISOString(),
+  // Not a Personal Best, so the result screen keeps the baseline it already has.
+  // The announcement is a different composition — a badge, a chip and a callout
+  // the ordinary result has none of — and it belongs to its own shot, not to a
+  // silent change in this one.
+  personalBest: false,
 };
 
 /** The Rejection the refused-Run screen renders the explanation of. */

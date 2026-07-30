@@ -3,6 +3,7 @@ package dev.markdsouza.godmodecode.typing;
 import dev.markdsouza.godmodecode.integrity.Issue;
 import dev.markdsouza.godmodecode.integrity.IssueRepository;
 import dev.markdsouza.godmodecode.integrity.RejectionReason;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -79,7 +80,26 @@ public class TypingRunService {
             case Verification.Rejected rejected -> new Submitted.Refused(rejected.reason());
             case Verification.Verified verified -> {
                 issues.markConsumed(issue.get().id());
-                yield new Submitted.Recorded(runs.insert(userId, passage, issue.get().id(), verified));
+
+                // Read before the Run is written, which is what makes it the
+                // *previous* best rather than this one. Nothing else of this
+                // User's can land in between: a User holds one live Issue at a
+                // time, enforced by a partial unique index, so there is no
+                // second Run of theirs in flight to race this one.
+                BigDecimal previousBest =
+                        runs.bestWpmIn(userId, passage.discipline()).orElse(null);
+                boolean personalBest =
+                        previousBest == null || verified.wpm().compareTo(previousBest) > 0;
+
+                yield new Submitted.Recorded(runs.insert(
+                        userId,
+                        passage,
+                        issue.get().id(),
+                        verified,
+                        personalBest,
+                        // Only quoted when it was actually beaten: a Run that
+                        // fell short has no delta to announce.
+                        personalBest ? previousBest : null));
             }
         };
     }

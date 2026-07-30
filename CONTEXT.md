@@ -79,6 +79,13 @@ A User's highest WPM within a Discipline, or fastest Passed Solve Run for a
 Pattern. Derived from Runs, never stored.
 _Avoid_: High score, record, PB
 
+**Profile**:
+A User's Personal Bests, best Accuracy, recent average and recent Runs, gathered
+into one view. Derived on every request and stored nowhere, like the Personal
+Bests it is mostly made of. Not another word for the User — that is what the
+User entry rules out — but the answer to "how am I doing".
+_Avoid_: Dashboard, stats, summary
+
 ### People
 
 **User**:

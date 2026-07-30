@@ -43,7 +43,19 @@ function typist() {
  * does, rather than echoing a fixture. A stub that answered with a constant
  * would let the result screen show any number at all and still pass.
  */
-function backendServing(text = PASSAGE) {
+function backendServing(
+  text = PASSAGE,
+  /**
+   * A Run the server called a Personal Best, at a WPM of its own choosing.
+   *
+   * Both figures are the server's — whether a Run beat every earlier one is a
+   * claim about Runs this browser has never seen — so a test about the
+   * announcement states them rather than deriving them from how fast a fake
+   * clock let somebody type. `previousWpm` null is a first Run in the
+   * Discipline: a Personal Best with nothing to improve on.
+   */
+  best: { wpm: number; previousWpm: number | null } | null = null,
+) {
   const submissions: TypingRunSubmission[] = [];
 
   server.use(
@@ -76,13 +88,15 @@ function backendServing(text = PASSAGE) {
           id: "00000000-0000-4000-8000-0000000000c3",
           passageId: PASSAGE_ID,
           discipline: "QUOTES",
-          wpm: Number((correct / 5 / (elapsedMillis / 60_000)).toFixed(1)),
+          wpm: best ? best.wpm : Number((correct / 5 / (elapsedMillis / 60_000)).toFixed(1)),
           accuracy: Number(((correct / submission.keystrokes) * 100).toFixed(1)),
           elapsedMillis,
           keystrokes: submission.keystrokes,
           correctCharacters: correct,
           errors: submission.keystrokes - correct,
           completedAt: submission.completedAt,
+          personalBest: best !== null,
+          ...(best?.previousWpm == null ? {} : { previousBestWpm: best.previousWpm }),
         },
         { status: 201 },
       );
@@ -376,6 +390,61 @@ describe("a Typing Run", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/handed out too long ago/i);
     expect(within(alert).getByRole("button", { name: /choose a discipline/i })).toBeInTheDocument();
+  });
+
+  it("announces a new Personal Best, and what it beat", async () => {
+    backendServing(PASSAGE, { wpm: 151, previousWpm: 112 });
+    const user = typist();
+
+    await startARun(user);
+    await countdownEnds();
+    await user.keyboard(PASSAGE);
+
+    const result = await screen.findByRole("region", { name: /run result/i });
+
+    // `role="status"`, so the reward is announced rather than only lit up. It is
+    // the one thing on this screen that was not true a moment ago.
+    const announcement = within(result).getByRole("status");
+    expect(announcement).toHaveTextContent(/fastest run yet · quotes/i);
+    // The delta, which is what makes 151 an improvement rather than a number,
+    // and the figure it improved on.
+    expect(announcement).toHaveTextContent("↑ 39");
+    expect(announcement).toHaveTextContent(/previous best 112 wpm/i);
+    expect(within(result).getByText(/new personal best/i)).toBeInTheDocument();
+  });
+
+  it("has no delta to show for a first Run in a Discipline, and still calls it a best", async () => {
+    backendServing(PASSAGE, { wpm: 88, previousWpm: null });
+    const user = typist();
+
+    await startARun(user);
+    await countdownEnds();
+    await user.keyboard(PASSAGE);
+
+    const announcement = within(
+      await screen.findByRole("region", { name: /run result/i }),
+    ).getByRole("status");
+
+    // There was nothing to beat. An arrow and a "+88" would be claiming an
+    // improvement over a Run that never happened.
+    expect(announcement).toHaveTextContent(/your first run in this discipline/i);
+    expect(announcement).not.toHaveTextContent("↑");
+  });
+
+  it("says nothing about a Personal Best when the Run did not set one", async () => {
+    backendServing();
+    const user = typist();
+
+    await startARun(user);
+    await countdownEnds();
+    await user.keyboard(PASSAGE);
+
+    const result = await screen.findByRole("region", { name: /run result/i });
+
+    // An ordinary Run is an ordinary result. Congratulating somebody for one
+    // makes the congratulation worthless when it is real.
+    expect(within(result).queryByText(/personal best/i)).not.toBeInTheDocument();
+    expect(within(result).queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("offers another Run and a change of Discipline once the result is in", async () => {

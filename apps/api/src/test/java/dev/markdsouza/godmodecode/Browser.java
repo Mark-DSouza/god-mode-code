@@ -3,10 +3,12 @@ package dev.markdsouza.godmodecode;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.markdsouza.godmodecode.pattern.SolveChallenge;
+import dev.markdsouza.godmodecode.pattern.SolveRun;
 import dev.markdsouza.godmodecode.pattern.SolveRunSubmission;
 import dev.markdsouza.godmodecode.typing.Challenge;
 import dev.markdsouza.godmodecode.typing.ChallengeRequest;
 import dev.markdsouza.godmodecode.typing.Discipline;
+import dev.markdsouza.godmodecode.typing.TypingRun;
 import dev.markdsouza.godmodecode.typing.TypingRunSubmission;
 import dev.markdsouza.godmodecode.user.RecognitionCookie;
 import dev.markdsouza.godmodecode.user.User;
@@ -37,6 +39,17 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * one-live-Issue rule spans both kinds needs one object that can ask for both.
  */
 public final class Browser {
+
+    /**
+     * How far back {@link #types} and {@link #solves} rewind the Challenge they
+     * were handed.
+     *
+     * A Run cannot be longer than the window the server itself watched go past,
+     * and inside a test suite that window is a few milliseconds old. Two minutes
+     * is longer than any Run a test has reason to describe and well inside the
+     * ten a Challenge is live for.
+     */
+    private static final Duration HELD = Duration.ofMinutes(2);
 
     private final TestRestTemplate http;
     private final String recognitionKey;
@@ -77,6 +90,46 @@ public final class Browser {
 
     public <T> ResponseEntity<T> submits(TypingRunSubmission submission, Class<T> as) {
         return send("/api/typing-runs", submission, as);
+    }
+
+    /**
+     * Plays one Typing Run: asks for a Passage in this Discipline, takes this
+     * long over it, and transcribes it perfectly.
+     *
+     * Here rather than in each test class because three of them wanted it and
+     * none of them wanted the plumbing — the interesting part of such a test is
+     * how fast the Run was and in which Discipline, not the rewind that makes
+     * the duration believable.
+     */
+    public TypingRun types(JdbcTemplate jdbc, Discipline discipline, Duration took) {
+        Challenge challenge = isHanded(discipline);
+        rewind(jdbc, challenge, HELD);
+        TypingRun run = submits(perfectRun(challenge, took), TypingRun.class).getBody();
+        assertThat(run).as("the Run was not recorded").isNotNull();
+        return run;
+    }
+
+    /**
+     * Plays one Solve Run: asks for this Pattern, and writes this source over
+     * this long.
+     *
+     * The Verdict is the judge's, so a caller that cares about it programs the
+     * judge before calling — this only gets as far as having something judged.
+     */
+    public SolveRun solves(JdbcTemplate jdbc, String slug, String source, Duration took) {
+        SolveChallenge challenge = isHanded(slug);
+        rewind(jdbc, challenge, HELD);
+        SolveRun run = submits(wrote(challenge, source, took), SolveRun.class).getBody();
+        assertThat(run).as("the Solve Run was not recorded").isNotNull();
+        return run;
+    }
+
+    /** Reads a path as whoever this browser is, carrying its Recognition Key. */
+    public <T> ResponseEntity<T> reads(String path, Class<T> as) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.put(HttpHeaders.COOKIE, List.of(RecognitionCookie.NAME + "=" + recognitionKey));
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        return http.exchange(path, HttpMethod.GET, new HttpEntity<>(headers), as);
     }
 
     /**

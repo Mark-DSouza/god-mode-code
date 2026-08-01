@@ -12,8 +12,8 @@
   },
   "devDependencies": {
     "@gmc/api-client": "workspace:*",
-    "@playwright/test": "1.61.1",
-    "@types/node": "^22.15.3",
-    "typescript": "^5.9.2"
+    "@playwright/test": "1.62.0",
+    "@types/node": "^26.1.2",
+    "typescript": "^7.0.2"
   }
 }

@@ -666,11 +666,6 @@ export interface components {
              * @example 98.7
              */
             accuracy: number;
-            /**
-             * Format: date-time
-             * @description When that Run was completed
-             */
-            completedAt: string;
         };
         /** @description The backend's own status and that of its dependencies */
         HealthStatus: {

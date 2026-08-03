@@ -335,11 +335,11 @@ export const SPECIMENS: Record<SpecimenName, Specimen> = {
     node: (
       <Table
         // The card's own columns and rows, so this can be held up against it
-        // side by side. The gap between rank 3 and rank 5 is the card's too, and
+        // side by side. The gap between 3 and 5 is the card's too, and
         // it is the state the component exists for: the row that is yours,
         // pinned in from below the visible top.
         columns={[
-          { key: "rank", label: "#", width: "48px", align: "center" },
+          { key: "position", label: "#", width: "48px", align: "center" },
           { key: "user", label: "User" },
           { key: "wpm", label: "WPM", width: "90px", align: "right" },
           {
@@ -352,12 +352,12 @@ export const SPECIMENS: Record<SpecimenName, Specimen> = {
           },
         ]}
         rows={[
-          { rank: 1, user: "neo_anderson", wpm: 148, acc: 99.2 },
-          { rank: 2, user: "trinity", wpm: 141, acc: 98.7 },
-          { rank: 3, user: "morpheus", wpm: 133, acc: 99.9 },
-          { rank: 5, user: "you", wpm: 112, acc: 98.4 },
+          { position: 1, user: "neo_anderson", wpm: 148, acc: 99.2 },
+          { position: 2, user: "trinity", wpm: 141, acc: 98.7 },
+          { position: 3, user: "morpheus", wpm: 133, acc: 99.9 },
+          { position: 5, user: "you", wpm: 112, acc: 98.4 },
         ]}
-        getRowKey={(row) => row.rank}
+        getRowKey={(row) => row.position}
         getHighlight={(row) => row.user === "you"}
         label="Leaderboard specimen"
       />

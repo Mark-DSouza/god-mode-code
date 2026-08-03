@@ -43,10 +43,10 @@ public class LeaderboardService {
      */
     static final int PUBLISHED = 10;
 
-    private final LeaderboardRepository rankings;
+    private final LeaderboardRepository boards;
 
-    LeaderboardService(LeaderboardRepository rankings) {
-        this.rankings = rankings;
+    LeaderboardService(LeaderboardRepository boards) {
+        this.boards = boards;
     }
 
     /**
@@ -58,30 +58,30 @@ public class LeaderboardService {
      *         nobody has attempted are different answers to different mistakes.
      */
     public Optional<Leaderboard> forPassage(UUID passageId, UUID viewerId) {
-        return rankings.forPassage(passageId, viewerId, PUBLISHED).map(ranking -> {
+        return boards.forPassage(passageId, viewerId, PUBLISHED).map(board -> {
             // Withheld, not truncated: below the threshold the top is not shown
             // to anybody, including the two people on it. Publishing it to its
             // own participants and hiding it from everyone else would be a
             // ranking that says something different depending on who asks.
-            boolean worthShowing = ranking.participants() >= MINIMUM_PARTICIPANTS;
+            boolean worthShowing = board.participants() >= MINIMUM_PARTICIPANTS;
 
             List<LeaderboardEntry> top = worthShowing
-                    ? ranking.entries().stream()
+                    ? board.entries().stream()
                             .filter(entry -> entry.position() <= PUBLISHED)
                             .toList()
                     : List.of();
 
             return new Leaderboard(
                     passageId,
-                    ranking.discipline(),
+                    board.discipline(),
                     top,
                     // Their own row survives the threshold. It is a fact about
                     // the asker's own Run rather than a claim about a
                     // population, and a player who has just typed something is
                     // owed the number they earned even when there is nobody to
                     // compare it against yet.
-                    viewerId == null ? null : ownRow(ranking, viewerId),
-                    ranking.participants(),
+                    viewerId == null ? null : ownRow(board, viewerId),
+                    board.participants(),
                     MINIMUM_PARTICIPANTS);
         });
     }
@@ -95,8 +95,8 @@ public class LeaderboardService {
      * showing five of ten rows cannot know whether the sixth is the asker's, and
      * making it work that out from the list is how a row goes missing.
      */
-    private static LeaderboardEntry ownRow(LeaderboardRepository.Ranking ranking, UUID viewerId) {
-        return ranking.entries().stream()
+    private static LeaderboardEntry ownRow(LeaderboardRepository.Board board, UUID viewerId) {
+        return board.entries().stream()
                 .filter(entry -> entry.user().id().equals(viewerId))
                 .findFirst()
                 .orElse(null);

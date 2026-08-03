@@ -3,7 +3,6 @@ package dev.markdsouza.godmodecode.leaderboard;
 import dev.markdsouza.godmodecode.user.User;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
-import java.time.Instant;
 
 /**
  * One User's standing on one Leaderboard: their best Run, and where it puts
@@ -44,6 +43,4 @@ public record LeaderboardEntry(
                 BigDecimal wpm,
         @Schema(description = "Accuracy of that same Run", example = "98.7",
                         requiredMode = Schema.RequiredMode.REQUIRED)
-                BigDecimal accuracy,
-        @Schema(description = "When that Run was completed", requiredMode = Schema.RequiredMode.REQUIRED)
-                Instant completedAt) {}
+                BigDecimal accuracy) {}

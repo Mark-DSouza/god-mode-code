@@ -1028,14 +1028,9 @@
             "type" : "number",
             "description" : "Accuracy of that same Run",
             "example" : 98.7
-          },
-          "completedAt" : {
-            "type" : "string",
-            "format" : "date-time",
-            "description" : "When that Run was completed"
           }
         },
-        "required" : [ "accuracy", "completedAt", "position", "user", "wpm" ]
+        "required" : [ "accuracy", "position", "user", "wpm" ]
       },
       "HealthStatus" : {
         "type" : "object",

@@ -5,7 +5,17 @@ export interface TableColumn<Row> {
   /** Which field of a row this column reads, and the column's own identity. */
   key: string;
   label: ReactNode;
-  /** Column width, e.g. "48px". Omitted columns share what is left. */
+  /**
+   * Column width, e.g. "48px". Omitted columns share what is left.
+   *
+   * The published contract calls this "a CSS grid track, e.g. `48px` or `1fr`",
+   * and this is the one place the reimplementation cannot honour it exactly: a
+   * fixed table layout takes a length, and `1fr` means nothing to a `<col>`.
+   * Nothing is lost — `1fr` was the grid's way of saying "share what is left",
+   * which is what omitting the width does here — but a caller porting a column
+   * definition across verbatim gets an ignored value rather than an error, so
+   * it is written down rather than left to be discovered.
+   */
   width?: string;
   align?: "left" | "center" | "right";
   /** false = use the display font instead of mono. */

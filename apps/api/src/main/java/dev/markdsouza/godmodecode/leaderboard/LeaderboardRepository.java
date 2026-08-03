@@ -2,7 +2,6 @@ package dev.markdsouza.godmodecode.leaderboard;
 
 import dev.markdsouza.godmodecode.typing.Discipline;
 import dev.markdsouza.godmodecode.user.User;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -30,8 +29,13 @@ import org.springframework.stereotype.Repository;
 class LeaderboardRepository {
 
     /**
-     * The ranking as the database returns it: the Passage's Discipline, the size
+     * The board as the database returns it: the Passage's Discipline, the size
      * of the population, and the rows asked for.
+     *
+     * Not "Ranking". CONTEXT.md gives that word to a Discipline Ranking — a
+     * User's standing across at least five distinct Challenges — which is a
+     * different question with a different rule, and a type here wearing its
+     * name would be the one place the two could be confused.
      *
      * {@code entries} is the top of the ranking <em>and</em> the requesting
      * User's row, which may be the same row or may be hundreds apart. Splitting
@@ -39,7 +43,7 @@ class LeaderboardRepository {
      * pass because fetching them separately is the second round trip this class
      * exists to avoid.
      */
-    record Ranking(Discipline discipline, int participants, List<LeaderboardEntry> entries) {}
+    record Board(Discipline discipline, int participants, List<LeaderboardEntry> entries) {}
 
     private final JdbcTemplate jdbc;
 
@@ -75,7 +79,7 @@ class LeaderboardRepository {
      *                 back — the correct answer for somebody who has no row.
      * @return empty when there is no such Passage.
      */
-    Optional<Ranking> forPassage(UUID passageId, UUID viewerId, int top) {
+    Optional<Board> forPassage(UUID passageId, UUID viewerId, int top) {
         return Optional.ofNullable(jdbc.query(
                 """
                 WITH best AS (
@@ -91,7 +95,7 @@ class LeaderboardRepository {
                     FROM best
                 )
                 SELECT p.discipline,
-                       r.position, r.participants, r.wpm, r.accuracy, r.completed_at,
+                       r.position, r.participants, r.wpm, r.accuracy,
                        u.id AS user_id, u.handle, u.credential_subject IS NOT NULL AS claimed
                 FROM passages p
                 LEFT JOIN ranked r ON r.position <= ? OR r.user_id = ?
@@ -99,7 +103,7 @@ class LeaderboardRepository {
                 WHERE p.id = ?
                 ORDER BY r.position, r.completed_at
                 """,
-                AS_RANKING,
+                AS_BOARD,
                 passageId,
                 top,
                 viewerId,
@@ -107,7 +111,7 @@ class LeaderboardRepository {
     }
 
     /**
-     * Many rows into one Ranking.
+     * Many rows into one Board.
      *
      * An extractor rather than a row mapper because the answer is one object
      * however many rows arrive — including none, which is the Passage that does
@@ -119,7 +123,7 @@ class LeaderboardRepository {
      * function respectively, so both are constant down the result and reading
      * them off the first row reads them off all of them.
      */
-    private static final ResultSetExtractor<Ranking> AS_RANKING = rs -> {
+    private static final ResultSetExtractor<Board> AS_BOARD = rs -> {
         if (!rs.next()) {
             return null;
         }
@@ -140,10 +144,9 @@ class LeaderboardRepository {
                     rs.getInt("position"),
                     new User(rs.getObject("user_id", UUID.class), rs.getString("handle"), rs.getBoolean("claimed")),
                     rs.getBigDecimal("wpm"),
-                    rs.getBigDecimal("accuracy"),
-                    rs.getObject("completed_at", OffsetDateTime.class).toInstant()));
+                    rs.getBigDecimal("accuracy")));
         } while (rs.next());
 
-        return new Ranking(discipline, participants, List.copyOf(entries));
+        return new Board(discipline, participants, List.copyOf(entries));
     };
 }

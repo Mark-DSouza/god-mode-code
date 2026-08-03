@@ -131,7 +131,6 @@ const RANKED: LeaderboardEntry[] = [
   },
   wpm: 148 - index * 9,
   accuracy: Number((99.2 - index * 0.4).toFixed(1)),
-  completedAt: new Date(FIXED_TIME.getTime() - index * 60_000).toISOString(),
 }));
 
 const LEADERBOARD: Leaderboard = {

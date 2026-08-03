@@ -72,7 +72,6 @@ function entry(position: number, handle: string, wpm: number, mine = false): Lea
     },
     wpm,
     accuracy: 99.1,
-    completedAt: "2026-01-01T00:00:00.000Z",
   };
 }
 

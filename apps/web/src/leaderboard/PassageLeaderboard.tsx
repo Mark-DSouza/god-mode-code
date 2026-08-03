@@ -67,7 +67,11 @@ const COLUMNS: TableColumn<Row>[] = [
     width: "84px",
     align: "right",
     muted: true,
-    render: (_value, row) => `${row.entry.accuracy}%`,
+    // Fixed to one decimal rather than printed as it arrives. The server
+    // sends numeric(4,1), and JSON drops a trailing zero — so an Accuracy of
+    // exactly 98.0 prints "98" and sits in a column of "99.2"s, ragged against
+    // every neighbour.
+    render: (_value, row) => `${row.entry.accuracy.toFixed(1)}%`,
   },
 ];
 

@@ -1,5 +1,6 @@
 import type { TypingRun } from "@gmc/api-client";
 import { Badge, Button, Card, ResultPanel } from "../design-system/index.ts";
+import { PassageLeaderboard } from "../leaderboard/PassageLeaderboard.tsx";
 import { PersonalBestCallout } from "../profile/PersonalBestCallout.tsx";
 import { DISCIPLINES } from "./disciplines.ts";
 
@@ -55,6 +56,11 @@ export function ResultScreen({
           discipline={run.discipline}
         />
       )}
+
+      {/* Where that Run puts them on this exact Passage. Below the numbers
+          rather than above them, because the Run is what they came for and the
+          ranking is what they wonder about a second later. */}
+      <PassageLeaderboard passageId={run.passageId} discipline={run.discipline} />
 
       <div className="flex flex-wrap justify-center gap-4">
         <Button size="lg" disabled={pending} onClick={onRunAgain}>

@@ -49,7 +49,7 @@ Implemented — the primitives every screen sits on:
 | `brand`    | `Wordmark`                                                                                                |
 | `core`     | `Badge` `Button` `Card` `Dialog` `IconButton` `Input` `Kbd` `ProgressBar` `Select` `Stat` `Switch` `Tabs` |
 | `typing`   | `ChallengeCard` `Countdown` `ResultPanel` `TypingField`                                                   |
-| `data`     | `Avatar` `RunChart`                                                                                       |
+| `data`     | `Avatar` `RunChart` `Table`                                                                               |
 | `feedback` | `EmptyState`                                                                                              |
 
 Deliberately **not** implemented yet — each is domain furniture for a screen
@@ -58,12 +58,18 @@ that does not exist, and lands with the ticket that introduces it:
 | Group        | Components                | Lands with                 |
 | ------------ | ------------------------- | -------------------------- |
 | `typing`     | `CodeStub`                | Solve Run                  |
-| `data`       | `Table`                   | Leaderboards               |
 | `navigation` | `Breadcrumb` `SettingRow` | Settings                   |
 | `feedback`   | `FaultState`              | the screens that need them |
 
 Building them now would mean guessing at the states they need before any screen
 exists to need them.
+
+`Table` was on that list until per-Challenge Leaderboards arrived, which is what
+the list is for. It is the one component here built as a real `<table>` rather
+than as the shipped component's grid of `<div>`s: a ranking is tabular data by
+construction — the same fields about a different person on every row — and the
+element that says so is the one that gives a screen reader the row and column
+association for free.
 
 ## Accessibility deviations
 

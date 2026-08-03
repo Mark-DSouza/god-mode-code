@@ -7,6 +7,7 @@ export { usePrefersReducedMotion } from "./effects/use-prefers-reduced-motion.ts
 
 export { Avatar, type AvatarProps } from "./data/Avatar.tsx";
 export { RunChart, type RunChartProps } from "./data/RunChart.tsx";
+export { Table, type TableColumn, type TableProps } from "./data/Table.tsx";
 
 export { EmptyState, type EmptyStateProps } from "./feedback/EmptyState.tsx";
 

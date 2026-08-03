@@ -18,6 +18,7 @@ import {
   Select,
   Stat,
   Switch,
+  Table,
   Tabs,
   TypingField,
   Wordmark,
@@ -326,6 +327,40 @@ export const SPECIMENS: Record<SpecimenName, Specimen> = {
         {/* The header renders this before the Handle arrives. */}
         <Avatar initials="" size={28} glow={false} />
       </div>
+    ),
+  },
+
+  table: {
+    width: 700,
+    node: (
+      <Table
+        // The card's own columns and rows, so this can be held up against it
+        // side by side. The gap between rank 3 and rank 5 is the card's too, and
+        // it is the state the component exists for: the row that is yours,
+        // pinned in from below the visible top.
+        columns={[
+          { key: "rank", label: "#", width: "48px", align: "center" },
+          { key: "user", label: "User" },
+          { key: "wpm", label: "WPM", width: "90px", align: "right" },
+          {
+            key: "acc",
+            label: "Acc",
+            width: "80px",
+            align: "right",
+            muted: true,
+            render: (value) => `${String(value)}%`,
+          },
+        ]}
+        rows={[
+          { rank: 1, user: "neo_anderson", wpm: 148, acc: 99.2 },
+          { rank: 2, user: "trinity", wpm: 141, acc: 98.7 },
+          { rank: 3, user: "morpheus", wpm: 133, acc: 99.9 },
+          { rank: 5, user: "you", wpm: 112, acc: 98.4 },
+        ]}
+        getRowKey={(row) => row.rank}
+        getHighlight={(row) => row.user === "you"}
+        label="Leaderboard specimen"
+      />
     ),
   },
 

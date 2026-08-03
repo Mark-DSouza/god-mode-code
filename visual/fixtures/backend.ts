@@ -1,4 +1,12 @@
-import type { Challenge, Health, Rejection, TypingRun, User } from "@gmc/api-client";
+import type {
+  Challenge,
+  Health,
+  Leaderboard,
+  LeaderboardEntry,
+  Rejection,
+  TypingRun,
+  User,
+} from "@gmc/api-client";
 import type { Page, Route } from "@playwright/test";
 
 /**
@@ -95,6 +103,49 @@ const RECORDED_RUN: TypingRun = {
   personalBest: false,
 };
 
+/**
+ * The board the result screen ranks the photographed Run against.
+ *
+ * Deep enough to fill the visible top and to leave something behind the "see
+ * the full ranking" control, and with this browser sitting fourth — inside the
+ * top, so the shot carries the green "your row" treatment, which is the whole
+ * composition this table exists for. The Handles are fixed for the same reason
+ * every other figure here is: a real backend would deal a different set of
+ * people on every run and the largest block of text on the panel would be the
+ * one thing that could not be compared.
+ */
+const RANKED: LeaderboardEntry[] = [
+  "CASCADING_MANTIS",
+  "PERSISTING_ORACLE",
+  "GLIDING_HERON",
+  HANDLE,
+  "DRIFTING_LOCUST",
+  "SPIRALING_ADDER",
+  "WANDERING_EGRET",
+].map((handle, index) => ({
+  position: index + 1,
+  user: {
+    id: handle === HANDLE ? USER.id : `0000000${index}-0000-4000-8000-00000000000f`,
+    handle,
+    claimed: false,
+  },
+  wpm: 148 - index * 9,
+  accuracy: Number((99.2 - index * 0.4).toFixed(1)),
+  completedAt: new Date(FIXED_TIME.getTime() - index * 60_000).toISOString(),
+}));
+
+const LEADERBOARD: Leaderboard = {
+  passageId: CHALLENGE.passage.id,
+  discipline: "QUOTES",
+  entries: RANKED,
+  // The same row as the fourth entry, which is what the real backend sends: the
+  // asker's row comes back whether or not the published top already contains
+  // it, and the screen is what decides whether to draw it twice.
+  you: RANKED.find((entry) => entry.user.id === USER.id),
+  participants: 34,
+  minimumParticipants: 5,
+};
+
 /** The Rejection the refused-Run screen renders the explanation of. */
 const REFUSAL: Rejection = {
   reason: "ISSUE_EXPIRED",
@@ -152,6 +203,7 @@ export async function stubBackend(page: Page, options: BackendOptions = {}): Pro
     // RunRefused rather than a transport failure.
     options.runRefused ? answer(REFUSAL, 422) : answer(RECORDED_RUN),
   );
+  await page.route("**/api/passages/*/leaderboard", answer(LEADERBOARD));
 }
 
 /**

@@ -35,6 +35,7 @@ export const SPECIMEN_NAMES = [
   "tabs",
   // data/data.card.html
   "avatar",
+  "table",
   "run-chart",
   // feedback/feedback.card.html
   "empty-state",

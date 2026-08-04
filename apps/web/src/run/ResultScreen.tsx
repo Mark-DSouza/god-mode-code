@@ -1,5 +1,6 @@
 import type { TypingRun } from "@gmc/api-client";
 import { Badge, Button, Card, ResultPanel } from "../design-system/index.ts";
+import { PassageLeaderboard } from "../leaderboard/PassageLeaderboard.tsx";
 import { PersonalBestCallout } from "../profile/PersonalBestCallout.tsx";
 import { DISCIPLINES } from "./disciplines.ts";
 
@@ -72,6 +73,18 @@ export function ResultScreen({
           </p>
         </Card>
       )}
+
+      {/* Where that Run puts them on this exact Passage.
+          Below the actions and below the alert, not above them, and that
+          ordering is load-bearing rather than taste. The screen is
+          photographed from the top of the viewport (ADR-0012, visual/README),
+          so anything inserted higher up pushes what was below it out of frame
+          — and putting a ten-row table above this alert made the failed-Run
+          shot identical to the ordinary one, which is a baseline that has
+          stopped watching the state it was taken for. The numbers are what
+          the player came for and the next Run is what they do about it; the
+          ranking is what they wonder about after both. */}
+      <PassageLeaderboard passageId={run.passageId} discipline={run.discipline} />
 
       <p className="font-code text-xs text-disabled">
         {DISCIPLINES[run.discipline].title} · verified by the server

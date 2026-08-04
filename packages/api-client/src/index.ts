@@ -34,6 +34,9 @@ export type SolveRun = components["schemas"]["SolveRun"];
 export type SolveRunSubmission = components["schemas"]["SolveRunSubmission"];
 export type Verdict = SolveRun["verdict"];
 
+export type Leaderboard = components["schemas"]["Leaderboard"];
+export type LeaderboardEntry = components["schemas"]["LeaderboardEntry"];
+
 export type Profile = components["schemas"]["Profile"];
 export type PersonalBest = components["schemas"]["PersonalBest"];
 export type HistoryEntry = components["schemas"]["HistoryEntry"];

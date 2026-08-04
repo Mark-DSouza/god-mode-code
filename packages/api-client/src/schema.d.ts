@@ -208,6 +208,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/passages/{passageId}/leaderboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Passage's Leaderboard
+         * @description Users ranked by their best Run on this Passage — only their best, so one fast typist replaying it all afternoon holds one row rather than the top ten. Tied WPMs share a position.
+         *
+         *     Unclaimed Users are ranked identically to Claimed ones and appear in the same list (ADR-0007).
+         *
+         *     `entries` is empty until enough distinct Users have attempted the Passage; `participants` and `minimumParticipants` say how far off that is, so the caller can fall back to the Discipline rather than show a ranking of two. `you` carries the requesting User's own row whether or not it is in the published top, and survives the threshold — it is a fact about their own Run rather than a claim about a population.
+         */
+        get: operations["forPassage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -598,6 +622,51 @@ export interface components {
             recentAverageWpm?: number;
             history: components["schemas"]["HistoryEntry"][];
         };
+        /** @description A ranking of Users by their best Run on one Challenge, derived at query time */
+        Leaderboard: {
+            /** Format: uuid */
+            passageId: string;
+            /**
+             * @description One of the three ways to play
+             * @enum {string}
+             */
+            discipline: "QUOTES" | "PROSE" | "CODE";
+            entries: components["schemas"]["LeaderboardEntry"][];
+            /** @description The requesting User's own row, wherever they stand */
+            you?: components["schemas"]["LeaderboardEntry"];
+            /**
+             * Format: int32
+             * @description Distinct Users with a Run on this Challenge
+             * @example 37
+             */
+            participants: number;
+            /**
+             * Format: int32
+             * @description Distinct Users needed before the ranking is shown
+             * @example 5
+             */
+            minimumParticipants: number;
+        };
+        /** @description One User's best Run on one Challenge, and where it ranks */
+        LeaderboardEntry: {
+            /**
+             * Format: int32
+             * @description Standing, with ties sharing a position
+             * @example 2
+             */
+            position: number;
+            user: components["schemas"]["User"];
+            /**
+             * @description WPM of this User's best Run on this Challenge
+             * @example 141
+             */
+            wpm: number;
+            /**
+             * @description Accuracy of that same Run
+             * @example 98.7
+             */
+            accuracy: number;
+        };
         /** @description The backend's own status and that of its dependencies */
         HealthStatus: {
             /**
@@ -935,6 +1004,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Pattern"][];
                 };
+            };
+        };
+    };
+    forPassage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                passageId: string;
+            };
+            cookie?: {
+                gmc_recognition?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ranking, and where the asker stands in it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Leaderboard"];
+                };
+            };
+            /** @description No such Passage */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

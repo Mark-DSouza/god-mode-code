@@ -1,4 +1,4 @@
-import type { Health, User } from "@gmc/api-client";
+import type { Health, Leaderboard, User } from "@gmc/api-client";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 
@@ -34,12 +34,56 @@ export const returningUser: User = {
   claimed: false,
 };
 
+/**
+ * How many distinct Users a Passage needs before its ranking is shown, as the
+ * backend reports it.
+ *
+ * Restated here rather than imported because it is the server's rule and this
+ * is the server's answer — the frontend reads the figure off the payload and
+ * has no opinion about what it should be.
+ */
+const MINIMUM_PARTICIPANTS = 5;
+
+/**
+ * A Passage too few people have typed for a ranking of it to mean anything.
+ *
+ * The default for the same reason `returningUser` is: it is the uninteresting
+ * case. Every test that reaches the result screen fetches a board, and only the
+ * Leaderboard tests care what is on one — so the default is the state that
+ * renders a sentence instead of a table and leaves everybody else's assertions
+ * about WPM readouts unambiguous.
+ */
+export function unrankedLeaderboard(passageId: string): Leaderboard {
+  return {
+    passageId,
+    discipline: "QUOTES",
+    entries: [],
+    participants: 1,
+    minimumParticipants: MINIMUM_PARTICIPANTS,
+  };
+}
+
 export const handlers = [
   http.get("/api/health", () => HttpResponse.json(healthUp)),
   http.get("/api/users/me", () => HttpResponse.json(returningUser)),
+  http.get("/api/passages/:passageId/leaderboard", ({ params }) =>
+    HttpResponse.json(unrankedLeaderboard(String(params.passageId))),
+  ),
 ];
 
 export const server = setupServer(...handlers);
+
+/** A Passage whose ranking is worth showing, with whatever is on it. */
+export function respondWithLeaderboard(board: Leaderboard) {
+  server.use(http.get("/api/passages/:passageId/leaderboard", () => HttpResponse.json(board)));
+}
+
+/** A board the backend will not produce, which must not take the result screen down with it. */
+export function respondLeaderboardUnavailable() {
+  server.use(
+    http.get("/api/passages/:passageId/leaderboard", () => new HttpResponse(null, { status: 500 })),
+  );
+}
 
 /** A backend that answers, but reports a dependency down. */
 export function respondDegraded() {

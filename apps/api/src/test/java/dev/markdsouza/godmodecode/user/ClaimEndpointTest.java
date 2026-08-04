@@ -124,6 +124,40 @@ class ClaimEndpointTest extends JudgedIntegrationTest {
     }
 
     @Test
+    @DisplayName("a browser already Claimed re-signing in with its own credential is told who it already is")
+    void reSigningInWithYourOwnCredentialIsANoOp() {
+        Browser browser = Browser.arrivingAt(http);
+        String subject = "github|already-signed-in";
+        browser.claims(tokenFor(subject), "ALREADY_SIGNED_IN", User.class);
+
+        ResponseEntity<User> again = browser.claims(tokenFor(subject), "IGNORED_AGAIN", User.class);
+
+        assertThat(again.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(again.getBody()).isNotNull();
+        assertThat(again.getBody().handle()).isEqualTo("ALREADY_SIGNED_IN");
+    }
+
+    @Test
+    @DisplayName("a browser already Claimed presenting somebody else's credential is refused, not silently accepted")
+    void aClaimedBrowserCannotBeQuietlyRenamedBySomeoneElsesCredential() {
+        Browser owner = Browser.arrivingAt(http);
+        owner.claims(tokenFor("github|owner-of-this-browser"), "OWNER_OF_THIS_BROWSER", User.class);
+
+        Browser elsewhere = Browser.arrivingAt(http);
+        elsewhere.claims(tokenFor("github|somebody-else-entirely"), "SOMEBODY_ELSE_ENTIRELY", User.class);
+
+        // Somebody else's valid, correctly-signed token — presented against a
+        // browser that is not theirs. The response must not treat this as
+        // "you are already this User".
+        ResponseEntity<User> response =
+                owner.claims(tokenFor("github|somebody-else-entirely"), "IGNORED", User.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(owner.reads("/api/users/me", User.class).getBody().handle())
+                .isEqualTo("OWNER_OF_THIS_BROWSER");
+    }
+
+    @Test
     @DisplayName("signing in to a User that already exists merges the Unclaimed User's Runs in, silently")
     void signingInMergesRuns() {
         Browser registered = Browser.arrivingAt(http);

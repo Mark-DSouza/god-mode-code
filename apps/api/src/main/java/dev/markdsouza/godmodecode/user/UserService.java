@@ -90,6 +90,19 @@ public class UserService {
         record Claimed(User user, Optional<String> newRecognitionKey) implements ClaimResult {}
 
         record HandleTaken() implements ClaimResult {}
+
+        /**
+         * The bearer token proved an identity that is not this browser's own
+         * already-Claimed one.
+         *
+         * Attaching a second credential to an already-Claimed User, or
+         * switching a browser to a different Claimed account, is not
+         * something Claiming does — there is exactly one credential per User
+         * (the database's own {@code users_credential_subject_unique}), and
+         * nothing here decides which of two already-Claimed accounts should
+         * win.
+         */
+        record NotYourCredential() implements ClaimResult {}
     }
 
     /**
@@ -111,11 +124,18 @@ public class UserService {
      */
     @Transactional
     public ClaimResult claim(User source, String credentialSubject, String handle) {
+        Optional<User> target = users.findByCredentialSubject(credentialSubject);
+
         if (source.claimed()) {
-            return new ClaimResult.Claimed(source, Optional.empty());
+            // The only success here is the credential this browser already
+            // holds, presented again — a re-sign-in that changes nothing.
+            // Every other credential is refused rather than silently
+            // accepted, so a stray or forged bearer token cannot quietly
+            // rename which account this browser is recognised as.
+            boolean sameIdentity = target.map(User::id).filter(source.id()::equals).isPresent();
+            return sameIdentity ? new ClaimResult.Claimed(source, Optional.empty()) : new ClaimResult.NotYourCredential();
         }
 
-        Optional<User> target = users.findByCredentialSubject(credentialSubject);
         if (target.isPresent()) {
             User destination = target.get();
             // Reattributed before the source row is deleted: both Run tables'

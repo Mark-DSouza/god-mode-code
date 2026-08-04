@@ -75,8 +75,7 @@ public class UserController {
         // This is the one request on the site that cannot be safely repeated, and
         // browsers repeat requests. Checking first costs a single indexed lookup
         // and removes the whole class of "reload created a second me".
-        Optional<User> alreadySomeone =
-                Optional.ofNullable(recognitionKey).flatMap(users::recognise);
+        Optional<User> alreadySomeone = currentUser(recognitionKey);
         if (alreadySomeone.isPresent()) {
             // No Set-Cookie: the browser already holds the right key, and
             // reissuing one can only lose it.
@@ -114,10 +113,7 @@ public class UserController {
         // A cookie that no longer matches a row is treated exactly like no cookie
         // at all: the User it named is gone, and the caller should create one
         // rather than be told about a database that no longer holds them.
-        return Optional.ofNullable(recognitionKey)
-                .flatMap(users::recognise)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        return currentUser(recognitionKey).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping(path = "/claim", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -155,7 +151,7 @@ public class UserController {
             @CookieValue(name = RecognitionCookie.NAME, required = false) String recognitionKey,
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody ClaimRequest request) {
-        Optional<User> source = Optional.ofNullable(recognitionKey).flatMap(users::recognise);
+        Optional<User> source = currentUser(recognitionKey);
         if (source.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -163,6 +159,11 @@ public class UserController {
         UserService.ClaimResult result = users.claim(source.get(), jwt.getSubject(), request.handle());
         return switch (result) {
             case UserService.ClaimResult.HandleTaken() -> ResponseEntity.status(HttpStatus.CONFLICT).build();
+            // Same status as a taken Handle: both mean "this request cannot
+            // proceed as asked", and this browser is unreachable from the
+            // shipped UI in the first place — signing in is only ever
+            // offered to an Unclaimed User (ADR-0007).
+            case UserService.ClaimResult.NotYourCredential() -> ResponseEntity.status(HttpStatus.CONFLICT).build();
             case UserService.ClaimResult.Claimed(User user, Optional<String> newRecognitionKey) -> {
                 ResponseEntity.BodyBuilder response = ResponseEntity.ok();
                 // Only present for a merge: a first-time claim leaves this
@@ -174,5 +175,10 @@ public class UserController {
                 yield response.body(user);
             }
         };
+    }
+
+    /** The User a possibly-absent cookie value names, if it names one still on file. */
+    private Optional<User> currentUser(String recognitionKey) {
+        return Optional.ofNullable(recognitionKey).flatMap(users::recognise);
     }
 }

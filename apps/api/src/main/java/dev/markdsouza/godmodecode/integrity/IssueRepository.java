@@ -63,6 +63,23 @@ public class IssueRepository {
     }
 
     /**
+     * Reattributes every Issue a Run still points to, for Claiming's merge
+     * (ADR-0007).
+     *
+     * Consumed only. A live or superseded Issue has no Run's {@code issue_id}
+     * referencing it, and deleting the User it belongs to takes it with them
+     * (cascade) — moving it here first would risk landing on the target's own
+     * live Issue and colliding with {@code issues_one_live_per_user}. A consumed
+     * one has no such slot to collide with, and it cannot be left behind: a Run
+     * being reattributed onto the target still requires the Issue its {@code
+     * issue_id} names to exist, and deleting the source User cascades every
+     * Issue still theirs.
+     */
+    public void reattributeConsumedIssues(UUID from, UUID to) {
+        jdbc.update("UPDATE issues SET user_id = ? WHERE user_id = ? AND consumed_at IS NOT NULL", to, from);
+    }
+
+    /**
      * Records that this Passage went to this User, now.
      *
      * Both timestamps come from the database rather than the application: the

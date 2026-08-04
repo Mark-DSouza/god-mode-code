@@ -83,6 +83,13 @@ springdoc:
 gmc:
   version: ${GMC_VERSION:0.0.1-SNAPSHOT}
 
+  auth:
+    # The Cognito user pool's issuer, e.g.
+    # https://cognito-idp.<region>.amazonaws.com/<pool-id>. Blank until a pool
+    # is provisioned, which SecurityConfig treats as "sign-in unavailable"
+    # rather than failing to start (ADR-0011).
+    issuer-uri: ${GMC_COGNITO_ISSUER_URI:}
+
   judge:
     # The judge's address on the private link. In production this is a fixed
     # private address that Terraform pins and the deploy script reads from

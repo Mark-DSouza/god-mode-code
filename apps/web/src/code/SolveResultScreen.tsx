@@ -1,4 +1,5 @@
 import type { SolveRun } from "@gmc/api-client";
+import { SignInPrompt } from "../auth/SignInPrompt.tsx";
 import { Badge, Button, Card, SolveResultPanel } from "../design-system/index.ts";
 import { PersonalBestCallout } from "../profile/PersonalBestCallout.tsx";
 
@@ -16,12 +17,14 @@ export function SolveResultScreen({
   run,
   onSolveAgain,
   onPickAnother,
+  onSignIn,
   pending,
   failed,
 }: {
   run: SolveRun;
   onSolveAgain: () => void;
   onPickAnother: () => void;
+  onSignIn: () => void;
   /** Whether the next Challenge is on its way, so "Try again" is not a dead button. */
   pending: boolean;
   failed: boolean;
@@ -73,6 +76,10 @@ export function SolveResultScreen({
       <p className="font-code text-xs text-disabled">
         Code · judged by executing your code against the tests
       </p>
+
+      {/* Last, not first: the invitation to sign in follows a Run worth
+          keeping rather than fighting the result for attention (ADR-0011). */}
+      <SignInPrompt onSignIn={onSignIn} />
     </section>
   );
 }

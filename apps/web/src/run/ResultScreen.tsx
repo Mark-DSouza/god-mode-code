@@ -1,4 +1,5 @@
 import type { TypingRun } from "@gmc/api-client";
+import { SignInPrompt } from "../auth/SignInPrompt.tsx";
 import { Badge, Button, Card, ResultPanel } from "../design-system/index.ts";
 import { PassageLeaderboard } from "../leaderboard/PassageLeaderboard.tsx";
 import { PersonalBestCallout } from "../profile/PersonalBestCallout.tsx";
@@ -16,12 +17,14 @@ export function ResultScreen({
   run,
   onRunAgain,
   onChangeDiscipline,
+  onSignIn,
   pending,
   failed,
 }: {
   run: TypingRun;
   onRunAgain: () => void;
   onChangeDiscipline: () => void;
+  onSignIn: () => void;
   /** Whether the next Challenge is on its way, so "Run again" is not a dead button. */
   pending: boolean;
   failed: boolean;
@@ -89,6 +92,10 @@ export function ResultScreen({
       <p className="font-code text-xs text-disabled">
         {DISCIPLINES[run.discipline].title} · verified by the server
       </p>
+
+      {/* Last, not first: the invitation to sign in follows a Run worth
+          keeping rather than fighting the result for attention (ADR-0011). */}
+      <SignInPrompt onSignIn={onSignIn} />
     </section>
   );
 }

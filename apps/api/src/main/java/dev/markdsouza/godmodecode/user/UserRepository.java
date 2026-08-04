@@ -3,6 +3,7 @@ package dev.markdsouza.godmodecode.user;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -65,5 +66,62 @@ class UserRepository {
                         recognitionKeyHash)
                 .stream()
                 .findFirst();
+    }
+
+    /** The User already Claimed with this credential, if signing in has been done before. */
+    Optional<User> findByCredentialSubject(String credentialSubject) {
+        return jdbc
+                .query(
+                        "SELECT id, handle, credential_subject FROM users WHERE credential_subject = ?",
+                        AS_USER,
+                        credentialSubject)
+                .stream()
+                .findFirst();
+    }
+
+    /**
+     * Attaches credentials to an Unclaimed User and gives it the Handle chosen on
+     * Claiming, retiring the generated one.
+     *
+     * {@code WHERE credential_subject IS NULL} is the same belt the caller's own
+     * check is the braces for: two Claiming requests for the same browser racing
+     * each other must not both succeed, and this is what a second one finds
+     * nothing to update.
+     *
+     * @return the Claimed User, or empty if the chosen Handle was already taken.
+     */
+    Optional<User> claim(UUID userId, String credentialSubject, String handle) {
+        try {
+            List<User> claimed = jdbc.query(
+                    """
+                    UPDATE users
+                    SET credential_subject = ?, handle = ?
+                    WHERE id = ? AND credential_subject IS NULL
+                    RETURNING id, handle, credential_subject
+                    """,
+                    AS_USER,
+                    credentialSubject,
+                    handle,
+                    userId);
+            return claimed.stream().findFirst();
+        } catch (DuplicateKeyException alreadyTaken) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Rotates the Recognition Key a User's row is found by.
+     *
+     * Used only when merging: the browser's old key named the row that is about
+     * to be deleted, so the target it is being recognised as from now on needs a
+     * key of its own for this browser to hold.
+     */
+    void updateRecognitionKeyHash(UUID userId, String recognitionKeyHash) {
+        jdbc.update("UPDATE users SET recognition_key_hash = ? WHERE id = ?", recognitionKeyHash, userId);
+    }
+
+    /** Removes a User whose Runs have already been reattributed elsewhere. */
+    void delete(UUID userId) {
+        jdbc.update("DELETE FROM users WHERE id = ?", userId);
     }
 }

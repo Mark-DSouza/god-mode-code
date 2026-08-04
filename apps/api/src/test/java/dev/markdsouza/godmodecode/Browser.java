@@ -10,6 +10,7 @@ import dev.markdsouza.godmodecode.typing.ChallengeRequest;
 import dev.markdsouza.godmodecode.typing.Discipline;
 import dev.markdsouza.godmodecode.typing.TypingRun;
 import dev.markdsouza.godmodecode.typing.TypingRunSubmission;
+import dev.markdsouza.godmodecode.user.ClaimRequest;
 import dev.markdsouza.godmodecode.user.RecognitionCookie;
 import dev.markdsouza.godmodecode.user.User;
 import java.time.Duration;
@@ -52,7 +53,10 @@ public final class Browser {
     private static final Duration HELD = Duration.ofMinutes(2);
 
     private final TestRestTemplate http;
-    private final String recognitionKey;
+    // Not final: a real browser overwrites its cookie the moment a response
+    // carries a new one, and Claiming's merge does exactly that (ADR-0007) — a
+    // Browser that could not follow it would be testing a browser that forgets.
+    private String recognitionKey;
     private final User user;
 
     private Browser(TestRestTemplate http, String recognitionKey, User user) {
@@ -122,6 +126,26 @@ public final class Browser {
         SolveRun run = submits(wrote(challenge, source, took), SolveRun.class).getBody();
         assertThat(run).as("the Solve Run was not recorded").isNotNull();
         return run;
+    }
+
+    /**
+     * Claims this browser's User with the given bearer token and chosen Handle,
+     * following whatever Recognition Key the response hands back — the same way
+     * a real browser would overwrite its cookie on {@code Set-Cookie}.
+     */
+    public <T> ResponseEntity<T> claims(String bearerToken, String handle, Class<T> as) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.put(HttpHeaders.COOKIE, List.of(RecognitionCookie.NAME + "=" + recognitionKey));
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(bearerToken);
+        ResponseEntity<T> response = http.exchange(
+                "/api/users/claim", HttpMethod.POST, new HttpEntity<>(new ClaimRequest(handle), headers), as);
+
+        String setCookie = response.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
+        if (setCookie != null) {
+            recognitionKey = setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));
+        }
+        return response;
     }
 
     /** Reads a path as whoever this browser is, carrying its Recognition Key. */

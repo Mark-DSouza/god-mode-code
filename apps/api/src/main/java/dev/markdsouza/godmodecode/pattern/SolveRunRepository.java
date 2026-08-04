@@ -67,6 +67,17 @@ class SolveRunRepository {
     }
 
     /**
+     * Reattributes every Solve Run from one User to another, for Claiming's
+     * merge (ADR-0007).
+     *
+     * A plain {@code UPDATE}: {@code solve_runs_one_per_issue} is scoped to the
+     * Issue, not the User, so moving rows between Users cannot collide with it.
+     */
+    void reattributeUser(UUID from, UUID to) {
+        jdbc.update("UPDATE solve_runs SET user_id = ? WHERE user_id = ?", to, from);
+    }
+
+    /**
      * The standing Personal Best in the Code Discipline, before this request
      * adds to it.
      *

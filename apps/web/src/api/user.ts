@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 const api = createApiClient();
 
-const currentUserQueryKey = ["current-user"] as const;
+export const currentUserQueryKey = ["current-user"] as const;
 
 /** One holder of the lock at a time, across every tab of this browser. */
 const RECOGNITION_LOCK = "gmc-recognise-or-create-user";

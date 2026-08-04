@@ -10,6 +10,9 @@ import { useState } from "react";
 import { useRequestSolveChallenge } from "../api/patterns.ts";
 import { useHealth } from "../api/health.ts";
 import { useRequestChallenge } from "../api/typing.ts";
+import { ClaimingScreen } from "../auth/ClaimingScreen.tsx";
+import { pendingCallback } from "../auth/cognito.ts";
+import { SignInScreen } from "../auth/SignInScreen.tsx";
 import { PatternBrowser } from "../code/PatternBrowser.tsx";
 import { SolveResultScreen } from "../code/SolveResultScreen.tsx";
 import { SolveScreen } from "../code/SolveScreen.tsx";
@@ -41,14 +44,28 @@ type Screen =
   | { name: "solved"; run: SolveRun }
   // The one screen that is about the player rather than about a Challenge, and
   // the one that would be worth a URL if any of them were.
-  | { name: "profile" };
+  | { name: "profile" }
+  // Two buttons and nothing else (ADR-0011). Reached only from the
+  // contextual prompt after a Run, never from a persistent header nag.
+  | { name: "signing-in" }
+  // Where the browser lands back from the Hosted UI redirect, carrying an
+  // authorization code this app never had a Screen open for — the previous
+  // Screen did not survive leaving the page, so there is nothing to return
+  // to but here.
+  | { name: "claiming" };
 
 /**
  * Choose a Discipline, transcribe the Passage or solve the Pattern, and see what
  * the server made of it.
  */
 export function App() {
-  const [screen, setScreen] = useState<Screen>({ name: "choosing" });
+  // A pending OAuth callback wins over whatever Screen a fresh load would
+  // otherwise start on: the browser just came back from the Hosted UI
+  // specifically to finish Claiming, and showing the tiles first would strand
+  // the authorization code this render is the only chance to consume.
+  const [screen, setScreen] = useState<Screen>(() =>
+    pendingCallback() ? { name: "claiming" } : { name: "choosing" },
+  );
   // Remembered so "Run again" means "another one of these" rather than sending
   // the player back to the tiles to say the same thing twice.
   const [lastPlayed, setLastPlayed] = useState<Discipline>("QUOTES");
@@ -113,6 +130,7 @@ export function App() {
               run={screen.run}
               onRunAgain={() => start(lastPlayed)}
               onChangeDiscipline={() => setScreen({ name: "choosing" })}
+              onSignIn={() => setScreen({ name: "signing-in" })}
               pending={request.isPending}
               failed={request.isError}
             />
@@ -155,9 +173,18 @@ export function App() {
               run={screen.run}
               onSolveAgain={() => lastSolved && solve(lastSolved)}
               onPickAnother={() => setScreen({ name: "browsing" })}
+              onSignIn={() => setScreen({ name: "signing-in" })}
               pending={requestPattern.isPending}
               failed={requestPattern.isError}
             />
+          )}
+
+          {screen.name === "signing-in" && (
+            <SignInScreen onCancel={() => setScreen({ name: "choosing" })} />
+          )}
+
+          {screen.name === "claiming" && (
+            <ClaimingScreen onDone={() => setScreen({ name: "choosing" })} />
           )}
         </main>
       </div>

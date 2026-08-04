@@ -26,6 +26,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim the User this browser is
+         * @description Attaches the identity provider's credentials to the User this browser is recognised as, choosing the Handle given in the request body (ADR-0011).
+         *
+         *     If those credentials already belong to a different User, this browser's Runs are merged into that User instead — silently and always, because Runs are append-only facts with no conflict to resolve (ADR-0007) — and the response carries a fresh cookie recognising this browser as the account it was merged into.
+         */
+        post: operations["claim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/typing-runs": {
         parameters: {
             query?: never;
@@ -274,6 +296,14 @@ export interface components {
              * @example false
              */
             claimed: boolean;
+        };
+        /** @description What the player chooses on Claiming */
+        ClaimRequest: {
+            /**
+             * @description The Handle to Claim with, retiring the generated one. Ignored when signing in merges into an account that already has one
+             * @example PERCOLATING_FERRET
+             */
+            handle: string;
         };
         /** @description The raw data a finished Run is verified from */
         TypingRunSubmission: {
@@ -730,6 +760,53 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["User"];
                 };
+            };
+        };
+    };
+    claim: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gmc_recognition?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Claimed, or merged into an existing account */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description No valid bearer token was presented */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This browser is nobody yet — there is no User here to Claim */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The chosen Handle is already taken */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

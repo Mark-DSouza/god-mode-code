@@ -173,7 +173,11 @@ describe("the invitation to sign in on the result screen", () => {
   it("does not appear for a User who has already Claimed", async () => {
     server.use(
       http.get("/api/users/me", () =>
-        HttpResponse.json<User>({ id: returningUser.id, handle: returningUser.handle, claimed: true }),
+        HttpResponse.json<User>({
+          id: returningUser.id,
+          handle: returningUser.handle,
+          claimed: true,
+        }),
       ),
     );
 

@@ -41,7 +41,7 @@ public class RecognitionCookie {
 
     private final boolean secure;
 
-    RecognitionCookie(@Value("${gmc.recognition.cookie-secure:true}") boolean secure) {
+    RecognitionCookie(@Value("${gmc.cookie-secure:true}") boolean secure) {
         this.secure = secure;
     }
 

@@ -117,14 +117,13 @@ gmc:
     # as good news.
     stale-after: 60s
 
-  recognition:
-    # The cookie carrying the Recognition Key is Secure by default: the site is
-    # only ever reached over HTTPS through Cloudflare (ADR-0002), and a cookie
-    # that recognises a User must not travel in clear. Browsers treat
-    # http://localhost as a secure context, so this stays on for local
-    # development and for the containerised stack too — the override exists for
-    # a plain-HTTP deployment, which nothing here is.
-    cookie-secure: ${GMC_RECOGNITION_COOKIE_SECURE:true}
+  # Every cookie this backend sets — the Recognition Key and the CSRF token —
+  # is Secure by default: the site is only ever reached over HTTPS through
+  # Cloudflare (ADR-0002), and neither should travel in clear. Browsers treat
+  # http://localhost as a secure context, so this stays on for local
+  # development and for the containerised stack too — the override exists for
+  # a plain-HTTP deployment, which nothing here is.
+  cookie-secure: ${GMC_COOKIE_SECURE:true}
 
 logging:
   # Empty by default, which leaves the human-readable console format in place

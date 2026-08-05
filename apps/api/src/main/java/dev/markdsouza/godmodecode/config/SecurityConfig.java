@@ -1,35 +1,64 @@
 package dev.markdsouza.godmodecode.config;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Everything on the site is open except the one request that attaches
- * credentials to a User (ADR-0011). Nothing else needs a bearer token: Runs,
- * Leaderboards and the Profile are all read or written against whichever User
- * the Recognition Key cookie names, Claimed or not (ADR-0007).
+ * Every state-changing request needs a CSRF token; only the one that attaches
+ * credentials to a User also needs a bearer token (ADR-0011). Everything else
+ * is read or written against whichever User the Recognition Key cookie names,
+ * Claimed or not (ADR-0007).
  */
 @Configuration
 class SecurityConfig {
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, @Value("${gmc.cookie-secure:true}") boolean cookieSecure)
+            throws Exception {
+        CookieCsrfTokenRepository csrfTokens = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        // JavaScript has to read this one — it is the value the SPA echoes back
+        // in a header — so HttpOnly is off deliberately, unlike the Recognition
+        // cookie next to it. Otherwise the same posture: Secure whenever this
+        // deployment is (which is always, outside local development), and Lax
+        // for the same reason the Recognition cookie is: there is exactly one
+        // origin, so nothing legitimate sends this cross-site.
+        csrfTokens.setCookieCustomizer(cookie -> cookie.secure(cookieSecure).sameSite("Lax").path("/"));
+
         http
-                // No server-side session and no form anywhere on the site
-                // (ADR-0002) — CSRF tokens defend a session cookie a browser
-                // sends automatically, and there is not one. The Recognition
-                // cookie's SameSite=Lax already stops it travelling on a
-                // cross-site POST.
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(csrfTokens)
+                        // No server-rendered form anywhere on this site
+                        // (ADR-0002), so the token is never expected back as a
+                        // request parameter — only as the header the SPA sets
+                        // from the cookie above. The plain handler is what
+                        // makes that comparison a straight string match; the
+                        // default handler expects a BREACH-masked value, which
+                        // exists to protect a token reflected into HTML the
+                        // page renders, and nothing here ever does that.
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+                // Spring Security loads the CSRF token lazily — nothing here
+                // reads the request attribute the way a server-rendered form
+                // would, so without forcing it, the cookie above is never
+                // written and the SPA has nothing to read back.
+                .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/users/claim")
@@ -59,5 +88,22 @@ class SecurityConfig {
             };
         }
         return JwtDecoders.fromIssuerLocation(issuerUri);
+    }
+
+    /** Forces the deferred CSRF token to render on every request, which is what actually writes its cookie. */
+    private static final class CsrfCookieFilter extends OncePerRequestFilter {
+        @Override
+        protected void doFilterInternal(
+                HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+                throws ServletException, IOException {
+            CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+            if (csrfToken != null) {
+                // The read is the side effect: a DeferredCsrfToken only asks
+                // the repository to generate-or-load and save the token the
+                // first time something calls getToken().
+                csrfToken.getToken();
+            }
+            filterChain.doFilter(request, response);
+        }
     }
 }

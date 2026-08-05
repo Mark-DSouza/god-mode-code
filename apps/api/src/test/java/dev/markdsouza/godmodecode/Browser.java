@@ -68,13 +68,20 @@ public final class Browser {
     /** Arrives, becomes an Unclaimed User, and holds on to the cookie it was given. */
     public static Browser arrivingAt(TestRestTemplate http) {
         ResponseEntity<User> created = http.postForEntity("/api/users", null, User.class);
-        String setCookie = created.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
-        assertThat(setCookie).as("arriving did not set a Recognition Key").isNotNull();
+        // Not getFirst(): the CSRF filter reissues its own token cookie on
+        // every response, so this one is picked out by name rather than
+        // position — the same reasoning as the merge branch of claims().
+        List<String> setCookies = created.getHeaders().get(HttpHeaders.SET_COOKIE);
+        String recognitionKey = setCookies == null
+                ? null
+                : setCookies.stream()
+                        .filter(setCookie -> setCookie.startsWith(RecognitionCookie.NAME + "="))
+                        .findFirst()
+                        .map(setCookie -> setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';')))
+                        .orElse(null);
+        assertThat(recognitionKey).as("arriving did not set a Recognition Key").isNotNull();
 
-        return new Browser(
-                http,
-                setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';')),
-                created.getBody());
+        return new Browser(http, recognitionKey, created.getBody());
     }
 
     public User user() {
@@ -141,9 +148,18 @@ public final class Browser {
         ResponseEntity<T> response = http.exchange(
                 "/api/users/claim", HttpMethod.POST, new HttpEntity<>(new ClaimRequest(handle), headers), as);
 
-        String setCookie = response.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
-        if (setCookie != null) {
-            recognitionKey = setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));
+        // getFirst() is not safe here: this response can carry more than one
+        // Set-Cookie, since the CSRF filter reissues its own token cookie on
+        // every response regardless of what else the request did. Only a
+        // merge sets this one, and it is picked out by name rather than
+        // position for exactly that reason.
+        List<String> setCookies = response.getHeaders().get(HttpHeaders.SET_COOKIE);
+        if (setCookies != null) {
+            setCookies.stream()
+                    .filter(setCookie -> setCookie.startsWith(RecognitionCookie.NAME + "="))
+                    .findFirst()
+                    .ifPresent(setCookie -> recognitionKey =
+                            setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';')));
         }
         return response;
     }

@@ -158,7 +158,13 @@ export interface paths {
          *     Asking again abandons the Challenge the User was holding, so a player can skip a Passage they do not fancy, and nobody can hold several at once and submit whichever went best (ADR-0003).
          */
         post: operations["request_1"];
-        delete?: never;
+        /**
+         * Give up the Challenge you are holding
+         * @description Voids whatever Challenge this User is holding, without recording a Run against it. Leaving mid-Run (the Escape key) calls this so the Issue stops being live immediately, rather than sitting live until the next Challenge is requested.
+         *
+         *     Answers 204 whether or not anything was actually live to give up, so a player who has already finished, or never started, is not told anything went wrong.
+         */
+        delete: operations["abandon"];
         options?: never;
         head?: never;
         patch?: never;
@@ -278,6 +284,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description What creating an Unclaimed User asks the widget to prove, if this deployment has one */
+        UserCreateRequest: {
+            /** @description The Cloudflare Turnstile widget's token, absent where no widget is configured */
+            turnstileToken?: string;
+        };
         /** @description Anyone who has played, whether or not they have Claimed */
         User: {
             /**
@@ -741,7 +752,11 @@ export interface operations {
                 gmc_recognition?: string;
             };
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UserCreateRequest"];
+            };
+        };
         responses: {
             /** @description This browser was already someone, and still is */
             200: {
@@ -760,6 +775,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["User"];
                 };
+            };
+            /** @description The challenge widget did not vouch for this browser */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many Unclaimed Users have been created from this address recently */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -849,6 +878,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Rejection"];
                 };
+            };
+            /** @description Too many Runs have been submitted by this User or from this address recently */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -994,6 +1030,40 @@ export interface operations {
             };
             /** @description That Discipline has no Passages. Code never will (ADR-0004) */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many Challenges have been asked for by this User or from this address recently */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    abandon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                gmc_recognition?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nothing is live for this User anymore */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This browser is nobody yet */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

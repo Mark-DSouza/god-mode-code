@@ -1,6 +1,6 @@
 import type { Challenge, TypingRun } from "@gmc/api-client";
-import { useEffect, useRef, useState } from "react";
-import { RunRefused, useSubmitTypingRun } from "../api/typing.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { RunRefused, useAbandonChallenge, useSubmitTypingRun } from "../api/typing.ts";
 import {
   Button,
   Card,
@@ -42,6 +42,7 @@ export function RunScreen({
 }) {
   const passage = challenge.passage;
   const submit = useSubmitTypingRun();
+  const abandon = useAbandonChallenge();
   const input = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
 
@@ -50,6 +51,31 @@ export function RunScreen({
     onComplete: (completed) =>
       submit.mutate({ issueId: challenge.issueId, ...completed }, { onSuccess: onRecorded }),
   });
+
+  // Voids the Issue on the server before leaving, rather than letting it sit
+  // live until the next Challenge is requested — nothing is recorded either
+  // way, but the slot is free immediately. Fire-and-forget: the player has
+  // already left by the time any response could arrive, and there is nothing
+  // useful to do with a failure here that abandoning again later would not
+  // already cover.
+  const leave = useCallback(() => {
+    abandon.mutate();
+    onLeave();
+  }, [abandon, onLeave]);
+
+  // The Escape key is the keyboard equivalent of the "Abandon this Challenge"
+  // button below, and must do exactly what it does: void the Issue, record
+  // nothing. Not wired once the Run is complete — by then a Run either was or
+  // was not recorded, and Escape has nothing left to abandon.
+  useEffect(() => {
+    if (run.phase === "complete") return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      leave();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [run.phase, leave]);
 
   // ADR-0003 asks the client to notice expiry *before* the player starts
   // typing: refusing a submission after four minutes of work is a bug report,
@@ -137,7 +163,7 @@ export function RunScreen({
               accent="white"
             />
           </div>
-          <IconButton label="Abandon this Challenge" variant="outline" onClick={onLeave}>
+          <IconButton label="Abandon this Challenge" variant="outline" onClick={leave}>
             <span aria-hidden="true">✕</span>
           </IconButton>
         </div>

@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.markdsouza.godmodecode.AbstractIntegrationTest;
 import dev.markdsouza.godmodecode.Browser;
+import dev.markdsouza.godmodecode.integrity.Rejection;
+import dev.markdsouza.godmodecode.integrity.RejectionReason;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -14,6 +16,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -157,6 +161,67 @@ class ChallengeEndpointTest extends AbstractIntegrationTest {
         // against one — so there is nothing to record this against.
         ResponseEntity<String> response = http.postForEntity(
                 "/api/challenges", new ChallengeRequest(Discipline.QUOTES), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("leaving mid-Run voids the Challenge immediately, without asking for another")
+    void abandoningVoidsTheLiveIssue() {
+        Browser browser = Browser.arrivingAt(http);
+        Challenge challenge = browser.isHanded(Discipline.QUOTES);
+
+        assertThat(browser.abandonsTheChallenge().getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        // Voided on the spot — not left live until the next Challenge is asked
+        // for, which is what the Escape key needs (ADR-0003's expiry-must-not-
+        // punish-honest-players concern has a mirror image: a voided Issue must
+        // not still be answerable).
+        assertThat(jdbc.queryForObject(
+                        "SELECT superseded_at IS NOT NULL AND consumed_at IS NULL FROM issues WHERE id = ?",
+                        Boolean.class,
+                        challenge.issueId()))
+                .isTrue();
+        Integer live = jdbc.queryForObject(
+                """
+                SELECT count(*) FROM issues
+                WHERE user_id = ? AND consumed_at IS NULL AND superseded_at IS NULL
+                """,
+                Integer.class,
+                browser.user().id());
+        assertThat(live).isZero();
+    }
+
+    @Test
+    @DisplayName("a voided Challenge cannot be answered")
+    void aVoidedChallengeIsRefused() {
+        Browser browser = Browser.arrivingAt(http);
+        Challenge challenge = browser.isHanded(Discipline.QUOTES);
+        Browser.rewind(jdbc, challenge, Duration.ofMinutes(1));
+
+        browser.abandonsTheChallenge();
+
+        ResponseEntity<Rejection> response =
+                browser.submits(Browser.perfectRun(challenge, Duration.ofSeconds(30)), Rejection.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(response.getBody().reason()).isEqualTo(RejectionReason.ISSUE_SUPERSEDED);
+    }
+
+    @Test
+    @DisplayName("abandoning with nothing live is a quiet no-op")
+    void abandoningWithNothingLiveIsAQuietNoOp() {
+        Browser browser = Browser.arrivingAt(http);
+
+        assertThat(browser.abandonsTheChallenge().getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        // Idempotent: a second Escape press, a double key event, must not error.
+        assertThat(browser.abandonsTheChallenge().getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
+
+    @Test
+    @DisplayName("a browser that is nobody yet cannot abandon a Challenge")
+    void aBrowserThatIsNobodyCannotAbandonAChallenge() {
+        ResponseEntity<String> response =
+                http.exchange("/api/challenges", HttpMethod.DELETE, HttpEntity.EMPTY, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }

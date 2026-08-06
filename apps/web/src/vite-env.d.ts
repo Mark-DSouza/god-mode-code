@@ -20,6 +20,12 @@ interface ImportMetaEnv {
    * regression suite. Never set for a build anyone visits (ADR-0012).
    */
   readonly VITE_RAIN_SEED?: string;
+  /**
+   * Cloudflare Turnstile's site key, guarding Unclaimed User creation
+   * (ADR-0007). Absent in development and CI, where no site is provisioned —
+   * `api/turnstile.ts` treats that as "no widget here" rather than an error.
+   */
+  readonly VITE_TURNSTILE_SITE_KEY?: string;
 }
 
 interface ImportMeta {

@@ -125,6 +125,30 @@ gmc:
   # a plain-HTTP deployment, which nothing here is.
   cookie-secure: ${GMC_COOKIE_SECURE:true}
 
+  # Enforced here rather than at Cloudflare, whose free tier allows only one
+  # rule (ADR-0007). User creation is generous but keyed by source address
+  # alone, since there is no User yet to key it by; Challenges and Runs are
+  # keyed by both, so neither a shared address nor a script minting fresh
+  # Users routes around the other.
+  rate-limits:
+    user-creation:
+      limit: ${GMC_RATE_LIMIT_USER_CREATION:5}
+      window: 1h
+    challenge-issuing:
+      limit: ${GMC_RATE_LIMIT_CHALLENGE_ISSUING:30}
+      window: 1m
+    run-submission:
+      limit: ${GMC_RATE_LIMIT_RUN_SUBMISSION:30}
+      window: 1m
+
+  turnstile:
+    # Cloudflare Turnstile's secret key, checked against a token the frontend
+    # widget collects before Unclaimed User creation. Blank until a site is
+    # provisioned, which UserService treats as "no challenge widget in this
+    # environment" rather than failing to start — the same posture
+    # SecurityConfig takes toward gmc.auth.issuer-uri.
+    secret-key: ${GMC_TURNSTILE_SECRET_KEY:}
+
 logging:
   # Empty by default, which leaves the human-readable console format in place
   # for local development. Production sets GMC_LOG_FORMAT=ecs, and from then on

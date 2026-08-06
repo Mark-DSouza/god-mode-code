@@ -13,11 +13,11 @@
     "name" : "Users",
     "description" : "Anyone who has played, Claimed or otherwise"
   }, {
-    "name" : "Leaderboards",
-    "description" : "Rankings by best Run, per Challenge"
-  }, {
     "name" : "Challenges",
     "description" : "Being handed something to type"
+  }, {
+    "name" : "Leaderboards",
+    "description" : "Rankings by best Run, per Challenge"
   }, {
     "name" : "Solve Runs",
     "description" : "Runs against a Pattern, judged by execution"
@@ -49,6 +49,15 @@
             "type" : "string"
           }
         } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UserCreateRequest"
+              }
+            }
+          }
+        },
         "responses" : {
           "201" : {
             "description" : "The Unclaimed User that was created",
@@ -69,6 +78,12 @@
                 }
               }
             }
+          },
+          "429" : {
+            "description" : "Too many Unclaimed Users have been created from this address recently"
+          },
+          "403" : {
+            "description" : "The challenge widget did not vouch for this browser"
           }
         }
       }
@@ -170,6 +185,9 @@
                 }
               }
             }
+          },
+          "429" : {
+            "description" : "Too many Runs have been submitted by this User or from this address recently"
           }
         }
       }
@@ -339,6 +357,31 @@
           },
           "404" : {
             "description" : "That Discipline has no Passages. Code never will (ADR-0004)"
+          },
+          "429" : {
+            "description" : "Too many Challenges have been asked for by this User or from this address recently"
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "Challenges" ],
+        "summary" : "Give up the Challenge you are holding",
+        "description" : "Voids whatever Challenge this User is holding, without recording a Run against it. Leaving mid-Run (the Escape key) calls this so the Issue stops being live immediately, rather than sitting live until the next Challenge is requested.\n\nAnswers 204 whether or not anything was actually live to give up, so a player who has already finished, or never started, is not told anything went wrong.\n",
+        "operationId" : "abandon",
+        "parameters" : [ {
+          "name" : "gmc_recognition",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Nothing is live for this User anymore"
+          },
+          "401" : {
+            "description" : "This browser is nobody yet"
           }
         }
       }
@@ -521,6 +564,16 @@
   },
   "components" : {
     "schemas" : {
+      "UserCreateRequest" : {
+        "type" : "object",
+        "description" : "What creating an Unclaimed User asks the widget to prove, if this deployment has one",
+        "properties" : {
+          "turnstileToken" : {
+            "type" : "string",
+            "description" : "The Cloudflare Turnstile widget's token, absent where no widget is configured"
+          }
+        }
+      },
       "User" : {
         "type" : "object",
         "description" : "Anyone who has played, whether or not they have Claimed",

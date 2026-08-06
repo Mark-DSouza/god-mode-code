@@ -1,5 +1,7 @@
 package dev.markdsouza.godmodecode.typing;
 
+import dev.markdsouza.godmodecode.ratelimit.ClientAddress;
+import dev.markdsouza.godmodecode.ratelimit.RateLimits;
 import dev.markdsouza.godmodecode.user.RecognitionCookie;
 import dev.markdsouza.godmodecode.user.User;
 import dev.markdsouza.godmodecode.user.UserService;
@@ -9,12 +11,14 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,10 +40,12 @@ public class ChallengeController {
 
     private final ChallengeService challenges;
     private final UserService users;
+    private final RateLimits rateLimits;
 
-    ChallengeController(ChallengeService challenges, UserService users) {
+    ChallengeController(ChallengeService challenges, UserService users, RateLimits rateLimits) {
         this.challenges = challenges;
         this.users = users;
+        this.rateLimits = rateLimits;
     }
 
     @PostMapping(
@@ -69,11 +75,16 @@ public class ChallengeController {
         @ApiResponse(
                 responseCode = "404",
                 description = "That Discipline has no Passages. Code never will (ADR-0004)",
+                content = @Content),
+        @ApiResponse(
+                responseCode = "429",
+                description = "Too many Challenges have been asked for by this User or from this address recently",
                 content = @Content)
     })
     public ResponseEntity<Challenge> request(
             @CookieValue(name = RecognitionCookie.NAME, required = false) String recognitionKey,
-            @Valid @RequestBody ChallengeRequest request) {
+            @Valid @RequestBody ChallengeRequest request,
+            HttpServletRequest httpRequest) {
 
         Optional<User> user = Optional.ofNullable(recognitionKey).flatMap(users::recognise);
         if (user.isEmpty()) {
@@ -84,9 +95,42 @@ public class ChallengeController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
+        if (!rateLimits.allowChallengeIssuing(user.get().id(), ClientAddress.of(httpRequest))) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).build();
+        }
+
         return challenges
                 .issueTo(user.get().id(), request.discipline())
                 .map(challenge -> ResponseEntity.status(HttpStatus.CREATED).body(challenge))
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping
+    @Operation(
+            summary = "Give up the Challenge you are holding",
+            description = """
+                    Voids whatever Challenge this User is holding, without recording a Run against \
+                    it. Leaving mid-Run (the Escape key) calls this so the Issue stops being live \
+                    immediately, rather than sitting live until the next Challenge is requested.
+
+                    Answers 204 whether or not anything was actually live to give up, so a player \
+                    who has already finished, or never started, is not told anything went wrong.
+                    """)
+    @ApiResponses({
+        @ApiResponse(responseCode = "204", description = "Nothing is live for this User anymore", content = @Content),
+        @ApiResponse(
+                responseCode = "401",
+                description = "This browser is nobody yet",
+                content = @Content)
+    })
+    public ResponseEntity<Void> abandon(
+            @CookieValue(name = RecognitionCookie.NAME, required = false) String recognitionKey) {
+        Optional<User> user = Optional.ofNullable(recognitionKey).flatMap(users::recognise);
+        if (user.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        challenges.abandon(user.get().id());
+        return ResponseEntity.noContent().build();
     }
 }

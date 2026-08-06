@@ -447,6 +447,69 @@ describe("a Typing Run", () => {
     expect(within(result).queryByRole("status")).not.toBeInTheDocument();
   });
 
+  it("intercepts an already-expired Challenge before the player can start typing", async () => {
+    const user = typist();
+    server.use(
+      http.post("/api/challenges", () =>
+        HttpResponse.json<Challenge>(
+          {
+            issueId: ISSUE_ID,
+            passage: {
+              id: PASSAGE_ID,
+              discipline: "QUOTES",
+              text: PASSAGE,
+              attribution: "Somebody, Something, 1900",
+              characterCount: PASSAGE.length,
+            },
+            // Already past by the time the response arrives — ADR-0003 wants
+            // this caught before typing begins, not refused after the fact.
+            expiresAt: new Date(Date.now() - 1_000).toISOString(),
+          },
+          { status: 201 },
+        ),
+      ),
+    );
+
+    await startARun(user);
+    // The expiry timer is real setTimeout under the fake clock, scheduled for
+    // "now" since the remaining time is already negative.
+    await act(async () => {
+      vi.advanceTimersByTime(0);
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/challenge expired/i);
+    expect(within(alert).getByRole("button", { name: /choose a discipline/i })).toBeInTheDocument();
+
+    // Never reached the surface a player could type into.
+    expect(screen.queryByTestId("typing-field")).not.toBeInTheDocument();
+  });
+
+  it("leaves no record when the Escape key aborts the Run", async () => {
+    const backend = backendServing();
+    let abandoned = false;
+    server.use(
+      http.delete("/api/challenges", () => {
+        abandoned = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const user = typist();
+
+    await startARun(user);
+    await countdownEnds();
+    await user.keyboard("gre");
+
+    await user.keyboard("{Escape}");
+
+    // Back to choosing a Discipline — the same screen a fresh visit shows.
+    await screen.findByRole("button", { name: /quotes/i });
+
+    // The Issue was voided on the server, and nothing was ever submitted.
+    await waitFor(() => expect(abandoned).toBe(true));
+    expect(backend.submissions).toHaveLength(0);
+  });
+
   it("offers another Run and a change of Discipline once the result is in", async () => {
     backendServing();
     const user = typist();

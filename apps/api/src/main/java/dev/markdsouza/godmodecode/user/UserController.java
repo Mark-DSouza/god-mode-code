@@ -1,6 +1,8 @@
 package dev.markdsouza.godmodecode.user;
 
 import dev.markdsouza.godmodecode.config.OpenApiConfig;
+import dev.markdsouza.godmodecode.ratelimit.ClientAddress;
+import dev.markdsouza.godmodecode.ratelimit.RateLimits;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -8,6 +10,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Optional;
 import org.springframework.http.HttpHeaders;
@@ -38,10 +41,14 @@ public class UserController {
 
     private final UserService users;
     private final RecognitionCookie cookie;
+    private final RateLimits rateLimits;
+    private final TurnstileVerifier turnstile;
 
-    UserController(UserService users, RecognitionCookie cookie) {
+    UserController(UserService users, RecognitionCookie cookie, RateLimits rateLimits, TurnstileVerifier turnstile) {
         this.users = users;
         this.cookie = cookie;
+        this.rateLimits = rateLimits;
+        this.turnstile = turnstile;
     }
 
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
@@ -68,10 +75,20 @@ public class UserController {
                 description = "This browser was already someone, and still is",
                 content = @Content(
                         mediaType = MediaType.APPLICATION_JSON_VALUE,
-                        schema = @Schema(implementation = User.class)))
+                        schema = @Schema(implementation = User.class))),
+        @ApiResponse(
+                responseCode = "429",
+                description = "Too many Unclaimed Users have been created from this address recently",
+                content = @Content),
+        @ApiResponse(
+                responseCode = "403",
+                description = "The challenge widget did not vouch for this browser",
+                content = @Content)
     })
     public ResponseEntity<User> create(
-            @CookieValue(name = RecognitionCookie.NAME, required = false) String recognitionKey) {
+            @CookieValue(name = RecognitionCookie.NAME, required = false) String recognitionKey,
+            @RequestBody(required = false) UserCreateRequest body,
+            HttpServletRequest request) {
         // This is the one request on the site that cannot be safely repeated, and
         // browsers repeat requests. Checking first costs a single indexed lookup
         // and removes the whole class of "reload created a second me".
@@ -80,6 +97,18 @@ public class UserController {
             // No Set-Cookie: the browser already holds the right key, and
             // reissuing one can only lose it.
             return ResponseEntity.ok(alreadySomeone.get());
+        }
+
+        // Checked only once a cookie has failed to answer: a returning visitor
+        // must never be rate limited for reading who they already are.
+        String sourceAddress = ClientAddress.of(request);
+        if (!rateLimits.allowUserCreation(sourceAddress)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).build();
+        }
+
+        String turnstileToken = body == null ? null : body.turnstileToken();
+        if (!turnstile.verify(turnstileToken, sourceAddress)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
         UserService.Arrival arrival = users.createUnclaimedUser();

@@ -48,6 +48,21 @@ export function useRequestChallenge() {
   });
 }
 
+/**
+ * Gives up whatever Challenge is currently held, without recording a Run.
+ *
+ * What the Escape key calls (ADR-0003): voiding the Issue immediately means
+ * the one-live-Issue slot is free the moment a player leaves, rather than
+ * only once they next ask for something to type.
+ */
+export function useAbandonChallenge() {
+  return useMutation({
+    mutationFn: async (): Promise<void> => {
+      await api.DELETE("/api/challenges");
+    },
+  });
+}
+
 /** Submits a finished Run for Verification, and reports back what the server made of it. */
 export function useSubmitTypingRun() {
   return useMutation({

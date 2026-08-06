@@ -20,6 +20,22 @@ gmc:
     # about polling drive the monitor directly rather than waiting for a tick.
     poll-interval: 1h
 
+  # High enough that nothing in the ordinary suite trips it — every test class
+  # but RateLimitEndpointTest shares one Spring context (and so one RateLimiter)
+  # across every method it runs — but low enough that RateLimitEndpointTest,
+  # which overrides these three via @DynamicPropertySource to get a context of
+  # its own, can trip them in a handful of requests rather than thousands.
+  rate-limits:
+    user-creation:
+      limit: 1000
+      window: 1m
+    challenge-issuing:
+      limit: 1000
+      window: 1m
+    run-submission:
+      limit: 1000
+      window: 1m
+
 management:
   metrics:
     tags:

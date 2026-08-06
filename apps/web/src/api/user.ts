@@ -1,5 +1,6 @@
 import { type User, createApiClient } from "@gmc/api-client";
 import { useQuery } from "@tanstack/react-query";
+import { turnstileToken } from "./turnstile.ts";
 
 const api = createApiClient();
 
@@ -43,7 +44,13 @@ async function recogniseOrCreate(): Promise<User> {
     throw new Error(`Could not read the current User (status ${existing.response.status})`);
   }
 
-  const created = await api.POST("/api/users");
+  // undefined wherever no Turnstile site is configured — every local and CI
+  // run, until one is provisioned — in which case this asks nothing of the
+  // request beyond what it already sent.
+  const token = await turnstileToken();
+  const created = await (token
+    ? api.POST("/api/users", { body: { turnstileToken: token } })
+    : api.POST("/api/users"));
   if (!created.data) {
     throw new Error(`Could not create a User (status ${created.response.status})`);
   }

@@ -99,6 +99,13 @@ public final class Browser {
         return response.getBody();
     }
 
+    /** Gives up whatever Challenge is currently held, the way leaving mid-Run does. */
+    public ResponseEntity<Void> abandonsTheChallenge() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.put(HttpHeaders.COOKIE, List.of(RecognitionCookie.NAME + "=" + recognitionKey));
+        return http.exchange("/api/challenges", HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
+    }
+
     public <T> ResponseEntity<T> submits(TypingRunSubmission submission, Class<T> as) {
         return send("/api/typing-runs", submission, as);
     }

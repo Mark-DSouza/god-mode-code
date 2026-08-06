@@ -1,6 +1,8 @@
 package dev.markdsouza.godmodecode.typing;
 
 import dev.markdsouza.godmodecode.integrity.Rejection;
+import dev.markdsouza.godmodecode.ratelimit.ClientAddress;
+import dev.markdsouza.godmodecode.ratelimit.RateLimits;
 import dev.markdsouza.godmodecode.user.RecognitionCookie;
 import dev.markdsouza.godmodecode.user.User;
 import dev.markdsouza.godmodecode.user.UserService;
@@ -10,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Optional;
 import org.springframework.http.HttpStatus;
@@ -31,10 +34,12 @@ public class TypingRunController {
 
     private final TypingRunService runs;
     private final UserService users;
+    private final RateLimits rateLimits;
 
-    TypingRunController(TypingRunService runs, UserService users) {
+    TypingRunController(TypingRunService runs, UserService users, RateLimits rateLimits) {
         this.runs = runs;
         this.users = users;
+        this.rateLimits = rateLimits;
     }
 
     @PostMapping(
@@ -66,7 +71,11 @@ public class TypingRunController {
                 description = "The Run was not recorded, and why",
                 content = @Content(
                         mediaType = MediaType.APPLICATION_JSON_VALUE,
-                        schema = @Schema(implementation = Rejection.class)))
+                        schema = @Schema(implementation = Rejection.class))),
+        @ApiResponse(
+                responseCode = "429",
+                description = "Too many Runs have been submitted by this User or from this address recently",
+                content = @Content)
     })
     // A wildcard because the two documented answers carry different bodies: a
     // TypingRun on 201, a Rejection on 422. The alternative is to throw for the
@@ -76,11 +85,16 @@ public class TypingRunController {
     // OpenApiContractTest against the committed document.
     public ResponseEntity<?> submit(
             @CookieValue(name = RecognitionCookie.NAME, required = false) String recognitionKey,
-            @Valid @RequestBody TypingRunSubmission submission) {
+            @Valid @RequestBody TypingRunSubmission submission,
+            HttpServletRequest request) {
 
         Optional<User> user = Optional.ofNullable(recognitionKey).flatMap(users::recognise);
         if (user.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        if (!rateLimits.allowRunSubmission(user.get().id(), ClientAddress.of(request))) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).build();
         }
 
         return switch (runs.submit(user.get().id(), submission)) {

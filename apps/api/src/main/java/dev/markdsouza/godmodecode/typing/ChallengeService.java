@@ -53,4 +53,25 @@ public class ChallengeService {
 
         return Optional.of(new Challenge(issue.id(), passage.get(), issue.expiresAt()));
     }
+
+    /**
+     * Gives up whatever Challenge this User is holding, without ever recording a
+     * Run against it.
+     *
+     * The same abandonment {@link #issueTo} already performs before handing out
+     * the next Challenge — exposed on its own so a player who leaves mid-Run
+     * (the Escape key, ADR-0003) frees the one-live-Issue slot immediately
+     * rather than leaving it live until they next ask for something to type.
+     * Idempotent: calling this with nothing live to abandon updates no rows.
+     *
+     * No issuing lock, unlike {@link #issueTo}: that lock exists to serialise
+     * the check-then-insert a double-clicked start button could race, and
+     * there is no insert here for a second abandon to race — two concurrent
+     * abandons are just two updates of the same row, and Postgres already
+     * serialises those.
+     */
+    @Transactional
+    public void abandon(UUID userId) {
+        issues.supersedeLiveFor(userId);
+    }
 }

@@ -73,6 +73,56 @@
         }
       }
     },
+    "/api/users/claim" : {
+      "post" : {
+        "tags" : [ "Users" ],
+        "summary" : "Claim the User this browser is",
+        "description" : "Attaches the identity provider's credentials to the User this browser is recognised as, choosing the Handle given in the request body (ADR-0011).\n\nIf those credentials already belong to a different User, this browser's Runs are merged into that User instead — silently and always, because Runs are append-only facts with no conflict to resolve (ADR-0007) — and the response carries a fresh cookie recognising this browser as the account it was merged into.\n",
+        "operationId" : "claim",
+        "parameters" : [ {
+          "name" : "gmc_recognition",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ClaimRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Claimed, or merged into an existing account",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "This browser is nobody yet — there is no User here to Claim"
+          },
+          "409" : {
+            "description" : "The chosen Handle is already taken"
+          },
+          "401" : {
+            "description" : "No valid bearer token was presented"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/api/typing-runs" : {
       "post" : {
         "tags" : [ "Typing Runs" ],
@@ -493,6 +543,21 @@
           }
         },
         "required" : [ "claimed", "handle", "id" ]
+      },
+      "ClaimRequest" : {
+        "type" : "object",
+        "description" : "What the player chooses on Claiming",
+        "properties" : {
+          "handle" : {
+            "type" : "string",
+            "description" : "The Handle to Claim with, retiring the generated one. Ignored when signing in merges into an account that already has one",
+            "example" : "PERCOLATING_FERRET",
+            "maxLength" : 22,
+            "minLength" : 3,
+            "pattern" : "^[A-Za-z0-9_]+$"
+          }
+        },
+        "required" : [ "handle" ]
       },
       "TypingRunSubmission" : {
         "type" : "object",
@@ -1061,6 +1126,14 @@
           }
         },
         "required" : [ "database", "judge", "status", "version" ]
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "type" : "http",
+        "description" : "The identity provider's ID token, validated by the backend as a resource server (ADR-0011).",
+        "scheme" : "bearer",
+        "bearerFormat" : "JWT"
       }
     }
   }

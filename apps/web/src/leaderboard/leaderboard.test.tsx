@@ -100,6 +100,7 @@ function resultScreen() {
       run={RUN}
       onRunAgain={() => {}}
       onChangeDiscipline={() => {}}
+      onSignIn={() => {}}
       pending={false}
       failed={false}
     />,
@@ -242,6 +243,7 @@ describe("a Passage's Leaderboard", () => {
         run={RUN}
         onRunAgain={() => {}}
         onChangeDiscipline={() => {}}
+        onSignIn={() => {}}
         pending={false}
         failed={false}
       />,

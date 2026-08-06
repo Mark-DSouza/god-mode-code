@@ -83,6 +83,13 @@ springdoc:
 gmc:
   version: ${GMC_VERSION:0.0.1-SNAPSHOT}
 
+  auth:
+    # The Cognito user pool's issuer, e.g.
+    # https://cognito-idp.<region>.amazonaws.com/<pool-id>. Blank until a pool
+    # is provisioned, which SecurityConfig treats as "sign-in unavailable"
+    # rather than failing to start (ADR-0011).
+    issuer-uri: ${GMC_COGNITO_ISSUER_URI:}
+
   judge:
     # The judge's address on the private link. In production this is a fixed
     # private address that Terraform pins and the deploy script reads from
@@ -110,14 +117,13 @@ gmc:
     # as good news.
     stale-after: 60s
 
-  recognition:
-    # The cookie carrying the Recognition Key is Secure by default: the site is
-    # only ever reached over HTTPS through Cloudflare (ADR-0002), and a cookie
-    # that recognises a User must not travel in clear. Browsers treat
-    # http://localhost as a secure context, so this stays on for local
-    # development and for the containerised stack too — the override exists for
-    # a plain-HTTP deployment, which nothing here is.
-    cookie-secure: ${GMC_RECOGNITION_COOKIE_SECURE:true}
+  # Every cookie this backend sets — the Recognition Key and the CSRF token —
+  # is Secure by default: the site is only ever reached over HTTPS through
+  # Cloudflare (ADR-0002), and neither should travel in clear. Browsers treat
+  # http://localhost as a secure context, so this stays on for local
+  # development and for the containerised stack too — the override exists for
+  # a plain-HTTP deployment, which nothing here is.
+  cookie-secure: ${GMC_COOKIE_SECURE:true}
 
 logging:
   # Empty by default, which leaves the human-readable console format in place

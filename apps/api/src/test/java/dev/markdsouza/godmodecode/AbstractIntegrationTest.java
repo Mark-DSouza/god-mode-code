@@ -1,6 +1,9 @@
 package dev.markdsouza.godmodecode;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -40,5 +43,26 @@ public abstract class AbstractIntegrationTest {
 
     static {
         POSTGRES.start();
+    }
+
+    @Autowired
+    private TestRestTemplate httpForCsrfSetup;
+
+    /**
+     * A subclass that adds its own {@code @TestConfiguration} or {@code
+     * @DynamicPropertySource} — {@link dev.markdsouza.godmodecode.user.HandleCollisionTest},
+     * every {@link dev.markdsouza.godmodecode.pattern.JudgedIntegrationTest}
+     * subclass — gets a Spring context of its own, and with it a {@code
+     * TestRestTemplate} bean of its own. A flag scoped to this class would
+     * only ever catch the first such context; checking the instance's own
+     * interceptor list is what makes this correct once for every context,
+     * including the ones nothing else here knows the names of.
+     */
+    @BeforeEach
+    void installCsrfInterceptorOnce() {
+        var interceptors = httpForCsrfSetup.getRestTemplate().getInterceptors();
+        if (interceptors.stream().noneMatch(CsrfHeaderInterceptor.class::isInstance)) {
+            interceptors.add(new CsrfHeaderInterceptor());
+        }
     }
 }

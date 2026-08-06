@@ -1,10 +1,14 @@
 package dev.markdsouza.godmodecode.user;
 
+import dev.markdsouza.godmodecode.integrity.IssueRepository;
+import dev.markdsouza.godmodecode.pattern.SolveRunService;
+import dev.markdsouza.godmodecode.typing.TypingRunService;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Becoming someone, and being recognised afterwards.
@@ -16,10 +20,21 @@ public class UserService {
 
     private final UserRepository users;
     private final HandleGenerator handles;
+    private final TypingRunService typingRuns;
+    private final SolveRunService solveRuns;
+    private final IssueRepository issues;
 
-    UserService(UserRepository users, HandleGenerator handles) {
+    UserService(
+            UserRepository users,
+            HandleGenerator handles,
+            TypingRunService typingRuns,
+            SolveRunService solveRuns,
+            IssueRepository issues) {
         this.users = users;
         this.handles = handles;
+        this.typingRuns = typingRuns;
+        this.solveRuns = solveRuns;
+        this.issues = issues;
     }
 
     /**
@@ -60,5 +75,89 @@ public class UserService {
     /** The User a browser presenting this key is, if the key is still one we issued. */
     public Optional<User> recognise(String recognitionKey) {
         return users.findByRecognitionKeyHash(RecognitionKey.hash(recognitionKey));
+    }
+
+    /**
+     * What Claiming produced.
+     *
+     * {@code newRecognitionKey} is set only when this browser now has to be
+     * recognised as a different row than before — a merge, where the row its old
+     * key named is gone (ADR-0007). A first-time claim changes nothing about
+     * which row the browser is recognised as, so the cookie it already holds
+     * keeps working and nothing new is issued.
+     */
+    public sealed interface ClaimResult {
+        record Claimed(User user, Optional<String> newRecognitionKey) implements ClaimResult {}
+
+        record HandleTaken() implements ClaimResult {}
+
+        /**
+         * The bearer token proved an identity that is not this browser's own
+         * already-Claimed one.
+         *
+         * Attaching a second credential to an already-Claimed User, or
+         * switching a browser to a different Claimed account, is not
+         * something Claiming does — there is exactly one credential per User
+         * (the database's own {@code users_credential_subject_unique}), and
+         * nothing here decides which of two already-Claimed accounts should
+         * win.
+         */
+        record NotYourCredential() implements ClaimResult {}
+    }
+
+    /**
+     * Attaches credentials to the User this browser is, or — if that credential
+     * already belongs to someone — merges this browser's Runs into that someone
+     * and leaves this User behind (ADR-0007, ADR-0011).
+     *
+     * One transaction, because a merge is not safe to observe half-done: a Run
+     * reattributed but a User not yet deleted would count twice in a Personal
+     * Best computed in between.
+     *
+     * @param source the User this browser is recognised as, which must be
+     *     Unclaimed for anything here to do — a browser signing in to the
+     *     credential it already holds is simply told who it already is.
+     * @param credentialSubject the federated subject the identity provider
+     *     vouched for.
+     * @param handle chosen on Claiming; used only when this credential has never
+     *     Claimed a User before.
+     */
+    @Transactional
+    public ClaimResult claim(User source, String credentialSubject, String handle) {
+        Optional<User> target = users.findByCredentialSubject(credentialSubject);
+
+        if (source.claimed()) {
+            // The only success here is the credential this browser already
+            // holds, presented again — a re-sign-in that changes nothing.
+            // Every other credential is refused rather than silently
+            // accepted, so a stray or forged bearer token cannot quietly
+            // rename which account this browser is recognised as.
+            boolean sameIdentity = target.map(User::id).filter(source.id()::equals).isPresent();
+            return sameIdentity ? new ClaimResult.Claimed(source, Optional.empty()) : new ClaimResult.NotYourCredential();
+        }
+
+        if (target.isPresent()) {
+            User destination = target.get();
+            // Reattributed before the source row is deleted: both Run tables'
+            // User foreign keys cascade on delete, and a Run not yet moved would
+            // be deleted along with the row it used to belong to. The Issue each
+            // moved Run's issue_id still names has to follow for the same
+            // reason — deleting the source User below cascades every Issue still
+            // theirs, and a Run pointing at one of those would be left with a
+            // dangling reference.
+            typingRuns.reattributeUser(source.id(), destination.id());
+            solveRuns.reattributeUser(source.id(), destination.id());
+            issues.reattributeConsumedIssues(source.id(), destination.id());
+
+            String newKey = RecognitionKey.issue();
+            users.updateRecognitionKeyHash(destination.id(), RecognitionKey.hash(newKey));
+            users.delete(source.id());
+
+            return new ClaimResult.Claimed(destination, Optional.of(newKey));
+        }
+
+        return users.claim(source.id(), credentialSubject, handle)
+                .<ClaimResult>map(claimed -> new ClaimResult.Claimed(claimed, Optional.empty()))
+                .orElseGet(ClaimResult.HandleTaken::new);
     }
 }

@@ -103,4 +103,17 @@ public class TypingRunService {
             }
         };
     }
+
+    /**
+     * Moves every Typing Run from one User to another, for Claiming's merge
+     * (ADR-0007).
+     *
+     * The only write this aggregate exposes across a User boundary — everything
+     * else is scoped to the User submitting a Run. Kept here rather than left to
+     * a repository call from the {@code user} package, so this aggregate decides
+     * for itself what "reattribute my Runs" means.
+     */
+    public void reattributeUser(UUID from, UUID to) {
+        runs.reattributeUser(from, to);
+    }
 }

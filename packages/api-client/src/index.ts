@@ -69,11 +69,41 @@ function currentOrigin(): string {
  */
 const lazyFetch: typeof globalThis.fetch = (...args) => globalThis.fetch(...args);
 
+const CSRF_COOKIE_NAME = "XSRF-TOKEN";
+const CSRF_HEADER_NAME = "X-XSRF-TOKEN";
+const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * The double-submit CSRF token the backend hands out as a cookie and expects
+ * echoed back as a header on every state-changing request (see
+ * `SecurityConfig` on the backend). Read fresh on every call rather than
+ * cached: the token is issued lazily, on the first request of a visit, so an
+ * early cache could read `null` and never look again.
+ */
+function csrfTokenFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`));
+  const value = match?.[1];
+  return value ? decodeURIComponent(value) : null;
+}
+
 export function createApiClient() {
-  return createClient<paths>({
+  const client = createClient<paths>({
     baseUrl: currentOrigin(),
     fetch: lazyFetch,
   });
+
+  client.use({
+    onRequest({ request }) {
+      if (STATE_CHANGING_METHODS.has(request.method)) {
+        const token = csrfTokenFromCookie();
+        if (token) request.headers.set(CSRF_HEADER_NAME, token);
+      }
+      return request;
+    },
+  });
+
+  return client;
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
